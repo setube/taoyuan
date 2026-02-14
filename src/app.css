@@ -119,18 +119,14 @@ body {
   }
 }
 
-/* 滚动条样式 */
+/* 隐藏滚动条 */
+* {
+  -ms-overflow-style: none; /* IE / Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--color-bg);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--color-muted);
-  border-radius: 2px;
+  display: none; /* Chrome / Safari / Opera */
 }
 
 /* 面板切换过渡 */
