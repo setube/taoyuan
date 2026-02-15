@@ -12,7 +12,6 @@
       @click="go(t.key)"
     >
       <component :is="t.icon" :size="18" class="shrink-0" />
-      <span class="quick-access-label">{{ t.label }}</span>
     </button>
     <button
       class="quick-access-btn mt-2"
@@ -20,7 +19,6 @@
       @click="$emit('open-settings')"
     >
       <SettingsIcon :size="18" class="shrink-0" />
-      <span class="quick-access-label">设置</span>
     </button>
   </div>
 </template>
@@ -79,9 +77,5 @@ const go = (key: PanelKey) => {
   background: var(--color-accent);
   border-color: var(--color-accent);
   color: var(--color-bg);
-}
-
-.quick-access-label {
-  line-height: 1.1;
 }
 </style>
