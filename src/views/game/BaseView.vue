@@ -29,6 +29,13 @@
         <Moon :size="12" class="mr-1" />
         休息（2 回合）
       </button>
+      <button
+        class="btn btn-danger text-xs w-full justify-center"
+        @click="requestSleep"
+      >
+        <Moon :size="12" class="mr-1" />
+        回家休息
+      </button>
       <button class="btn text-xs w-full justify-center" @click="goCraft">
         制作
       </button>
@@ -37,6 +44,7 @@
 </template>
 
 <script setup lang="ts">
+import { inject } from "vue";
 import { Home, Moon } from "lucide-vue-next";
 import { useBaseStore } from "@/stores/useBaseStore";
 import { useGameStore } from "@/stores/useGameStore";
@@ -44,6 +52,8 @@ import { usePlayerStore } from "@/stores/usePlayerStore";
 import { TURN_COSTS } from "@/data/timeConstants";
 import { addLog } from "@/composables/useGameLog";
 import router from "@/router";
+
+const requestSleep = inject<() => void>("requestSleep", () => {});
 
 const baseStore = useBaseStore();
 const gameStore = useGameStore();

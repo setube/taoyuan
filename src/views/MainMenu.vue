@@ -287,14 +287,12 @@
             </div>
           </template>
 
-          <!-- 步骤 4：序章文案 -->
+          <!-- 步骤 4：开始游戏（序章文案将显示在游戏内下方文本框） -->
           <template v-else-if="charCreateStep === 4">
             <p class="text-accent text-sm mb-3 text-center shrink-0">开端</p>
-            <div
-              class="flex-1 overflow-y-auto text-sm text-muted whitespace-pre-line mb-4 pr-1 min-h-0"
-            >
-              {{ INTRO_FLAVOR_TEXT }}
-            </div>
+            <p class="text-sm text-muted text-center mb-4">
+              点击下方按钮开始你的旅程，序章将显示在游戏内日志中。
+            </p>
             <div class="flex justify-center shrink-0">
               <button
                 class="btn text-xs px-6"
@@ -700,7 +698,7 @@ import {
 import type { AttributeSet, AttributeType } from "@/types";
 import _pkg from "../../package.json";
 import { useAudio } from "@/composables/useAudio";
-import { showFloat } from "@/composables/useGameLog";
+import { showFloat, addLog, resetLogs } from "@/composables/useGameLog";
 import type { FarmMapType, Gender } from "@/types";
 import type { BackgroundId } from "@/types/survival";
 
@@ -951,6 +949,8 @@ const handleStartGameFromFlavor = () => {
   );
   farmStore.resetFarm(6);
   questStore.initMainQuest();
+  resetLogs();
+  addLog(INTRO_FLAVOR_TEXT, { speaker: "叙事" });
   showCharCreate.value = false;
   charCreateStep.value = 1;
   charBackgroundId.value = null;

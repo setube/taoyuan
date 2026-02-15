@@ -81,6 +81,8 @@ export const useGameStore = defineStore("game", () => {
   const preOutbreakTurnsTotal = 20;
   /** 末日生存：阶段一已消耗回合数 */
   const turnsUsedInPre = ref(0);
+  /** 末日生存：今日已消耗回合数（每日重置，用于顶部栏显示） */
+  const turnsUsedToday = ref(0);
   /** 末日生存：地图上的网格位置（玩家所在格） */
   const mapPosition = ref<GridPosition>(getCenter());
   /** 末日生存：当前城市地点（由 mapPosition 所在格推导） */
@@ -171,6 +173,7 @@ export const useGameStore = defineStore("game", () => {
         phase.value = "post";
       }
     }
+    turnsUsedToday.value += n;
 
     const minsPerTurn = MINUTES_PER_TURN;
     const addedMinutes = n * minsPerTurn;
@@ -294,6 +297,7 @@ export const useGameStore = defineStore("game", () => {
     dailyLuck.value = Math.random() * 0.2 - 0.1;
     hour.value = DAY_START_HOUR;
     midnightWarned.value = false;
+    turnsUsedToday.value = 0;
     currentLocationGroup.value = "farm";
     return { seasonChanged: oldSeason !== season.value, oldSeason };
   };
@@ -359,6 +363,7 @@ export const useGameStore = defineStore("game", () => {
     isGameStarted.value = true;
     phase.value = "pre";
     turnsUsedInPre.value = 0;
+    turnsUsedToday.value = 0;
     mapPosition.value = getCenter();
   };
 
@@ -377,6 +382,7 @@ export const useGameStore = defineStore("game", () => {
       dailyLuck: dailyLuck.value,
       phase: phase.value,
       turnsUsedInPre: turnsUsedInPre.value,
+      turnsUsedToday: turnsUsedToday.value,
       mapPosition: { row: mapPosition.value.row, col: mapPosition.value.col },
     };
   };
@@ -398,6 +404,7 @@ export const useGameStore = defineStore("game", () => {
     dailyLuck.value = data.dailyLuck ?? 0;
     phase.value = data.phase ?? "pre";
     turnsUsedInPre.value = data.turnsUsedInPre ?? 0;
+    turnsUsedToday.value = data.turnsUsedToday ?? 0;
     mapPosition.value =
       data.mapPosition != null
         ? { row: data.mapPosition.row, col: data.mapPosition.col }
@@ -421,6 +428,7 @@ export const useGameStore = defineStore("game", () => {
     phase,
     preOutbreakTurnsTotal,
     turnsUsedInPre,
+    turnsUsedToday,
     mapPosition,
     currentCityLocation,
     seasonIndex,

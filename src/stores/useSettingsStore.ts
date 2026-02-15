@@ -127,8 +127,8 @@ export const useSettingsStore = defineStore("settings", () => {
     qmsgShowReverse.value = data?.qmsgShowReverse ?? false;
     syncQmsgConfig();
     const { sfxEnabled, bgmEnabled } = useAudio();
-    sfxEnabled.value = data?.sfxEnabled ?? true;
-    bgmEnabled.value = data?.bgmEnabled ?? true;
+    sfxEnabled.value = data?.sfxEnabled ?? false;
+    bgmEnabled.value = data?.bgmEnabled ?? false;
   };
 
   return {
