@@ -1,30 +1,31 @@
 <template>
-  <div
-    class="status-bar flex flex-col gap-1 min-h-0"
-    :class="
-      vertical
-        ? 'status-bar-vertical pr-1.5 py-1.5'
-        : 'border-b border-accent/30 pb-2 md:pb-3'
-    "
+  <section
+    class="status-bar flex flex-col rounded-xs bg-panel border border-muted/30 overflow-hidden min-h-0"
+    :class="vertical ? 'flex-1' : ''"
   >
-    <!-- Block 1: Identity -->
+    <!-- Title: Identity row (player name, date/time, money) -->
     <div
+      class="status-bar-title w-full text-left px-1.5 py-1 text-xs shrink-0"
       :class="
         vertical
-          ? 'status-bar-vertical-block text-xs flex flex-col gap-0.5 shrink-0'
-          : 'text-xs md:text-sm flex items-center justify-between'
+          ? 'flex flex-col gap-0.5'
+          : 'flex items-center justify-between flex-wrap gap-x-2 gap-y-0.5'
       "
     >
       <div
         :class="
           vertical
             ? 'flex flex-col gap-0.5'
-            : 'flex items-center gap-2 md:gap-3'
+            : 'flex items-center gap-2 md:gap-3 flex-wrap'
         "
       >
-        <span class="text-muted text-xs max-w-full truncate">{{
-          playerStore.playerName
-        }}</span>
+        <button
+          type="button"
+          class="status-bar-name text-accent text-xs max-w-full truncate text-left font-medium hover:bg-accent/10 transition-colors rounded-xs px-0.5 -mx-0.5 py-0 border-0 bg-transparent cursor-pointer"
+          @click="openCharInfo"
+        >
+          {{ playerStore.playerName }}
+        </button>
         <template v-if="!vertical">
           <span class="hidden md:inline">第{{ gameStore.year }}年</span>
           <span
@@ -45,56 +46,57 @@
       </span>
     </div>
 
-    <!-- 5 tracks + 效果 (vertical only) -->
+    <!-- Content: stats + effects (vertical only), or backpack link (horizontal) -->
     <div
-      v-if="vertical"
-      class="status-bar-top flex flex-col gap-1 shrink-0 min-h-0 overflow-y-auto"
+      class="status-bar-list border-t border-muted/25 px-1.5 pb-1.5 pt-1.5 flex flex-col gap-0.5 min-h-0 overflow-y-auto flex-1"
     >
-      <!-- Block 2: 生命 / 体力 / 饥饿 / 疲劳 / 士气 — label + value -->
-      <div
-        v-for="row in statRows"
-        :key="row.key"
-        class="status-bar-track flex items-center justify-between gap-1 text-xs shrink-0"
-      >
-        <span :class="row.labelClass">{{ row.label }}</span>
-        <span class="tabular-nums text-muted shrink-0">{{
-          row.valueText
-        }}</span>
-      </div>
+      <template v-if="vertical">
+        <!-- Block: 生命 / 体力 / 饥饿 / 疲劳 / 士气 -->
+        <div
+          v-for="row in statRows"
+          :key="row.key"
+          class="status-bar-track text-[10px] flex items-center justify-between gap-1 shrink-0"
+        >
+          <span :class="row.labelClass">{{ row.label }}</span>
+          <span class="tabular-nums text-muted shrink-0">{{
+            row.valueText
+          }}</span>
+        </div>
 
-      <!-- Block 3: 效果 — section title + one row per status with hover tooltip -->
-      <div class="shrink-0 mt-1">
-        <p class="text-[10px] text-muted font-medium mb-0.5">效果</p>
-        <div class="flex flex-col gap-0.5">
-          <div
-            v-for="row in effectRows"
-            :key="row.key"
-            class="status-bar-effect-row flex items-center justify-between text-[10px] cursor-help"
-            @mouseenter="setHoveredEffect(row.key, $event)"
-            @mouseleave="clearHoveredEffect"
-          >
-            <span :class="row.class">{{ row.label }}</span>
-            <span class="text-muted tabular-nums">
-              {{ row.turnsLeft == null ? "—" : `${row.turnsLeft} 回` }}
-            </span>
+        <!-- Block: 效果 -->
+        <div class="shrink-0 mt-0.5">
+          <p class="text-[10px] text-accent font-medium mb-0.5">效果</p>
+          <div class="flex flex-col gap-0.5">
+            <div
+              v-for="row in effectRows"
+              :key="row.key"
+              class="status-bar-effect-row flex items-center justify-between text-[10px] cursor-help min-h-5"
+              @mouseenter="setHoveredEffect(row.key, $event)"
+              @mouseleave="clearHoveredEffect"
+            >
+              <span :class="row.class">{{ row.label }}</span>
+              <span class="text-muted tabular-nums shrink-0">
+                {{ row.turnsLeft == null ? "—" : `${row.turnsLeft} 回` }}
+              </span>
+            </div>
           </div>
         </div>
+      </template>
+
+      <!-- Horizontal: compact backpack link -->
+      <div v-if="!vertical" class="shrink-0">
+        <button
+          type="button"
+          class="w-full text-left px-0 py-0.5 text-xs font-medium text-accent hover:bg-accent/10 transition-colors cursor-pointer border-0 bg-transparent flex items-center gap-1"
+          @click="openBackpack"
+        >
+          <Package :size="12" />
+          背包 {{ backpackSummary }}
+        </button>
       </div>
     </div>
 
-    <!-- Mobile: compact backpack link -->
-    <div v-if="!vertical" class="shrink-0">
-      <button
-        type="button"
-        class="flex items-center gap-1 text-xs text-accent hover:bg-accent/10 rounded-xs py-0.5 px-1 -mb-1"
-        @click="openBackpack"
-      >
-        <Package :size="12" />
-        背包 {{ backpackSummary }}
-      </button>
-    </div>
-
-    <!-- Effect tooltip: teleported to body, free-positioned, full-width capable -->
+    <!-- Effect tooltip: teleported to body -->
     <Teleport to="body">
       <div
         v-show="hoveredEffectKey && hoveredTooltipDescription"
@@ -104,7 +106,7 @@
         {{ hoveredTooltipDescription }}
       </div>
     </Teleport>
-  </div>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -272,6 +274,10 @@ const backpackSummary = computed(() => {
 function openBackpack() {
   navigateToPanel("inventory");
 }
+
+function openCharInfo() {
+  navigateToPanel("charinfo");
+}
 </script>
 
 <style scoped>
@@ -289,21 +295,19 @@ function openBackpack() {
   animation: staminaPulse 1s ease-in-out infinite;
 }
 
-.status-bar-vertical {
-  min-width: 0;
-  font-size: 11px;
+.status-bar-title {
+  font-family: inherit;
 }
 
-.status-bar-vertical .status-bar-vertical-block {
-  font-size: 11px;
+.status-bar-name {
+  font-family: inherit;
+}
+
+.status-bar-list {
+  min-height: 0;
 }
 
 .status-bar-track {
   width: 100%;
-}
-
-/* 效果 rows: consistent hit target */
-.status-bar-effect-row {
-  min-height: 1.25rem;
 }
 </style>

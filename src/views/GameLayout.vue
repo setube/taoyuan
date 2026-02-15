@@ -5,9 +5,7 @@
     :class="{ 'py-10': isWebView }"
   >
     <!-- 移动端顶部：横向状态栏 -->
-    <div class="md:hidden shrink-0 mb-1">
-      <StatusBar />
-    </div>
+    <StatusBar class="md:hidden shrink-0 mb-1" />
 
     <!-- 桌面端：网格布局（顶栏 | 左栏全高 | 中央+右栏 | 底栏仅主区） -->
     <div class="flex-1 min-h-0 flex flex-col md:grid md:gap-2 game-layout-grid">
@@ -26,11 +24,10 @@
       </div>
 
       <!-- 左侧：仅状态栏（与中央、底栏同级网格格） -->
-      <aside
-        class="game-layout-left hidden md:flex flex-col shrink-0 w-30 border border-muted/20 rounded-xs p-2 bg-panel/80 min-h-0 overflow-y-auto"
-      >
-        <StatusBar vertical />
-      </aside>
+      <StatusBar
+        vertical
+        class="game-layout-left hidden md:flex flex-col shrink-0 w-30 min-h-0"
+      />
 
       <!-- 中央 + 右侧（桌面端为网格一格；移动端为 flex 主区域） -->
       <div
