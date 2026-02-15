@@ -77,7 +77,7 @@
           </router-view>
         </main>
         <aside class="game-layout-right hidden md:flex flex-col shrink-0">
-          <QuickAccessBar />
+          <DynamicBar />
         </aside>
       </div>
 
@@ -273,7 +273,7 @@ import { Moon, X, Map, Settings as SettingsIcon } from "lucide-vue-next";
 import MobileMapMenu from "@/components/game/MobileMapMenu.vue";
 import StatusBar from "@/components/game/StatusBar.vue";
 import BackpackBar from "@/components/game/BackpackBar.vue";
-import QuickAccessBar from "@/components/game/QuickAccessBar.vue";
+import DynamicBar from "@/components/game/DynamicBar.vue";
 import GameLogPanel from "@/components/game/GameLogPanel.vue";
 import EventDialog from "@/components/game/EventDialog.vue";
 import HeartEventDialog from "@/components/game/HeartEventDialog.vue";
