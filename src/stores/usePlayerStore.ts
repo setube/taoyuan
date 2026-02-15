@@ -1,6 +1,7 @@
 import { ref, computed } from "vue";
 import { defineStore } from "pinia";
 import type { Gender, AttributeType, AttributeSet } from "@/types";
+import type { BackgroundId } from "@/types/survival";
 import type { DerivedSkillType } from "@/types/skill";
 import { getAttributeModifier, DEFAULT_ATTRIBUTES } from "@/types/attributes";
 import {
@@ -39,6 +40,8 @@ export const usePlayerStore = defineStore("player", () => {
 
   /** 末日生存：六维属性（力量、敏捷、体质、智力、感知、魅力） */
   const attributes = ref<AttributeSet>({ ...DEFAULT_ATTRIBUTES });
+  /** 末日生存：角色创建时选择的背景（决定起始 Familiarity） */
+  const selectedBackgroundId = ref<BackgroundId | null>(null);
   const HP_PER_CON_MOD = 10;
 
   /** 末日生存：获取单属性调整值 */
@@ -202,6 +205,11 @@ export const usePlayerStore = defineStore("player", () => {
     attributes.value = { ...attrs };
   };
 
+  /** 设置选择的背景（新游戏角色创建时调用） */
+  const setSelectedBackground = (id: BackgroundId | null) => {
+    selectedBackgroundId.value = id;
+  };
+
   const serialize = () => {
     return {
       playerName: playerName.value,
@@ -213,6 +221,7 @@ export const usePlayerStore = defineStore("player", () => {
       hp: hp.value,
       baseMaxHp: baseMaxHp.value,
       attributes: attributes.value,
+      selectedBackgroundId: selectedBackgroundId.value,
     };
   };
 
@@ -230,6 +239,7 @@ export const usePlayerStore = defineStore("player", () => {
     if ((data as any).attributes) {
       attributes.value = { ...DEFAULT_ATTRIBUTES, ...(data as any).attributes };
     }
+    selectedBackgroundId.value = (data as any).selectedBackgroundId ?? null;
   };
 
   return {
@@ -261,6 +271,8 @@ export const usePlayerStore = defineStore("player", () => {
     earnMoney,
     setIdentity,
     setAttributes,
+    setSelectedBackground,
+    selectedBackgroundId,
     serialize,
     deserialize,
   };

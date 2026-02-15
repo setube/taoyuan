@@ -27,6 +27,10 @@ import { useSecretNoteStore } from "./useSecretNoteStore";
 import { useHanhaiStore } from "./useHanhaiStore";
 import { useBaseStore } from "./useBaseStore";
 import { useCombatStore } from "./useCombatStore";
+import { useFamiliarityStore } from "./useFamiliarityStore";
+import { useMapStateStore } from "./useMapStateStore";
+import { useSurvivalNpcStore } from "./useSurvivalNpcStore";
+import { useSurvivalStore } from "./useSurvivalStore";
 
 const SAVE_KEY_PREFIX = "taoyuanxiang_save_";
 const MAX_SLOTS = 3;
@@ -153,6 +157,10 @@ export const useSaveStore = defineStore("save", () => {
       const hanhaiStore = useHanhaiStore();
       const baseStore = useBaseStore();
       const combatStore = useCombatStore();
+      const familiarityStore = useFamiliarityStore();
+      const mapStateStore = useMapStateStore();
+      const survivalNpcStore = useSurvivalNpcStore();
+      const survivalStore = useSurvivalStore();
 
       const data = {
         gameId: GAME_ID,
@@ -182,6 +190,10 @@ export const useSaveStore = defineStore("save", () => {
         secretNote: secretNoteStore.serialize(),
         hanhai: hanhaiStore.serialize(),
         combat: combatStore.serialize(),
+        familiarity: familiarityStore.serialize(),
+        mapState: mapStateStore.serialize(),
+        survivalNpc: survivalNpcStore.serialize(),
+        survival: survivalStore.serialize(),
         savedAt: new Date().toISOString(),
       };
       localStorage.setItem(
@@ -244,6 +256,10 @@ export const useSaveStore = defineStore("save", () => {
       const secretNoteStore = useSecretNoteStore();
       const hanhaiStore = useHanhaiStore();
       const combatStore = useCombatStore();
+      const familiarityStore = useFamiliarityStore();
+      const mapStateStore = useMapStateStore();
+      const survivalNpcStore = useSurvivalNpcStore();
+      const survivalStore = useSurvivalStore();
 
       gameStore.deserialize(data.game);
       playerStore.deserialize(data.player);
@@ -270,6 +286,10 @@ export const useSaveStore = defineStore("save", () => {
       if (data.secretNote) secretNoteStore.deserialize(data.secretNote);
       if (data.hanhai) hanhaiStore.deserialize(data.hanhai);
       if (data.combat) combatStore.deserialize(data.combat);
+      if (data.familiarity) familiarityStore.deserialize(data.familiarity);
+      if (data.mapState) mapStateStore.deserialize(data.mapState);
+      if (data.survivalNpc) survivalNpcStore.deserialize(data.survivalNpc);
+      if (data.survival) survivalStore.deserialize(data.survival);
       activeSlot.value = slot;
       return true;
     } catch {

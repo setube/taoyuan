@@ -104,6 +104,65 @@
         <Info :size="14" />
         关于
       </button>
+
+      <!-- 开发者模式开关 -->
+      <button
+        class="btn text-center justify-center text-xs text-muted border border-accent/20"
+        :class="{ 'border-accent/50 text-accent': settingsStore.developerMode }"
+        @click="toggleDeveloperMode"
+      >
+        <Settings :size="12" />
+        {{ settingsStore.developerMode ? "开发者模式 开" : "开发者模式" }}
+      </button>
+
+      <!-- 开发者快捷入口（仅当开发者模式开启时显示） -->
+      <div
+        v-if="settingsStore.developerMode"
+        class="w-full border border-accent/30 rounded-xs p-3 flex flex-col gap-2"
+      >
+        <p class="text-accent text-xs font-medium">快捷测试</p>
+        <div class="grid grid-cols-2 gap-2">
+          <button class="btn text-xs justify-center py-2" @click="devGoCombat">
+            进入战斗
+          </button>
+          <button class="btn text-xs justify-center py-2" @click="devGoMap">
+            进入地图
+          </button>
+          <button class="btn text-xs justify-center py-2" @click="devGoBase">
+            进入基地
+          </button>
+          <button
+            class="btn text-xs justify-center py-2"
+            @click="devGoLocation('supermarket')"
+          >
+            前往超市
+          </button>
+          <button
+            class="btn text-xs justify-center py-2"
+            @click="devGoLocation('pharmacy')"
+          >
+            前往药店
+          </button>
+          <button
+            class="btn text-xs justify-center py-2"
+            @click="devGoInventory"
+          >
+            背包
+          </button>
+          <button class="btn text-xs justify-center py-2" @click="devGoSkills">
+            技能
+          </button>
+          <button class="btn text-xs justify-center py-2" @click="devGoQuest">
+            任务
+          </button>
+          <button
+            class="btn text-xs justify-center py-2 col-span-2"
+            @click="devSetPhasePost"
+          >
+            设为疫情后
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 关于弹窗 -->
@@ -149,15 +208,19 @@
       </div>
     </Transition>
 
-    <!-- 角色创建弹窗（步骤 1：姓名性别 / 2：属性分配 / 3：序章） -->
+    <!-- 角色创建弹窗（步骤 1：姓名性别 2：背景 3：属性分配 4：序章） -->
     <Transition name="panel-fade">
       <div
-        v-if="showCharCreate && charCreateStep !== 2 && !showFarmSelect"
+        v-if="
+          showCharCreate &&
+          (charCreateStep === 1 || charCreateStep === 4) &&
+          !showFarmSelect
+        "
         class="fixed inset-0 z-50 flex items-center justify-center bg-bg/80"
       >
         <div
           class="game-panel w-full mx-4 relative flex flex-col"
-          :class="charCreateStep === 3 ? 'max-w-md max-h-[85vh]' : 'max-w-xs'"
+          :class="charCreateStep === 4 ? 'max-w-md max-h-[85vh]' : 'max-w-xs'"
         >
           <button
             class="absolute top-2 right-2 text-muted hover:text-text z-10"
@@ -224,8 +287,8 @@
             </div>
           </template>
 
-          <!-- 步骤 3：序章文案 -->
-          <template v-else-if="charCreateStep === 3">
+          <!-- 步骤 4：序章文案 -->
+          <template v-else-if="charCreateStep === 4">
             <p class="text-accent text-sm mb-3 text-center shrink-0">开端</p>
             <div
               class="flex-1 overflow-y-auto text-sm text-muted whitespace-pre-line mb-4 pr-1 min-h-0"
@@ -246,10 +309,57 @@
       </div>
     </Transition>
 
-    <!-- 步骤 2：属性分配（单独一层以便更宽布局） -->
+    <!-- 步骤 2：背景选择 -->
     <Transition name="panel-fade">
       <div
         v-if="showCharCreate && charCreateStep === 2"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-4"
+      >
+        <div class="game-panel w-full max-w-sm mx-4 relative">
+          <button
+            class="absolute top-2 right-2 text-muted hover:text-text z-10"
+            @click="handleBackToMenu"
+          >
+            <X :size="14" />
+          </button>
+          <p class="text-accent text-sm mb-2 text-center">选择背景</p>
+          <p class="text-xs text-muted mb-3 text-center">
+            背景将决定你在部分地点的起始熟悉度
+          </p>
+          <div class="flex flex-col gap-2">
+            <button
+              v-for="bg in charBackgrounds"
+              :key="bg.id"
+              type="button"
+              class="border rounded-xs px-3 py-2 text-left transition-all"
+              :class="
+                charBackgroundId === bg.id
+                  ? 'border-accent bg-accent/10'
+                  : 'border-accent/20 hover:border-accent/50'
+              "
+              @click="charBackgroundId = bg.id"
+            >
+              <span class="text-sm">{{ bg.name }}</span>
+            </button>
+          </div>
+          <div class="flex gap-3 justify-center mt-4">
+            <button class="btn text-xs" @click="handleBackgroundBack">
+              <ArrowLeft :size="12" />
+              返回
+            </button>
+            <button class="btn text-xs px-6" @click="handleBackgroundNext">
+              <Play :size="12" />
+              下一步
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 步骤 3：属性分配（单独一层以便更宽布局） -->
+    <Transition name="panel-fade">
+      <div
+        v-if="showCharCreate && charCreateStep === 3"
         class="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-4"
       >
         <div class="game-panel w-full max-w-sm mx-4 relative">
@@ -321,7 +431,7 @@
       </div>
     </Transition>
 
-    <!-- 农场选择弹窗 -->
+    <!-- 农场选择弹窗（末日生存流程中未使用） -->
     <Transition name="panel-fade">
       <div
         v-if="showFarmSelect"
@@ -574,12 +684,25 @@ import {
   INTRO_FLAVOR_TEXT,
   buildAttributesFromPoints,
 } from "@/data/charCreate";
-import { ATTRIBUTE_NAMES, getAttributeModifier } from "@/types/attributes";
+import { getAllBackgrounds } from "@/data/backgrounds";
+import { useFamiliarityStore } from "@/stores/useFamiliarityStore";
+import { useMapStateStore } from "@/stores/useMapStateStore";
+import { useSurvivalNpcStore } from "@/stores/useSurvivalNpcStore";
+import { useSurvivalStore } from "@/stores/useSurvivalStore";
+import { useSettingsStore } from "@/stores/useSettingsStore";
+import { useCombatStore } from "@/stores/useCombatStore";
+import { getRandomZombie } from "@/data/zombies";
+import {
+  ATTRIBUTE_NAMES,
+  getAttributeModifier,
+  DEFAULT_ATTRIBUTES,
+} from "@/types/attributes";
 import type { AttributeSet, AttributeType } from "@/types";
 import _pkg from "../../package.json";
 import { useAudio } from "@/composables/useAudio";
 import { showFloat } from "@/composables/useGameLog";
 import type { FarmMapType, Gender } from "@/types";
+import type { BackgroundId } from "@/types/survival";
 
 const router = useRouter();
 const { startBgm } = useAudio();
@@ -596,12 +719,16 @@ const farmStore = useFarmStore();
 const animalStore = useAnimalStore();
 const playerStore = usePlayerStore();
 const questStore = useQuestStore();
+const settingsStore = useSettingsStore();
 
 const slots = ref(saveStore.getSlots());
 const showCharCreate = ref(false);
-/** 角色创建步骤：1=姓名性别 2=属性分配 3=序章 */
-const charCreateStep = ref<1 | 2 | 3>(1);
-/** 步骤2：六维上额外分配的点数（基础值见 charCreate.ts） */
+/** 角色创建步骤：1=姓名性别 2=背景 3=属性分配 4=序章 */
+const charCreateStep = ref<1 | 2 | 3 | 4>(1);
+/** 步骤2：选择的背景 */
+const charBackgroundId = ref<BackgroundId | null>(null);
+const charBackgrounds = getAllBackgrounds();
+/** 步骤3：六维上额外分配的点数（基础值见 charCreate.ts） */
 const statPoints = ref<AttributeSet>({
   str: 0,
   dex: 0,
@@ -610,7 +737,7 @@ const statPoints = ref<AttributeSet>({
   wis: 0,
   cha: 0,
 });
-/** 步骤3 开始时写入，用于开始游戏时 setAttributes */
+/** 步骤4 开始时写入，用于开始游戏时 setAttributes */
 const allocatedAttributes = ref<AttributeSet | null>(null);
 const showFarmSelect = ref(false);
 const showIdentitySetup = ref(false);
@@ -687,6 +814,7 @@ const handleBackToMenu = () => {
   showCharCreate.value = false;
   showFarmSelect.value = false;
   charCreateStep.value = 1;
+  charBackgroundId.value = null;
   statPoints.value = {
     str: 0,
     dex: 0,
@@ -701,17 +829,98 @@ const handleBackToMenu = () => {
   charGender.value = "male";
 };
 
+/** Developer: ensure a minimal game is started so we can jump to any screen. */
+function ensureGameStarted() {
+  if (gameStore.isGameStarted) return;
+  const slot = saveStore.assignNewSlot();
+  if (slot < 0) {
+    showFloat("存档槽位已满，请先删除一个旧存档。");
+    return false;
+  }
+  playerStore.setIdentity("Dev", "male");
+  playerStore.setAttributes({ ...DEFAULT_ATTRIBUTES });
+  playerStore.setSelectedBackground(null);
+  gameStore.startNewGame("standard");
+  const familiarityStore = useFamiliarityStore();
+  const mapStateStore = useMapStateStore();
+  const survivalNpcStore = useSurvivalNpcStore();
+  const survivalStore = useSurvivalStore();
+  familiarityStore.reset();
+  mapStateStore.reset();
+  survivalNpcStore.reset();
+  survivalStore.reset();
+  familiarityStore.applyBackgroundBonuses(null);
+  farmStore.resetFarm(6);
+  questStore.initMainQuest();
+  return true;
+}
+
+function toggleDeveloperMode() {
+  settingsStore.setDeveloperMode(!settingsStore.developerMode);
+}
+
+function devGoCombat() {
+  if (!ensureGameStarted()) return;
+  const combatStore = useCombatStore();
+  combatStore.startCombat(getRandomZombie());
+  void router.push("/game/combat");
+}
+
+function devGoMap() {
+  if (!ensureGameStarted()) return;
+  void router.push("/game/map");
+}
+
+function devGoBase() {
+  if (!ensureGameStarted()) return;
+  void router.push("/game/base");
+}
+
+function devGoLocation(id: string) {
+  if (!ensureGameStarted()) return;
+  void router.push(`/game/location/${id}`);
+}
+
+function devGoInventory() {
+  if (!ensureGameStarted()) return;
+  void router.push("/game/inventory");
+}
+
+function devGoSkills() {
+  if (!ensureGameStarted()) return;
+  void router.push("/game/skills");
+}
+
+function devGoQuest() {
+  if (!ensureGameStarted()) return;
+  void router.push("/game/quest");
+}
+
+function devSetPhasePost() {
+  if (!ensureGameStarted()) return;
+  gameStore.$patch({ phase: "post" });
+  showFloat("已设为疫情后阶段");
+}
+
 const handleCharCreateNext = () => {
   charCreateStep.value = 2;
 };
 
-const handleStatsBack = () => {
+const handleBackgroundBack = () => {
   charCreateStep.value = 1;
+};
+
+const handleBackgroundNext = () => {
+  charCreateStep.value = 3;
+};
+
+const handleStatsBack = () => {
+  charCreateStep.value = 2;
 };
 
 const handleStatsNext = () => {
   allocatedAttributes.value = buildAttributesFromPoints(statPoints.value);
-  charCreateStep.value = 3;
+  charCreateStep.value = 4;
 };
 
 const handleStartGameFromFlavor = () => {
@@ -727,11 +936,24 @@ const handleStartGameFromFlavor = () => {
   if (allocatedAttributes.value) {
     playerStore.setAttributes(allocatedAttributes.value);
   }
+  playerStore.setSelectedBackground(charBackgroundId.value);
   gameStore.startNewGame("standard");
+  const familiarityStore = useFamiliarityStore();
+  const mapStateStore = useMapStateStore();
+  const survivalNpcStore = useSurvivalNpcStore();
+  const survivalStore = useSurvivalStore();
+  familiarityStore.reset();
+  mapStateStore.reset();
+  survivalNpcStore.reset();
+  survivalStore.reset();
+  familiarityStore.applyBackgroundBonuses(
+    playerStore.selectedBackgroundId ?? null,
+  );
   farmStore.resetFarm(6);
   questStore.initMainQuest();
   showCharCreate.value = false;
   charCreateStep.value = 1;
+  charBackgroundId.value = null;
   allocatedAttributes.value = null;
   statPoints.value = {
     str: 0,

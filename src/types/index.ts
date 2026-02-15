@@ -17,3 +17,4 @@ export * from "./guild";
 export * from "./secretNote";
 export * from "./hanhai";
 export * from "./encounter";
+export * from "./survival";
