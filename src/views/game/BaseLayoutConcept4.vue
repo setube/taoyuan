@@ -1,15 +1,16 @@
 <template>
-  <div class="flex flex-col items-center gap-4 p-4">
+  <div class="flex flex-col items-center gap-4 p-4 min-h-0">
     <h3 class="text-accent text-xs">概念4：真实俯视图 (10×20)</h3>
 
     <!-- Apartment Grid -->
-    <div class="apartment-grid">
+    <div class="apartment-grid shrink-0">
       <button
         v-for="furniture in APARTMENT_FURNITURE"
         :key="furniture.id"
         :style="{ gridArea: furniture.gridArea }"
         class="furniture-btn"
-        @click="openFurnitureModal(furniture)"
+        :class="{ 'ring-2 ring-accent': selectedFurniture?.id === furniture.id }"
+        @click="selectFurniture(furniture)"
       >
         <component :is="getIcon(furniture.icon)" :size="getFurnitureIconSize(furniture)" />
         <span class="text-[10px] text-accent">{{ furniture.name }}</span>
@@ -28,16 +29,37 @@
       </button>
     </div>
 
-    <!-- Center modal: description at top, actions as buttons at bottom -->
-    <BaseRoomModal
+    <!-- Bottom of center: action buttons when something is selected -->
+    <div
       v-if="selectedFurniture"
-      :name="selectedFurniture.name"
-      :icon="getIcon(selectedFurniture.icon)"
-      :description="currentFlavorText"
-      :primaryActions="primaryActions"
-      :generalActions="generalActions"
-      @close="closeModal"
-    />
+      class="w-full max-w-[600px] shrink-0 rounded-xs bg-panel border border-muted/30 p-2 flex flex-wrap items-center gap-2"
+    >
+      <span class="text-accent text-[10px] font-medium w-full md:w-auto">
+        {{ selectedFurniture.name }} —
+      </span>
+      <button
+        v-for="action in primaryActions"
+        :key="action.id"
+        class="btn text-xs"
+        :disabled="action.disabled"
+        @click="runAction(action)"
+      >
+        {{ action.label }}
+        <span v-if="action.badge" class="ml-1 text-[10px] text-muted">{{ action.badge }}</span>
+      </button>
+      <button
+        v-for="action in generalActions"
+        :key="action.id"
+        class="btn text-xs opacity-80 hover:opacity-100"
+        :disabled="action.disabled"
+        @click="runAction(action)"
+      >
+        {{ action.label }}
+      </button>
+      <button class="btn text-xs text-muted ml-auto" @click="clearSelection">
+        关闭
+      </button>
+    </div>
   </div>
 </template>
 
@@ -57,7 +79,7 @@
   } from 'lucide-vue-next'
   import { APARTMENT_FURNITURE, type FurnitureDef } from '@/data/baseFurniture'
   import { getRandomFlavor } from '@/data/baseFlavor'
-  import BaseRoomModal, { type RoomAction } from '@/components/game/BaseRoomModal.vue'
+  import type { RoomAction } from '@/components/game/BaseRoomModal.vue'
   import { useBaseStore } from '@/stores/useBaseStore'
   import { useGameStore } from '@/stores/useGameStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
@@ -72,7 +94,6 @@
   const requestSleep = inject<() => void>('requestSleep')
 
   const selectedFurniture = ref<FurnitureDef | null>(null)
-  const currentFlavorText = ref('')
 
   // Icon mapping
   const iconMap: Record<string, any> = {
@@ -143,14 +164,19 @@
     return null
   }
 
-  const openFurnitureModal = (furniture: FurnitureDef) => {
+  const selectFurniture = (furniture: FurnitureDef) => {
     selectedFurniture.value = furniture
-    currentFlavorText.value = getRandomFlavor(furniture.id)
+    const flavor = getRandomFlavor(furniture.id)
+    addLog(flavor)
     baseStore.interactWithFurniture(furniture.id)
   }
 
-  const closeModal = () => {
+  const clearSelection = () => {
     selectedFurniture.value = null
+  }
+
+  const runAction = (action: RoomAction) => {
+    action.handler()
   }
 
   // Actions based on furniture type
