@@ -1,79 +1,62 @@
 <template>
-  <div>
-    <div class="flex items-center gap-1.5 text-sm text-accent mb-3">
-      <Home :size="14" />
-      <span>基地（公寓）</span>
-    </div>
-    <p class="text-xs text-muted mb-3">
-      这里是你的避难所。加固门窗、休息或制作物品。
-    </p>
+  <div class="relative">
+    <!-- Developer Mode Toggle (top-right corner) -->
+    <button
+      v-if="settingsStore.developerMode"
+      class="absolute top-2 right-2 px-2 py-1 text-[10px] bg-accent/20 text-accent border border-accent/30 rounded-full hover:bg-accent/30 transition-colors z-10"
+      @click="cycleLayout"
+    >
+      概念{{ currentLayoutNumber }}
+    </button>
 
-    <div class="flex flex-col gap-2 mb-4">
-      <div
-        class="border border-accent/20 rounded-xs p-2 flex justify-between items-center"
-      >
-        <span class="text-xs">加固等级</span>
-        <span class="text-xs">{{ baseStore.barricadeLevel }}/3</span>
-      </div>
-      <button
-        class="btn text-xs"
-        :disabled="baseStore.barricadeLevel >= 3"
-        @click="handleUpgradeBarricade"
-      >
-        加固门窗（需材料）
-      </button>
-    </div>
-
-    <div class="flex flex-col gap-2">
-      <button class="btn text-xs w-full justify-center" @click="handleRest">
-        <Moon :size="12" class="mr-1" />
-        休息（2 回合）
-      </button>
-      <button
-        class="btn btn-danger text-xs w-full justify-center"
-        @click="requestSleep"
-      >
-        <Moon :size="12" class="mr-1" />
-        回家休息
-      </button>
-      <button class="btn text-xs w-full justify-center" @click="goCraft">
-        制作
-      </button>
-    </div>
+    <!-- Layout Components -->
+    <BaseLayoutConcept1 v-if="currentLayout === 'concept1'" />
+    <BaseLayoutConcept2 v-else-if="currentLayout === 'concept2'" />
+    <BaseLayoutConcept3 v-else-if="currentLayout === 'concept3'" />
+    <BaseLayoutConcept4 v-else />
   </div>
 </template>
 
 <script setup lang="ts">
-import { inject } from "vue";
-import { Home, Moon } from "lucide-vue-next";
-import { useBaseStore } from "@/stores/useBaseStore";
-import { useGameStore } from "@/stores/useGameStore";
-import { usePlayerStore } from "@/stores/usePlayerStore";
-import { TURN_COSTS } from "@/data/timeConstants";
-import { addLog } from "@/composables/useGameLog";
-import router from "@/router";
+  import { ref, computed, onMounted } from 'vue'
+  import { useSettingsStore } from '@/stores/useSettingsStore'
+  import BaseLayoutConcept1 from './BaseLayoutConcept1.vue'
+  import BaseLayoutConcept2 from './BaseLayoutConcept2.vue'
+  import BaseLayoutConcept3 from './BaseLayoutConcept3.vue'
+  import BaseLayoutConcept4 from './BaseLayoutConcept4.vue'
 
-const requestSleep = inject<() => void>("requestSleep", () => {});
+  const settingsStore = useSettingsStore()
 
-const baseStore = useBaseStore();
-const gameStore = useGameStore();
-const playerStore = usePlayerStore();
+  type LayoutType = 'concept1' | 'concept2' | 'concept3' | 'concept4'
 
-function handleUpgradeBarricade() {
-  if (baseStore.upgradeBarricade()) {
-    addLog("你加固了门窗，基地更安全了。");
+  const currentLayout = ref<LayoutType>('concept4')
+
+  const currentLayoutNumber = computed(() => {
+    const layouts: LayoutType[] = ['concept1', 'concept2', 'concept3', 'concept4']
+    return layouts.indexOf(currentLayout.value) + 1
+  })
+
+  onMounted(() => {
+    // Load saved layout preference (only in dev mode)
+    if (settingsStore.developerMode) {
+      const saved = localStorage.getItem('devBaseLayout')
+      if (saved && ['concept1', 'concept2', 'concept3', 'concept4'].includes(saved)) {
+        currentLayout.value = saved as LayoutType
+      }
+    } else {
+      // Default to Concept 4 (most immersive) in production
+      currentLayout.value = 'concept4'
+    }
+  })
+
+  const cycleLayout = () => {
+    const layouts: LayoutType[] = ['concept1', 'concept2', 'concept3', 'concept4']
+    const currentIndex = layouts.indexOf(currentLayout.value)
+    const nextIndex = (currentIndex + 1) % layouts.length
+    const nextLayout = layouts[nextIndex]!!
+    currentLayout.value = nextLayout
+
+    // Save preference
+    localStorage.setItem('devBaseLayout', currentLayout.value)
   }
-}
-
-function handleRest() {
-  const result = gameStore.advanceTurns(TURN_COSTS.rest);
-  playerStore.restoreStamina(30);
-  playerStore.restoreHealth(5);
-  addLog("你休息了一会儿，恢复了少量体力和生命。");
-  if (result.message) addLog(result.message);
-}
-
-function goCraft() {
-  router.push("/game/workshop");
-}
 </script>
