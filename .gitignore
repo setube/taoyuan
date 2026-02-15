@@ -1,3 +1,14 @@
+# Lock files (keep local; do not push for shared repo)
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lock
+
+# Environment / secrets (never push)
+.env
+.env.*
+!.env.example
+
 # Logs
 logs
 *.log

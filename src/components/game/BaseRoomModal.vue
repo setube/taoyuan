@@ -1,44 +1,36 @@
 <template>
   <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" @click.self="emit('close')">
-    <div class="game-panel max-w-md w-full">
-      <!-- Header -->
-      <div class="flex items-center justify-between mb-4">
-        <div class="flex items-center gap-2">
-          <component :is="icon" :size="20" class="text-accent" />
-          <h2 class="text-accent text-sm font-medium">{{ name }}</h2>
+    <div class="game-panel max-w-md w-full flex flex-col">
+      <!-- Top: header + description -->
+      <div class="flex items-start justify-between gap-2 mb-3">
+        <div class="flex items-center gap-2 min-w-0">
+          <component :is="icon" :size="20" class="text-accent shrink-0" />
+          <h2 class="text-accent text-sm font-medium truncate">{{ name }}</h2>
         </div>
-        <button @click="emit('close')" class="text-muted hover:text-accent transition-colors">
+        <button @click="emit('close')" class="text-muted hover:text-accent transition-colors shrink-0" aria-label="关闭">
           <X :size="16" />
         </button>
       </div>
-
-      <!-- Description / Flavor Text -->
       <p class="text-xs text-muted leading-relaxed mb-4">
         {{ description }}
       </p>
 
-      <!-- Primary Actions -->
-      <div v-if="primaryActions.length > 0" class="space-y-2 mb-4">
-        <h3 class="text-accent text-[10px] uppercase tracking-wide mb-2">主要操作</h3>
+      <!-- Bottom of modal: actions as buttons -->
+      <div class="flex flex-wrap gap-2 mt-auto pt-3 border-t border-muted/30">
         <button
           v-for="action in primaryActions"
           :key="action.id"
-          class="btn w-full text-xs justify-start"
+          class="btn text-xs"
           :disabled="action.disabled"
           @click="handleAction(action)"
         >
           {{ action.label }}
-          <span v-if="action.badge" class="ml-auto text-[10px] text-muted">{{ action.badge }}</span>
+          <span v-if="action.badge" class="ml-1 text-[10px] text-muted">{{ action.badge }}</span>
         </button>
-      </div>
-
-      <!-- General Actions -->
-      <div v-if="generalActions && generalActions.length > 0" class="space-y-1">
-        <h3 class="text-muted text-[10px] uppercase tracking-wide mb-2">通用操作</h3>
         <button
-          v-for="action in generalActions"
+          v-for="action in (generalActions ?? [])"
           :key="action.id"
-          class="btn w-full text-xs justify-start opacity-75 hover:opacity-100"
+          class="btn text-xs opacity-80 hover:opacity-100"
           :disabled="action.disabled"
           @click="handleAction(action)"
         >

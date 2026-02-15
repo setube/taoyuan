@@ -28,7 +28,7 @@
       </button>
     </div>
 
-    <!-- Room Modal -->
+    <!-- Center modal: description at top, actions as buttons at bottom -->
     <BaseRoomModal
       v-if="selectedFurniture"
       :name="selectedFurniture.name"
