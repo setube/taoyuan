@@ -13,7 +13,14 @@
       <div
         class="game-layout-topbar hidden md:flex items-center gap-4 py-1.5 px-2 text-xs border-b border-accent/20 bg-panel/50 col-span-2"
       >
-        <span class="text-accent font-medium">{{ locationName }}</span>
+        <button
+          type="button"
+          class="text-accent font-medium hover:bg-accent/10 transition-colors rounded-xs px-0.5 -mx-0.5 py-0 border-0 bg-transparent cursor-pointer"
+          :title="'打开地图'"
+          @click="navigateToPanel('map')"
+        >
+          {{ locationName }}
+        </button>
         <span class="text-muted"
           >第{{ gameStore.year }}年 {{ gameStore.seasonName }} 第{{
             gameStore.day
@@ -230,6 +237,7 @@ import { ref, computed, watch, onMounted, onUnmounted, provide } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useGameStore, usePlayerStore, useAnimalStore } from "@/stores";
 import { getLocationName } from "@/data/locations";
+import { navigateToPanel } from "@/composables/useNavigation";
 import { useDialogs } from "@/composables/useDialogs";
 import { handleEndDay } from "@/composables/useEndDay";
 import { useGameClock } from "@/composables/useGameClock";
