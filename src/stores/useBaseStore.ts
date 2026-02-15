@@ -13,6 +13,8 @@ export interface FurnitureState {
   lastInteracted?: number // timestamp
 }
 
+const BASE_LAYOUT_KEY = "taoyuan_base_layout";
+
 /** 末日生存：基地（公寓）状态，替代 FarmStore */
 export const useBaseStore = defineStore("base", () => {
   /** 加固等级 0–3 (legacy, used for door by default) */
