@@ -197,6 +197,11 @@ export const usePlayerStore = defineStore("player", () => {
     needsIdentitySetup.value = false;
   };
 
+  /** 设置六维属性（新游戏角色创建时调用） */
+  const setAttributes = (attrs: AttributeSet) => {
+    attributes.value = { ...attrs };
+  };
+
   const serialize = () => {
     return {
       playerName: playerName.value,
@@ -255,6 +260,7 @@ export const usePlayerStore = defineStore("player", () => {
     spendMoney,
     earnMoney,
     setIdentity,
+    setAttributes,
     serialize,
     deserialize,
   };

@@ -149,68 +149,160 @@
       </div>
     </Transition>
 
-    <!-- 角色创建弹窗 -->
+    <!-- 角色创建弹窗（步骤 1：姓名性别 / 2：属性分配 / 3：序章） -->
     <Transition name="panel-fade">
       <div
-        v-if="showCharCreate && !showFarmSelect"
+        v-if="showCharCreate && charCreateStep !== 2 && !showFarmSelect"
         class="fixed inset-0 z-50 flex items-center justify-center bg-bg/80"
       >
-        <div class="game-panel w-full max-w-xs mx-4 relative">
+        <div
+          class="game-panel w-full mx-4 relative flex flex-col"
+          :class="charCreateStep === 3 ? 'max-w-md max-h-[85vh]' : 'max-w-xs'"
+        >
           <button
-            class="absolute top-2 right-2 text-muted hover:text-text"
+            class="absolute top-2 right-2 text-muted hover:text-text z-10"
             @click="handleBackToMenu"
           >
             <X :size="14" />
           </button>
-          <p class="text-accent text-sm mb-4 text-center">创建你的角色</p>
-          <div class="flex flex-col gap-4">
-            <!-- 名字输入 -->
-            <div>
-              <label class="text-xs text-muted mb-1 block">你的名字</label>
-              <input
-                v-model="charName"
-                type="text"
-                maxlength="4"
-                placeholder="请输入你的名字"
-                class="w-full px-3 py-2 bg-bg border border-accent/30 rounded-xs text-sm focus:border-accent outline-none"
-              />
+
+          <!-- 步骤 1：姓名与性别 -->
+          <template v-if="charCreateStep === 1">
+            <p class="text-accent text-sm mb-4 text-center">创建你的角色</p>
+            <div class="flex flex-col gap-4">
+              <div>
+                <label class="text-xs text-muted mb-1 block">你的名字</label>
+                <input
+                  v-model="charName"
+                  type="text"
+                  maxlength="4"
+                  placeholder="请输入你的名字"
+                  class="w-full px-3 py-2 bg-bg border border-accent/30 rounded-xs text-sm focus:border-accent outline-none"
+                />
+              </div>
+              <div>
+                <label class="text-xs text-muted mb-1 block">性别</label>
+                <div class="flex gap-3">
+                  <button
+                    class="btn flex-1 justify-center py-2"
+                    :class="
+                      charGender === 'male' ? 'border-accent! bg-accent/10!' : ''
+                    "
+                    @click="charGender = 'male'"
+                  >
+                    男
+                  </button>
+                  <button
+                    class="btn flex-1 justify-center py-2"
+                    :class="
+                      charGender === 'female'
+                        ? 'border-accent! bg-accent/10!'
+                        : ''
+                    "
+                    @click="charGender = 'female'"
+                  >
+                    女
+                  </button>
+                </div>
+              </div>
             </div>
-            <!-- 性别选择 -->
-            <div>
-              <label class="text-xs text-muted mb-1 block">性别</label>
-              <div class="flex gap-3">
+            <div class="flex gap-3 justify-center mt-4">
+              <button class="btn text-xs" @click="handleBackToMenu">
+                <ArrowLeft :size="12" />
+                返回
+              </button>
+              <button
+                class="btn text-xs px-6"
+                :disabled="!charName.trim()"
+                @click="handleCharCreateNext"
+              >
+                <Play :size="12" />
+                下一步
+              </button>
+            </div>
+          </template>
+
+          <!-- 步骤 3：序章文案 -->
+          <template v-else-if="charCreateStep === 3">
+            <p class="text-accent text-sm mb-3 text-center shrink-0">开端</p>
+            <div
+              class="flex-1 overflow-y-auto text-sm text-muted whitespace-pre-line mb-4 pr-1 min-h-0"
+            >
+              {{ INTRO_FLAVOR_TEXT }}
+            </div>
+            <div class="flex justify-center shrink-0">
+              <button class="btn text-xs px-6" @click="handleStartGameFromFlavor">
+                <Play :size="12" />
+                开始游戏
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 步骤 2：属性分配（单独一层以便更宽布局） -->
+    <Transition name="panel-fade">
+      <div
+        v-if="showCharCreate && charCreateStep === 2"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-4"
+      >
+        <div class="game-panel w-full max-w-sm mx-4 relative">
+          <button
+            class="absolute top-2 right-2 text-muted hover:text-text z-10"
+            @click="handleBackToMenu"
+          >
+            <X :size="14" />
+          </button>
+          <p class="text-accent text-sm mb-2 text-center">分配属性</p>
+          <p class="text-xs text-muted mb-3 text-center">
+            将 {{ CHAR_CREATE_POINTS_TO_DISTRIBUTE }} 点分配到六维属性中（基础值 {{ CHAR_CREATE_BASE_STAT }}）
+          </p>
+          <p class="text-accent text-xs mb-3 text-center">
+            剩余点数：{{ statPointsRemaining }}
+          </p>
+          <div class="flex flex-col gap-2">
+            <div
+              v-for="key in ATTRIBUTE_KEYS"
+              :key="key"
+              class="flex items-center justify-between gap-2 border border-accent/20 rounded-xs px-3 py-2"
+            >
+              <span class="text-sm text-muted w-16">{{ ATTRIBUTE_NAMES[key] }}</span>
+              <div class="flex items-center gap-1">
                 <button
-                  class="btn flex-1 justify-center py-2"
-                  :class="
-                    charGender === 'male' ? 'border-accent! bg-accent/10!' : ''
-                  "
-                  @click="charGender = 'male'"
+                  type="button"
+                  class="btn px-2 py-0.5 text-xs"
+                  :disabled="!canDecreaseStat(key)"
+                  @click="removeStatPoint(key)"
                 >
-                  男
+                  −
                 </button>
+                <span class="text-sm w-8 text-center">
+                  {{ getStatValue(key) }}
+                  <span class="text-muted text-xs">
+                    ({{ getStatValue(key) >= 10 ? '+' : '' }}{{ getAttributeModifier(getStatValue(key)) }})
+                  </span>
+                </span>
                 <button
-                  class="btn flex-1 justify-center py-2"
-                  :class="
-                    charGender === 'female'
-                      ? 'border-accent! bg-accent/10!'
-                      : ''
-                  "
-                  @click="charGender = 'female'"
+                  type="button"
+                  class="btn px-2 py-0.5 text-xs"
+                  :disabled="!canIncreaseStat(key)"
+                  @click="addStatPoint(key)"
                 >
-                  女
+                  +
                 </button>
               </div>
             </div>
           </div>
           <div class="flex gap-3 justify-center mt-4">
-            <button class="btn text-xs" @click="handleBackToMenu">
+            <button class="btn text-xs" @click="handleStatsBack">
               <ArrowLeft :size="12" />
               返回
             </button>
             <button
               class="btn text-xs px-6"
-              :disabled="!charName.trim()"
-              @click="handleCharCreateNext"
+              :disabled="!canProceedFromStats"
+              @click="handleStatsNext"
             >
               <Play :size="12" />
               下一步
@@ -466,6 +558,16 @@ import { useAnimalStore } from "@/stores/useAnimalStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useQuestStore } from "@/stores/useQuestStore";
 import { FARM_MAP_DEFS } from "@/data/farmMaps";
+import {
+  CHAR_CREATE_BASE_STAT,
+  CHAR_CREATE_POINTS_TO_DISTRIBUTE,
+  CHAR_CREATE_MIN_STAT,
+  CHAR_CREATE_MAX_STAT,
+  INTRO_FLAVOR_TEXT,
+  buildAttributesFromPoints,
+} from "@/data/charCreate";
+import { ATTRIBUTE_NAMES, getAttributeModifier } from "@/types/attributes";
+import type { AttributeSet, AttributeType } from "@/types";
 import _pkg from "../../package.json";
 import { useAudio } from "@/composables/useAudio";
 import { showFloat } from "@/composables/useGameLog";
@@ -489,6 +591,19 @@ const questStore = useQuestStore();
 
 const slots = ref(saveStore.getSlots());
 const showCharCreate = ref(false);
+/** 角色创建步骤：1=姓名性别 2=属性分配 3=序章 */
+const charCreateStep = ref<1 | 2 | 3>(1);
+/** 步骤2：六维上额外分配的点数（基础值见 charCreate.ts） */
+const statPoints = ref<AttributeSet>({
+  str: 0,
+  dex: 0,
+  con: 0,
+  int: 0,
+  wis: 0,
+  cha: 0,
+});
+/** 步骤3 开始时写入，用于开始游戏时 setAttributes */
+const allocatedAttributes = ref<AttributeSet | null>(null);
 const showFarmSelect = ref(false);
 const showIdentitySetup = ref(false);
 const showAbout = ref(false);
@@ -504,6 +619,42 @@ const deleteTargetSlot = ref<number | null>(null);
 const selectedFarmDef = computed(() =>
   FARM_MAP_DEFS.find((f) => f.type === selectedMap.value),
 );
+
+const ATTRIBUTE_KEYS: AttributeType[] = [
+  "str",
+  "dex",
+  "con",
+  "int",
+  "wis",
+  "cha",
+];
+const statPointsRemaining = computed(() => {
+  const p = statPoints.value;
+  const used =
+    p.str + p.dex + p.con + p.int + p.wis + p.cha;
+  return CHAR_CREATE_POINTS_TO_DISTRIBUTE - used;
+});
+const canProceedFromStats = computed(
+  () => statPointsRemaining.value === 0,
+);
+function getStatValue(key: AttributeType): number {
+  return CHAR_CREATE_BASE_STAT + statPoints.value[key];
+}
+function canIncreaseStat(key: AttributeType): boolean {
+  if (statPointsRemaining.value <= 0) return false;
+  return getStatValue(key) < CHAR_CREATE_MAX_STAT;
+}
+function canDecreaseStat(key: AttributeType): boolean {
+  return statPoints.value[key] > 0;
+}
+function addStatPoint(key: AttributeType) {
+  if (!canIncreaseStat(key)) return;
+  statPoints.value = { ...statPoints.value, [key]: statPoints.value[key] + 1 };
+}
+function removeStatPoint(key: AttributeType) {
+  if (!canDecreaseStat(key)) return;
+  statPoints.value = { ...statPoints.value, [key]: statPoints.value[key] - 1 };
+}
 
 const handleSelectFarm = (type: FarmMapType) => {
   selectedMap.value = type;
@@ -530,13 +681,62 @@ const refreshSlots = () => {
 const handleBackToMenu = () => {
   showCharCreate.value = false;
   showFarmSelect.value = false;
+  charCreateStep.value = 1;
+  statPoints.value = {
+    str: 0,
+    dex: 0,
+    con: 0,
+    int: 0,
+    wis: 0,
+    cha: 0,
+  };
+  allocatedAttributes.value = null;
   selectedMap.value = "standard";
   charName.value = "";
   charGender.value = "male";
 };
 
 const handleCharCreateNext = () => {
-  showFarmSelect.value = true;
+  charCreateStep.value = 2;
+};
+
+const handleStatsBack = () => {
+  charCreateStep.value = 1;
+};
+
+const handleStatsNext = () => {
+  allocatedAttributes.value = buildAttributesFromPoints(statPoints.value);
+  charCreateStep.value = 3;
+};
+
+const handleStartGameFromFlavor = () => {
+  const slot = saveStore.assignNewSlot();
+  if (slot < 0) {
+    showFloat("存档槽位已满，请先删除一个旧存档。");
+    return;
+  }
+  playerStore.setIdentity(
+    (charName.value.trim() || "未命名").slice(0, 4),
+    charGender.value,
+  );
+  if (allocatedAttributes.value) {
+    playerStore.setAttributes(allocatedAttributes.value);
+  }
+  gameStore.startNewGame("standard");
+  farmStore.resetFarm(6);
+  questStore.initMainQuest();
+  showCharCreate.value = false;
+  charCreateStep.value = 1;
+  allocatedAttributes.value = null;
+  statPoints.value = {
+    str: 0,
+    dex: 0,
+    con: 0,
+    int: 0,
+    wis: 0,
+    cha: 0,
+  };
+  void router.push("/game");
 };
 
 const handleBackToCharCreate = () => {
