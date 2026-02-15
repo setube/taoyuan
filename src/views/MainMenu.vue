@@ -145,6 +145,12 @@
           </button>
           <button
             class="btn text-xs justify-center py-2"
+            @click="devContextTest"
+          >
+            情境测试
+          </button>
+          <button
+            class="btn text-xs justify-center py-2"
             @click="devGoInventory"
           >
             背包
@@ -690,6 +696,7 @@ import { useSurvivalStore } from "@/stores/useSurvivalStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useCombatStore } from "@/stores/useCombatStore";
 import { getRandomZombie } from "@/data/zombies";
+import { GRID_POIS } from "@/data/mapGrid";
 import {
   ATTRIBUTE_NAMES,
   getAttributeModifier,
@@ -877,6 +884,17 @@ function devGoBase() {
 function devGoLocation(id: string) {
   if (!ensureGameStarted()) return;
   void router.push(`/game/location/${id}`);
+}
+
+function devContextTest() {
+  if (!ensureGameStarted()) return;
+  const poi = GRID_POIS.find((p) => p.locationId === "supermarket");
+  if (poi) {
+    gameStore.travelToGridCell(poi.row, poi.col);
+    const survivalNpcStore = useSurvivalNpcStore();
+    survivalNpcStore.initNpc("test_survivor_supermarket");
+  }
+  void router.push("/game/base");
 }
 
 function devGoInventory() {

@@ -77,7 +77,7 @@
           </router-view>
         </main>
         <aside class="game-layout-right hidden md:flex flex-col shrink-0">
-          <QuickAccessBar @open-settings="showSettings = true" />
+          <QuickAccessBar />
         </aside>
       </div>
 
