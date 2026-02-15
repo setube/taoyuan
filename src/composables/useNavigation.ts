@@ -1,127 +1,64 @@
-import type { Component } from 'vue'
-import router from '@/router'
-import { useGameStore } from '@/stores'
-import { isShopOpen, TAB_TO_LOCATION_GROUP } from '@/data/timeConstants'
-import { addLog } from './useGameLog'
-import { handleEndDay } from './useEndDay'
-import { sfxClick, useAudio } from './useAudio'
-import { useGameClock } from './useGameClock'
-import {
-  Wheat,
-  Egg,
-  Home,
-  Users,
-  Store,
-  TreePine,
-  Fish,
-  Pickaxe,
-  Flame,
-  Cog,
-  Wrench,
-  Package,
-  Star,
-  BookOpen,
-  Wallet,
-  ScrollText,
-  User,
-  FlaskConical,
-  Landmark,
-  Swords,
-  Tent
-} from 'lucide-vue-next'
+import type { Component } from "vue";
+import router from "@/router";
+import { useGameStore } from "@/stores";
+import { addLog } from "./useGameLog";
+import { handleEndDay } from "./useEndDay";
+import { sfxClick, useAudio } from "./useAudio";
+import { Home, Map, Package, Star, ScrollText, User } from "lucide-vue-next";
 
 export type PanelKey =
-  | 'farm'
-  | 'shop'
-  | 'inventory'
-  | 'fishing'
-  | 'mining'
-  | 'village'
-  | 'cooking'
-  | 'forage'
-  | 'upgrade'
-  | 'skills'
-  | 'workshop'
-  | 'achievement'
-  | 'animal'
-  | 'home'
-  | 'wallet'
-  | 'quest'
-  | 'charinfo'
-  | 'breeding'
-  | 'museum'
-  | 'guild'
-  | 'hanhai'
+  | "base"
+  | "map"
+  | "inventory"
+  | "skills"
+  | "quest"
+  | "charinfo"
+  | "farm"
+  | "shop"
+  | "upgrade"
+  | "workshop"
+  | "home"
+  | "village"
+  | "forage"
+  | "fishing"
+  | "mining"
+  | "cooking"
+  | "animal"
+  | "breeding"
+  | "achievement"
+  | "wallet"
+  | "museum"
+  | "guild"
+  | "hanhai";
 
 export const TABS: { key: PanelKey; label: string; icon: Component }[] = [
-  { key: 'farm', label: '农场', icon: Wheat },
-  { key: 'animal', label: '畜棚', icon: Egg },
-  { key: 'home', label: '农舍', icon: Home },
-  { key: 'breeding', label: '育种', icon: FlaskConical },
-  { key: 'village', label: '桃源村', icon: Users },
-  { key: 'shop', label: '商圈', icon: Store },
-  { key: 'forage', label: '竹林', icon: TreePine },
-  { key: 'fishing', label: '清溪', icon: Fish },
-  { key: 'mining', label: '矿洞', icon: Pickaxe },
-  { key: 'cooking', label: '灶台', icon: Flame },
-  { key: 'workshop', label: '加工坊', icon: Cog },
-  { key: 'upgrade', label: '工坊', icon: Wrench },
-  { key: 'charinfo', label: '角色', icon: User },
-  { key: 'inventory', label: '背包', icon: Package },
-  { key: 'skills', label: '技能', icon: Star },
-  { key: 'achievement', label: '图鉴', icon: BookOpen },
-  { key: 'wallet', label: '钱袋', icon: Wallet },
-  { key: 'quest', label: '告示栏', icon: ScrollText },
-  { key: 'museum', label: '博物馆', icon: Landmark },
-  { key: 'guild', label: '公会', icon: Swords },
-  { key: 'hanhai', label: '瀚海', icon: Tent }
-]
+  { key: "base", label: "基地", icon: Home },
+  { key: "map", label: "地图", icon: Map },
+  { key: "charinfo", label: "属性", icon: User },
+  { key: "inventory", label: "背包", icon: Package },
+  { key: "skills", label: "技能", icon: Star },
+  { key: "quest", label: "任务", icon: ScrollText },
+];
 
-/** 导航到游戏面板，检查旅行时间、就寝时间和商店营业时间 */
+/** 导航到游戏面板（末日生存：无旅行时间，直接跳转） */
 export const navigateToPanel = (panelKey: PanelKey) => {
-  const gameStore = useGameStore()
-  const { startBgm } = useAudio()
+  const gameStore = useGameStore();
+  const { startBgm } = useAudio();
 
   if (gameStore.isPastBedtime) {
-    addLog('已经凌晨2点了，你必须休息。')
-    handleEndDay()
-    return
+    addLog("已经凌晨2点了，你必须休息。");
+    handleEndDay();
+    return;
   }
 
-  // 商店营业检查
-  const shopCheck = isShopOpen(panelKey, gameStore.day, gameStore.hour)
-  if (!shopCheck.open) {
-    addLog(shopCheck.reason!)
-    return
-  }
-
-  // 旅行时间
-  const travelResult = gameStore.travelTo(panelKey)
-  if (travelResult.timeCost > 0) {
-    addLog(travelResult.message)
-  }
-  if (travelResult.passedOut) {
-    handleEndDay()
-    return
-  }
-
-  sfxClick()
-  startBgm()
-  void router.push({ name: panelKey })
-
-  // UI 面板（无地点）暂停时钟，游戏面板恢复
-  const { pauseClock, resumeClock } = useGameClock()
-  const targetGroup = TAB_TO_LOCATION_GROUP[panelKey]
-  if (targetGroup === null || targetGroup === undefined) {
-    pauseClock()
-  } else {
-    resumeClock()
-  }
-}
+  sfxClick();
+  startBgm();
+  void router.push({ name: panelKey });
+};
 
 export const useNavigation = () => {
   return {
     TABS,
-    navigateToPanel
-  }
-}
+    navigateToPanel,
+  };
+};

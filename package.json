@@ -1,6 +1,6 @@
 {
   "name": "taoyuan",
-  "title": "桃源乡",
+  "title": "末日生存",
   "qq": "920930589",
   "private": true,
   "version": "1.7.0",
@@ -36,7 +36,7 @@
     "@types/node": "^24.10.1",
     "@typescript-eslint/eslint-plugin": "^8.52.0",
     "@typescript-eslint/parser": "^8.52.0",
-    "@vitejs/plugin-vue": "^6.0.1",
+    "@vitejs/plugin-vue": "^5.2.1",
     "@vue/tsconfig": "^0.8.1",
     "electron": "^39.2.7",
     "electron-builder": "^26.0.12",
@@ -47,7 +47,7 @@
     "lightningcss": "^1.31.1",
     "tailwindcss": "^4.1.18",
     "typescript": "~5.9.3",
-    "vite": "^7.2.4",
+    "vite": "^5.4.11",
     "vue-eslint-parser": "^10.2.0",
     "vue-tsc": "^3.1.4"
   },

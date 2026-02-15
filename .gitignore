@@ -11,6 +11,7 @@ chars.txt
 extract_chars.py
 
 node_modules
+.pnpm-store
 dist
 dist-ssr
 dist-electron
@@ -19,6 +20,7 @@ docs
 
 # Editor directories and files
 .claude/*
+.cursor
 .vscode/*
 images/app/*
 !.vscode/extensions.json
