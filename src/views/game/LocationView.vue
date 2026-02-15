@@ -9,6 +9,10 @@
       <p class="text-xs text-muted">这里是公寓，请从地图前往其他地点。</p>
       <button class="btn text-xs mt-2" @click="goToMap">返回地图</button>
     </template>
+    <template v-else-if="locationId === 'street'">
+      <p class="text-xs text-muted">你在街道上，无特别之处。</p>
+      <button class="btn text-xs mt-2" @click="goToMap">返回地图</button>
+    </template>
     <template v-else>
       <template v-if="gameStore.phase === 'pre'">
         <p class="text-xs text-muted mb-2">疫情尚未爆发，可以购物。</p>

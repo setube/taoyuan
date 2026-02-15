@@ -1,0 +1,21 @@
+import type { SurvivalNpcId } from "@/types/survival";
+
+export interface SurvivalNpcDef {
+  id: SurvivalNpcId;
+  name: string;
+  /** Optional default 道德 at first meet */
+  defaultMoralIntegrity?: number;
+  /** Optional location/node id where this NPC can appear */
+  locationId?: string;
+}
+
+/** Survival NPC definitions; populate with content. Runtime relation (好感/恐惧/道德) is in useSurvivalNpcStore. */
+export const SURVIVAL_NPCS: SurvivalNpcDef[] = [];
+
+export function getSurvivalNpcById(id: SurvivalNpcId): SurvivalNpcDef | undefined {
+  return SURVIVAL_NPCS.find((n) => n.id === id);
+}
+
+export function getAllSurvivalNpcs(): SurvivalNpcDef[] {
+  return [...SURVIVAL_NPCS];
+}
