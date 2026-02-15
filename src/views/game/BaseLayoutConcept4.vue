@@ -5,7 +5,9 @@
       <button
         type="button"
         class="btn text-xs"
-        :class="rearrangeMode ? 'bg-accent/20 text-accent ring-2 ring-accent' : ''"
+        :class="
+          rearrangeMode ? 'bg-accent/20 text-accent ring-2 ring-accent' : ''
+        "
         @click="toggleRearrangeMode"
       >
         {{ rearrangeMode ? "完成摆放" : "重新摆放" }}
@@ -34,7 +36,11 @@
             'rearrange-draggable': rearrangeMode,
           }"
           :draggable="rearrangeMode"
-          @click="() => { if (!rearrangeMode) selectFurniture(furniture) }"
+          @click="
+            () => {
+              if (!rearrangeMode) selectFurniture(furniture);
+            }
+          "
           @dragstart="onDragStart($event, furniture)"
         >
           <component
@@ -162,7 +168,12 @@ const GRID_ROWS = 10;
 const GRID_COLS = 20;
 
 /** Parse gridArea "r0/c0/r1/c1" to integers (1-based). End lines can go to GRID_ROWS+1 / GRID_COLS+1. */
-function parseGridArea(area: string): { r0: number; c0: number; r1: number; c1: number } {
+function parseGridArea(area: string): {
+  r0: number;
+  c0: number;
+  r1: number;
+  c1: number;
+} {
   const parts = area.split("/").map((s) => Math.round(Number(s)) || 1);
   const r0 = Math.max(1, Math.min(parts[0] ?? 1, GRID_ROWS));
   const c0 = Math.max(1, Math.min(parts[1] ?? 1, GRID_COLS));
@@ -175,7 +186,7 @@ function parseGridArea(area: string): { r0: number; c0: number; r1: number; c1: 
 function snapToGridArea(
   currentArea: string,
   dropRow: number,
-  dropCol: number
+  dropCol: number,
 ): string {
   const { r0, c0, r1, c1 } = parseGridArea(currentArea);
   const h = Math.max(1, r1 - r0);
@@ -199,7 +210,7 @@ function normalizeGridArea(area: string): string {
 function findFurnitureAt(
   layout: FurnitureDef[],
   row: number,
-  col: number
+  col: number,
 ): FurnitureDef | null {
   for (const f of layout) {
     const { r0, c0, r1, c1 } = parseGridArea(f.gridArea);
@@ -209,7 +220,9 @@ function findFurnitureAt(
 }
 
 /** Get 1-based grid cell (row, col) from mouse position. Clamps to grid rect so edge drops (e.g. in padding) still map to edge cells. */
-function getGridCellFromEvent(e: DragEvent): { row: number; col: number } | null {
+function getGridCellFromEvent(
+  e: DragEvent,
+): { row: number; col: number } | null {
   const el = gridEl.value;
   if (!el || e.clientX == null) return null;
   const rect = el.getBoundingClientRect();
@@ -218,7 +231,10 @@ function getGridCellFromEvent(e: DragEvent): { row: number; col: number } | null
   x = Math.max(0, Math.min(rect.width, x));
   y = Math.max(0, Math.min(rect.height, y));
   const col = Math.min(GRID_COLS, Math.floor((x / rect.width) * GRID_COLS) + 1);
-  const row = Math.min(GRID_ROWS, Math.floor((y / rect.height) * GRID_ROWS) + 1);
+  const row = Math.min(
+    GRID_ROWS,
+    Math.floor((y / rect.height) * GRID_ROWS) + 1,
+  );
   return {
     row: Math.max(1, Math.min(row, GRID_ROWS)),
     col: Math.max(1, Math.min(col, GRID_COLS)),

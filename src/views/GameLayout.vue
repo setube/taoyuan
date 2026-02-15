@@ -39,7 +39,8 @@
             type="button"
             class="game-layout-topbar-icon p-1.5 rounded-xs border border-transparent text-text hover:bg-accent/10 hover:border-accent/20 hover:text-accent transition-colors cursor-pointer"
             :class="{
-              'bg-accent/20 border-accent/30 text-accent': currentPanel === t.key,
+              'bg-accent/20 border-accent/30 text-accent':
+                currentPanel === t.key,
             }"
             :title="t.label"
             @click="navigateToPanel(t.key)"
