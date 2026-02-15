@@ -13,6 +13,7 @@ extract_chars.py
 node_modules
 .pnpm-store
 package-lock.json
+pnpm-lock.yaml
 dist
 dist-ssr
 dist-electron
