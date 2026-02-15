@@ -33,16 +33,6 @@
           >
         </div>
         <div class="flex items-center gap-0.5 shrink-0">
-          <!-- 基地布局切换：仅在基地页显示 -->
-          <button
-            v-if="currentPanel === 'base'"
-            type="button"
-            class="game-layout-topbar-icon px-2 py-1.5 rounded-xs border border-accent/30 text-accent text-xs hover:bg-accent/20 transition-colors cursor-pointer shrink-0"
-            :title="'切换基地布局（概念 ' + baseStore.baseLayoutConcept + '）'"
-            @click="baseStore.cycleBaseLayout()"
-          >
-            布局 {{ baseStore.baseLayoutConcept }}
-          </button>
           <button
             v-for="t in TABS"
             :key="t.key"
@@ -272,7 +262,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, provide } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useGameStore, usePlayerStore, useAnimalStore, useBaseStore } from "@/stores";
+import { useGameStore, usePlayerStore, useAnimalStore } from "@/stores";
 import { getLocationName } from "@/data/locations";
 import { TABS, navigateToPanel } from "@/composables/useNavigation";
 import { useDialogs } from "@/composables/useDialogs";
@@ -303,8 +293,6 @@ const router = useRouter();
 const route = useRoute();
 const gameStore = useGameStore();
 const playerStore = usePlayerStore();
-const baseStore = useBaseStore();
-
 /** 当前地点名（顶栏显示） */
 const locationName = computed(() =>
   getLocationName(gameStore.currentCityLocation),

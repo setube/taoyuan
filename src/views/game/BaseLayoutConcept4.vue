@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-col items-center gap-4 p-4 min-h-0">
     <div class="w-full max-w-[600px] flex items-center justify-between gap-2">
-      <h3 class="text-accent text-xs">概念4：真实俯视图 (10×20)</h3>
+      <h3 class="text-accent text-xs">真实俯视图 (10×20)</h3>
       <button
         type="button"
         class="btn text-xs"
@@ -58,10 +58,10 @@
       </div>
     </div>
 
-    <!-- Bottom of center: action buttons when something is selected -->
+    <!-- Bottom of center: action buttons when something is selected (no visible container) -->
     <div
       v-if="selectedFurniture"
-      class="w-full max-w-[600px] shrink-0 rounded-xs bg-panel border border-muted/30 p-2 flex flex-wrap items-center gap-2"
+      class="w-full max-w-[600px] shrink-0 flex flex-wrap items-center gap-2"
     >
       <span class="text-accent text-[10px] font-medium w-full md:w-auto">
         {{ selectedFurniture.name }} —
@@ -86,9 +86,6 @@
         @click="runAction(action)"
       >
         {{ action.label }}
-      </button>
-      <button class="btn text-xs text-muted ml-auto" @click="clearSelection">
-        关闭
       </button>
     </div>
   </div>
