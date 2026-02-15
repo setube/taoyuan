@@ -28,6 +28,12 @@ export const CITY_LOCATIONS: CityLocationDef[] = [
     canShopInPre: true,
     canScavengeInPost: true,
   },
+  {
+    id: "street",
+    name: "街道",
+    canShopInPre: false,
+    canScavengeInPost: false,
+  },
 ];
 
 /** 两地之间的回合消耗（单向）。key: "fromId->toId" */

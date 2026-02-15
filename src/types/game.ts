@@ -48,12 +48,19 @@ export type Location =
   | "mine"
   | "home";
 
+/** 末日生存：地图网格坐标 */
+export interface GridPosition {
+  row: number;
+  col: number;
+}
+
 /** 末日生存：城市地点 ID */
 export type CityLocationId =
   | "apartment"
   | "supermarket"
   | "pharmacy"
-  | "hardware";
+  | "hardware"
+  | "street";
 
 /** 末日生存：地点分组（基地 / 城市） */
 export type SurvivalLocationGroup = "base" | "city";

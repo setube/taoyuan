@@ -7,6 +7,7 @@ import type {
   LocationGroup,
   FarmMapType,
   CityLocationId,
+  GridPosition,
 } from "@/types";
 import {
   DAY_START_HOUR,
@@ -21,7 +22,8 @@ import {
   getLocationGroupName,
   MINUTES_PER_TURN,
 } from "@/data/timeConstants";
-import { getTravelTurns } from "@/data/locations";
+import { getCellAt, getTravelTurnsBetween, getCenter } from "@/data/mapGrid";
+import { getLocationName } from "@/data/locations";
 import { useAnimalStore } from "./useAnimalStore";
 import { useInventoryStore } from "./useInventoryStore";
 
@@ -79,8 +81,12 @@ export const useGameStore = defineStore("game", () => {
   const preOutbreakTurnsTotal = 20;
   /** 末日生存：阶段一已消耗回合数 */
   const turnsUsedInPre = ref(0);
-  /** 末日生存：当前城市地点 */
-  const currentCityLocation = ref<CityLocationId>("apartment");
+  /** 末日生存：地图上的网格位置（玩家所在格） */
+  const mapPosition = ref<GridPosition>(getCenter());
+  /** 末日生存：当前城市地点（由 mapPosition 所在格推导） */
+  const currentCityLocation = computed<CityLocationId>(() =>
+    getCellAt(mapPosition.value.row, mapPosition.value.col),
+  );
 
   const seasonIndex = computed(() => SEASON_ORDER.indexOf(season.value));
   const seasonName = computed(() => SEASON_NAMES[season.value]);
@@ -297,9 +303,10 @@ export const useGameStore = defineStore("game", () => {
     currentLocation.value = location;
   };
 
-  /** 末日生存：前往城市某地，消耗回合并更新地点 */
-  const travelToCityLocation = (
-    to: CityLocationId,
+  /** 末日生存：前往网格格位，消耗回合并更新位置 */
+  const travelToGridCell = (
+    row: number,
+    col: number,
   ): {
     ok: boolean;
     turns: number;
@@ -307,8 +314,8 @@ export const useGameStore = defineStore("game", () => {
     newDay: boolean;
     message: string;
   } => {
-    const from = currentCityLocation.value;
-    if (from === to) {
+    const from = mapPosition.value;
+    if (from.row === row && from.col === col) {
       return {
         ok: true,
         turns: 0,
@@ -317,17 +324,11 @@ export const useGameStore = defineStore("game", () => {
         message: "",
       };
     }
-    const turns = getTravelTurns(from, to);
+    const toPos: GridPosition = { row, col };
+    const turns = getTravelTurnsBetween(from, toPos);
     const result = advanceTurns(turns);
-    currentCityLocation.value = to;
-    const locName =
-      to === "apartment"
-        ? "公寓"
-        : to === "supermarket"
-          ? "超市"
-          : to === "pharmacy"
-            ? "药店"
-            : "五金店";
+    mapPosition.value = toPos;
+    const locName = getLocationName(getCellAt(row, col));
     const msg = turns > 0 ? `前往${locName}，消耗 ${turns} 回合。` : "";
     return {
       ok: result.ok,
@@ -358,7 +359,7 @@ export const useGameStore = defineStore("game", () => {
     isGameStarted.value = true;
     phase.value = "pre";
     turnsUsedInPre.value = 0;
-    currentCityLocation.value = "apartment";
+    mapPosition.value = getCenter();
   };
 
   /** 导出存档数据 */
@@ -376,7 +377,7 @@ export const useGameStore = defineStore("game", () => {
       dailyLuck: dailyLuck.value,
       phase: phase.value,
       turnsUsedInPre: turnsUsedInPre.value,
-      currentCityLocation: currentCityLocation.value,
+      mapPosition: { row: mapPosition.value.row, col: mapPosition.value.col },
     };
   };
 
@@ -397,7 +398,10 @@ export const useGameStore = defineStore("game", () => {
     dailyLuck.value = data.dailyLuck ?? 0;
     phase.value = data.phase ?? "pre";
     turnsUsedInPre.value = data.turnsUsedInPre ?? 0;
-    currentCityLocation.value = data.currentCityLocation ?? "apartment";
+    mapPosition.value =
+      data.mapPosition != null
+        ? { row: data.mapPosition.row, col: data.mapPosition.col }
+        : getCenter();
     isGameStarted.value = true;
   };
 
@@ -417,6 +421,7 @@ export const useGameStore = defineStore("game", () => {
     phase,
     preOutbreakTurnsTotal,
     turnsUsedInPre,
+    mapPosition,
     currentCityLocation,
     seasonIndex,
     seasonName,
@@ -433,7 +438,7 @@ export const useGameStore = defineStore("game", () => {
     startNewGame,
     advanceTime,
     advanceTurns,
-    travelToCityLocation,
+    travelToGridCell,
     getTravelCost,
     travelTo,
     setTomorrowWeather,

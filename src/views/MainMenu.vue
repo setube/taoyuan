@@ -186,7 +186,9 @@
                   <button
                     class="btn flex-1 justify-center py-2"
                     :class="
-                      charGender === 'male' ? 'border-accent! bg-accent/10!' : ''
+                      charGender === 'male'
+                        ? 'border-accent! bg-accent/10!'
+                        : ''
                     "
                     @click="charGender = 'male'"
                   >
@@ -231,7 +233,10 @@
               {{ INTRO_FLAVOR_TEXT }}
             </div>
             <div class="flex justify-center shrink-0">
-              <button class="btn text-xs px-6" @click="handleStartGameFromFlavor">
+              <button
+                class="btn text-xs px-6"
+                @click="handleStartGameFromFlavor"
+              >
                 <Play :size="12" />
                 开始游戏
               </button>
@@ -256,7 +261,8 @@
           </button>
           <p class="text-accent text-sm mb-2 text-center">分配属性</p>
           <p class="text-xs text-muted mb-3 text-center">
-            将 {{ CHAR_CREATE_POINTS_TO_DISTRIBUTE }} 点分配到六维属性中（基础值 {{ CHAR_CREATE_BASE_STAT }}）
+            将 {{ CHAR_CREATE_POINTS_TO_DISTRIBUTE }} 点分配到六维属性中（基础值
+            {{ CHAR_CREATE_BASE_STAT }}）
           </p>
           <p class="text-accent text-xs mb-3 text-center">
             剩余点数：{{ statPointsRemaining }}
@@ -267,7 +273,9 @@
               :key="key"
               class="flex items-center justify-between gap-2 border border-accent/20 rounded-xs px-3 py-2"
             >
-              <span class="text-sm text-muted w-16">{{ ATTRIBUTE_NAMES[key] }}</span>
+              <span class="text-sm text-muted w-16">{{
+                ATTRIBUTE_NAMES[key]
+              }}</span>
               <div class="flex items-center gap-1">
                 <button
                   type="button"
@@ -280,7 +288,8 @@
                 <span class="text-sm w-8 text-center">
                   {{ getStatValue(key) }}
                   <span class="text-muted text-xs">
-                    ({{ getStatValue(key) >= 10 ? '+' : '' }}{{ getAttributeModifier(getStatValue(key)) }})
+                    ({{ getStatValue(key) >= 10 ? "+" : ""
+                    }}{{ getAttributeModifier(getStatValue(key)) }})
                   </span>
                 </span>
                 <button
@@ -561,7 +570,6 @@ import { FARM_MAP_DEFS } from "@/data/farmMaps";
 import {
   CHAR_CREATE_BASE_STAT,
   CHAR_CREATE_POINTS_TO_DISTRIBUTE,
-  CHAR_CREATE_MIN_STAT,
   CHAR_CREATE_MAX_STAT,
   INTRO_FLAVOR_TEXT,
   buildAttributesFromPoints,
@@ -630,13 +638,10 @@ const ATTRIBUTE_KEYS: AttributeType[] = [
 ];
 const statPointsRemaining = computed(() => {
   const p = statPoints.value;
-  const used =
-    p.str + p.dex + p.con + p.int + p.wis + p.cha;
+  const used = p.str + p.dex + p.con + p.int + p.wis + p.cha;
   return CHAR_CREATE_POINTS_TO_DISTRIBUTE - used;
 });
-const canProceedFromStats = computed(
-  () => statPointsRemaining.value === 0,
-);
+const canProceedFromStats = computed(() => statPointsRemaining.value === 0);
 function getStatValue(key: AttributeType): number {
   return CHAR_CREATE_BASE_STAT + statPoints.value[key];
 }
