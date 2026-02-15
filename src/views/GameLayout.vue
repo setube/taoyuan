@@ -9,18 +9,52 @@
 
     <!-- 桌面端：网格布局（顶栏 | 左栏全高 | 中央+右栏 | 底栏仅主区） -->
     <div class="flex-1 min-h-0 flex flex-col md:grid md:gap-2 game-layout-grid">
-      <!-- 桌面端顶栏：地点 | 第X年X季第X天 | 时间 | 今日回合 -->
+      <!-- 桌面端顶栏：地点 | 日期时间回合 | [导航图标] 设置 -->
       <div
-        class="game-layout-topbar hidden md:flex items-center gap-4 py-1.5 px-2 text-xs border-b border-accent/20 bg-panel/50 col-span-2"
+        class="game-layout-topbar hidden md:flex items-center justify-between gap-4 py-1.5 px-2 text-xs border-b border-accent/20 bg-panel/50 col-span-2"
       >
-        <span class="text-accent font-medium">{{ locationName }}</span>
-        <span class="text-muted"
-          >第{{ gameStore.year }}年 {{ gameStore.seasonName }} 第{{
-            gameStore.day
-          }}天</span
-        >
-        <span class="text-muted">{{ gameStore.timeDisplay }}</span>
-        <span class="text-muted">今日 {{ gameStore.turnsUsedToday }} 回合</span>
+        <div class="flex items-center gap-4 min-w-0">
+          <button
+            type="button"
+            class="text-accent font-medium hover:bg-accent/10 transition-colors rounded-xs px-0.5 -mx-0.5 py-0 border-0 bg-transparent cursor-pointer shrink-0"
+            :title="'打开地图'"
+            @click="navigateToPanel('map')"
+          >
+            {{ locationName }}
+          </button>
+          <span class="text-muted shrink-0"
+            >第{{ gameStore.year }}年 {{ gameStore.seasonName }} 第{{
+              gameStore.day
+            }}天</span
+          >
+          <span class="text-muted shrink-0">{{ gameStore.timeDisplay }}</span>
+          <span class="text-muted shrink-0"
+            >今日 {{ gameStore.turnsUsedToday }} 回合</span
+          >
+        </div>
+        <div class="flex items-center gap-0.5 shrink-0">
+          <button
+            v-for="t in TABS"
+            :key="t.key"
+            type="button"
+            class="game-layout-topbar-icon p-1.5 rounded-xs border border-transparent text-text hover:bg-accent/10 hover:border-accent/20 hover:text-accent transition-colors cursor-pointer"
+            :class="{
+              'bg-accent/20 border-accent/30 text-accent': currentPanel === t.key,
+            }"
+            :title="t.label"
+            @click="navigateToPanel(t.key)"
+          >
+            <component :is="t.icon" :size="16" class="block" />
+          </button>
+          <button
+            type="button"
+            class="game-layout-topbar-icon p-1.5 rounded-xs border border-transparent text-text hover:bg-accent/10 hover:border-accent/20 hover:text-accent transition-colors cursor-pointer"
+            title="设置"
+            @click="showSettings = true"
+          >
+            <SettingsIcon :size="16" class="block" />
+          </button>
+        </div>
       </div>
 
       <!-- 左侧：仅状态栏（与中央、底栏同级网格格） -->
@@ -43,7 +77,7 @@
           </router-view>
         </main>
         <aside class="game-layout-right hidden md:flex flex-col shrink-0">
-          <QuickAccessBar @open-settings="showSettings = true" />
+          <DynamicBar />
         </aside>
       </div>
 
@@ -230,6 +264,7 @@ import { ref, computed, watch, onMounted, onUnmounted, provide } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useGameStore, usePlayerStore, useAnimalStore } from "@/stores";
 import { getLocationName } from "@/data/locations";
+import { TABS, navigateToPanel } from "@/composables/useNavigation";
 import { useDialogs } from "@/composables/useDialogs";
 import { handleEndDay } from "@/composables/useEndDay";
 import { useGameClock } from "@/composables/useGameClock";
@@ -238,7 +273,7 @@ import { Moon, X, Map, Settings as SettingsIcon } from "lucide-vue-next";
 import MobileMapMenu from "@/components/game/MobileMapMenu.vue";
 import StatusBar from "@/components/game/StatusBar.vue";
 import BackpackBar from "@/components/game/BackpackBar.vue";
-import QuickAccessBar from "@/components/game/QuickAccessBar.vue";
+import DynamicBar from "@/components/game/DynamicBar.vue";
 import GameLogPanel from "@/components/game/GameLogPanel.vue";
 import EventDialog from "@/components/game/EventDialog.vue";
 import HeartEventDialog from "@/components/game/HeartEventDialog.vue";
@@ -263,6 +298,9 @@ const playerStore = usePlayerStore();
 const locationName = computed(() =>
   getLocationName(gameStore.currentCityLocation),
 );
+
+/** 当前面板（顶栏图标高亮） */
+const currentPanel = computed(() => (route.name as string) ?? "base");
 const { switchToSeasonalBgm } = useAudio();
 
 // 游戏未开始时重定向到主菜单
@@ -322,11 +360,6 @@ watch(
 
 // 判断是否webview环境
 const isWebView = window.__WEBVIEW__;
-
-/** 从路由名称获取当前面板标识 */
-const currentPanel = computed(() => {
-  return (route.name as string) ?? "farm";
-});
 
 const sleepLabel = computed(() => {
   if (gameStore.hour >= 24) return "倒头就睡";
