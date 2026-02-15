@@ -59,8 +59,19 @@ export interface SurvivalTracks {
 /** Optional hunger stage for later mechanics */
 export type HungerStage = "full" | "peckish" | "hungry" | "starving";
 
+/** Fatigue stage for status display */
+export type FatigueStage = "fresh" | "tired" | "weary" | "exhausted";
+
+/** Morale stage for status display */
+export type MoraleStage = "low" | "neutral" | "steady" | "high";
+
 /** Combat noise level (design reference for future use) */
-export type NoiseLevel = "low" | "medium" | "medium_high" | "high" | "very_high";
+export type NoiseLevel =
+  | "low"
+  | "medium"
+  | "medium_high"
+  | "high"
+  | "very_high";
 
 /** Per-node state for save: alert level and optional decay timestamp */
 export interface NodeStateSnapshot {

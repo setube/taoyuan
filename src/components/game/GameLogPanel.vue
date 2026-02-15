@@ -63,6 +63,14 @@ watch(
   color: var(--color-text);
 }
 
+@media (min-width: 768px) {
+  .game-log-panel {
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+  }
+}
+
 .game-log-line {
   line-height: 1.4;
   word-break: break-word;

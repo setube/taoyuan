@@ -11,18 +11,23 @@
 
     <!-- 桌面端：网格布局（顶栏 | 左栏全高 | 中央+右栏 | 底栏仅主区） -->
     <div class="flex-1 min-h-0 flex flex-col md:grid md:gap-2 game-layout-grid">
-      <!-- 桌面端顶栏：地点 | 时间 | 今日回合 -->
+      <!-- 桌面端顶栏：地点 | 第X年X季第X天 | 时间 | 今日回合 -->
       <div
         class="game-layout-topbar hidden md:flex items-center gap-4 py-1.5 px-2 text-xs border-b border-accent/20 bg-panel/50 col-span-2"
       >
         <span class="text-accent font-medium">{{ locationName }}</span>
+        <span class="text-muted"
+          >第{{ gameStore.year }}年 {{ gameStore.seasonName }} 第{{
+            gameStore.day
+          }}天</span
+        >
         <span class="text-muted">{{ gameStore.timeDisplay }}</span>
         <span class="text-muted">今日 {{ gameStore.turnsUsedToday }} 回合</span>
       </div>
 
-      <!-- 左侧：垂直状态栏（桌面端，顶对齐，占满到底） -->
+      <!-- 左侧：仅状态栏（与中央、底栏同级网格格） -->
       <aside
-        class="game-layout-left hidden md:flex flex-col shrink-0 w-24 border border-accent/20 rounded-xs p-2 bg-panel/80 min-h-0 row-span-2"
+        class="game-layout-left hidden md:flex flex-col shrink-0 w-30 border border-muted/20 rounded-xs p-2 bg-panel/80 min-h-0 overflow-y-auto"
       >
         <StatusBar vertical />
       </aside>
@@ -45,8 +50,15 @@
         </aside>
       </div>
 
-      <!-- 底部：文本输出框（桌面端仅在主区下方；移动端全宽） -->
-      <div class="game-layout-bottom shrink-0 mt-2 md:mt-0">
+      <!-- 左下：背包（与状态栏、中央、底栏同级，独立一节） -->
+      <div class="game-layout-backpack hidden md:flex min-h-0 shrink-0">
+        <BackpackBar />
+      </div>
+
+      <!-- 底部：文本输出框（与背包同行等高） -->
+      <div
+        class="game-layout-bottom shrink-0 mt-2 md:mt-0 md:flex md:flex-col md:min-h-0"
+      >
         <GameLogPanel />
       </div>
     </div>
@@ -228,6 +240,7 @@ import { useAudio } from "@/composables/useAudio";
 import { Moon, X, Map, Settings as SettingsIcon } from "lucide-vue-next";
 import MobileMapMenu from "@/components/game/MobileMapMenu.vue";
 import StatusBar from "@/components/game/StatusBar.vue";
+import BackpackBar from "@/components/game/BackpackBar.vue";
 import QuickAccessBar from "@/components/game/QuickAccessBar.vue";
 import GameLogPanel from "@/components/game/GameLogPanel.vue";
 import EventDialog from "@/components/game/EventDialog.vue";
@@ -371,9 +384,14 @@ const confirmSleep = () => {
 <style scoped>
 @media (min-width: 768px) {
   .game-layout-grid {
-    grid-template-rows: auto 1fr auto;
-    grid-template-columns: 96px 1fr;
+    grid-template-rows: auto 1fr minmax(140px, 200px);
+    grid-template-columns: 120px 1fr;
   }
+}
+
+.game-layout-backpack {
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* 移动端地图按钮 */

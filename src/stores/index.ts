@@ -25,3 +25,4 @@ export { useSecretNoteStore } from "./useSecretNoteStore";
 export { useHanhaiStore } from "./useHanhaiStore";
 export { useEncounterStore } from "./useEncounterStore";
 export { useCombatStore } from "./useCombatStore";
+export { useSurvivalStore } from "./useSurvivalStore";
