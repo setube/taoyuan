@@ -154,7 +154,7 @@ const router = useRouter();
 const baseStore = useBaseStore();
 const gameStore = useGameStore();
 const playerStore = usePlayerStore();
-const { addLog } = useGameLog();
+const { addLog, runChoiceScene } = useGameLog();
 
 const requestSleep = inject<() => void>("requestSleep");
 
@@ -426,7 +426,7 @@ const primaryActions = computed<RoomAction[]>(() => {
       actions.push({
         id: "lookOut",
         label: `观察外面`,
-        handler: () => handleLookOut(furniture.id),
+        handler: () => void handleLookOut(furniture.id),
       });
       break;
 
@@ -528,7 +528,21 @@ const handleBarricade = (furnitureId: string) => {
   }
 };
 
-const handleLookOut = (_furnitureId: string) => {
+const handleLookOut = async (furnitureId: string) => {
+  if (furnitureId === "window") {
+    await runChoiceScene({
+      flavorText:
+        "你凑到窗边。外面天色阴沉，街道上零星有影子在动；远处有一缕黑烟缓缓升起。",
+      options: ["向左看", "向下看", "盯着远处的烟多看一会儿"],
+      followUps: [
+        "左边那栋楼的阳台上有几盆枯死的植物，晾衣绳空荡荡的。",
+        "楼下人行道上有几具倒伏的躯体，分不清是人是尸。",
+        "那缕烟像是从几条街外的工厂区飘来的，说不清是火情还是有人在生火。",
+      ],
+    });
+    gameStore.advanceTurns(1);
+    return;
+  }
   const messages = [
     "街上一片死寂，偶尔有游荡的尸群经过",
     "对面楼的窗户紧闭，不知道里面还有没有活人",
