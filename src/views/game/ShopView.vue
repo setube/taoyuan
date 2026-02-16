@@ -1,7 +1,5 @@
 <template>
-  <div
-    class="rounded-xs bg-panel border border-muted/30 p-2 h-full min-h-0 flex flex-col"
-  >
+  <div class="h-full min-h-0 flex flex-col gap-2">
     <h3 class="text-accent text-[10px] font-medium mb-2 shrink-0">
       交易 · 以物易物
     </h3>
@@ -28,8 +26,7 @@
             :key="entry.key"
             class="grid grid-cols-[1fr_36px_60px] gap-1 items-center text-[10px] py-1 px-2 border-b border-muted/10 cursor-pointer hover:bg-accent/5 tabular-nums"
             :class="{
-              'bg-accent/10 border-accent/30':
-                selectedMy?.entry.key === entry.key,
+              'bg-accent/10 border-accent/30': isMyEntrySelected(entry.key),
             }"
             @click="addMySelection(entry)"
           >
@@ -46,56 +43,147 @@
         </div>
       </div>
 
-      <!-- Center: selected shop (top), break-even (middle), selected mine (bottom) -->
+      <!-- Center: 我提供 (top), 对方提供 (below), break-even, button -->
       <div
         class="flex flex-col min-h-0 border border-muted/20 rounded-xs overflow-hidden shrink-0"
       >
         <div class="flex-1 min-h-0 flex flex-col">
-          <!-- Top: 对方提供 (single horizontal row) -->
+          <!-- Top: 我提供 (list, content at top) -->
           <div
-            class="border-b border-muted/20 px-2 py-1.5 shrink-0 flex items-center gap-1.5 min-h-[28px]"
+            class="flex-1 min-h-0 flex flex-col border-b border-muted/20 overflow-hidden"
           >
-            <span class="text-accent text-[10px] font-medium shrink-0"
-              >对方提供</span
+            <div
+              class="px-2 py-1 border-b border-muted/10 shrink-0 flex items-center"
             >
-            <template v-if="selectedShop">
-              <span class="text-[10px] truncate min-w-0">{{
-                selectedShop.entry.name
-              }}</span>
-              <span class="text-[10px] text-muted tabular-nums shrink-0"
-                >×{{ selectedShop.quantity }}</span
-              >
-              <div class="flex items-center shrink-0 gap-0 h-7">
-                <button
-                  type="button"
-                  class="btn text-[10px] w-7 h-7 p-0 min-h-0 min-w-0 flex items-center justify-center"
-                  title="减少数量"
-                  @click="decrementShopQty"
+              <span class="text-accent text-[10px] font-medium">我提供</span>
+            </div>
+            <div
+              class="flex-1 min-h-0 overflow-y-auto px-2 py-1 flex flex-col items-start gap-1"
+            >
+              <template v-if="selectedMyList.length">
+                <div
+                  v-for="(item, idx) in selectedMyList"
+                  :key="`my-${item.entry.key}`"
+                  class="w-full flex items-center gap-1.5 text-[10px] py-0.5"
                 >
-                  －
-                </button>
-                <button
-                  type="button"
-                  class="btn text-[10px] w-7 h-7 p-0 min-h-0 min-w-0 flex items-center justify-center"
-                  title="增加数量"
-                  @click="incrementShopQty"
-                >
-                  ＋
-                </button>
-              </div>
-              <span
-                class="text-[10px] text-accent tabular-nums shrink-0 ml-auto"
-                >{{ totalShopCost }}文</span
+                  <span class="truncate min-w-0 flex-1">{{
+                    item.entry.name
+                  }}</span>
+                  <span class="text-muted tabular-nums shrink-0"
+                    >×{{ item.quantity }}</span
+                  >
+                  <div class="flex items-center shrink-0 gap-0 h-6">
+                    <button
+                      type="button"
+                      class="btn text-[10px] w-6 h-6 p-0 min-h-0 min-w-0 flex items-center justify-center"
+                      title="减少数量"
+                      @click="decrementMyQty(idx)"
+                    >
+                      －
+                    </button>
+                    <button
+                      type="button"
+                      class="btn text-[10px] w-6 h-6 p-0 min-h-0 min-w-0 flex items-center justify-center"
+                      title="增加数量"
+                      @click="incrementMyQty(idx)"
+                    >
+                      ＋
+                    </button>
+                  </div>
+                  <span class="text-accent tabular-nums shrink-0"
+                    >{{ item.entry.sellPrice * item.quantity }}文</span
+                  >
+                  <button
+                    type="button"
+                    class="btn text-[10px] w-6 h-6 p-0 min-h-0 min-w-0 flex items-center justify-center shrink-0"
+                    title="移除"
+                    @click="removeMyItem(idx)"
+                  >
+                    ×
+                  </button>
+                </div>
+                <span class="text-[10px] text-muted tabular-nums shrink-0">
+                  小计 {{ totalMyValue }} 文
+                </span>
+              </template>
+              <p
+                v-else
+                class="text-muted/60 text-[10px] py-0.5"
               >
-            </template>
-            <p v-else class="text-muted/60 text-[10px]">点击右侧物品</p>
+                点击左侧物品（可只买不换）
+              </p>
+            </div>
           </div>
 
-          <!-- Middle: break-even -->
+          <!-- 对方提供 (list, content at top) -->
+          <div
+            class="flex-1 min-h-0 flex flex-col border-b border-muted/20 overflow-hidden"
+          >
+            <div
+              class="px-2 py-1 border-b border-muted/10 shrink-0 flex items-center"
+            >
+              <span class="text-accent text-[10px] font-medium">对方提供</span>
+            </div>
+            <div
+              class="flex-1 min-h-0 overflow-y-auto px-2 py-1 flex flex-col items-start gap-1"
+            >
+              <template v-if="selectedShopList.length">
+                <div
+                  v-for="(item, idx) in selectedShopList"
+                  :key="`shop-${item.entry.key}`"
+                  class="w-full flex items-center gap-1.5 text-[10px] py-0.5"
+                >
+                  <span class="truncate min-w-0 flex-1">{{
+                    item.entry.name
+                  }}</span>
+                  <span class="text-muted tabular-nums shrink-0"
+                    >×{{ item.quantity }}</span
+                  >
+                  <div class="flex items-center shrink-0 gap-0 h-6">
+                    <button
+                      type="button"
+                      class="btn text-[10px] w-6 h-6 p-0 min-h-0 min-w-0 flex items-center justify-center"
+                      title="减少数量"
+                      @click="decrementShopQty(idx)"
+                    >
+                      －
+                    </button>
+                    <button
+                      type="button"
+                      class="btn text-[10px] w-6 h-6 p-0 min-h-0 min-w-0 flex items-center justify-center"
+                      title="增加数量"
+                      @click="incrementShopQty(idx)"
+                    >
+                      ＋
+                    </button>
+                  </div>
+                  <span class="text-accent tabular-nums shrink-0">{{
+                    discounted(item.entry.price) * item.quantity
+                  }}文</span>
+                  <button
+                    type="button"
+                    class="btn text-[10px] w-6 h-6 p-0 min-h-0 min-w-0 flex items-center justify-center shrink-0"
+                    title="移除"
+                    @click="removeShopItem(idx)"
+                  >
+                    ×
+                  </button>
+                </div>
+                <span class="text-[10px] text-muted tabular-nums shrink-0">
+                  小计 {{ totalShopCost }} 文
+                </span>
+              </template>
+              <p v-else class="text-muted/60 text-[10px] py-0.5">
+                点击右侧物品
+              </p>
+            </div>
+          </div>
+
+          <!-- Break-even -->
           <div
             class="py-1.5 px-2 border-b border-muted/20 shrink-0 flex items-center justify-center min-h-[28px]"
           >
-            <template v-if="selectedShop && selectedMy">
+            <template v-if="selectedShopList.length && selectedMyList.length">
               <span
                 class="text-[10px] font-medium tabular-nums"
                 :class="
@@ -109,54 +197,12 @@
                 {{ breakEvenLabel }}
               </span>
             </template>
-            <template v-else-if="selectedShop">
+            <template v-else-if="selectedShopList.length">
               <span class="text-[10px] text-muted tabular-nums"
                 >支付 {{ totalShopCost }} 文</span
               >
             </template>
             <span v-else class="text-muted/50 text-[10px]">—</span>
-          </div>
-
-          <!-- Bottom: 我提供 (single horizontal row) -->
-          <div
-            class="border-b border-muted/20 px-2 py-1.5 flex-1 min-h-[28px] flex items-center gap-1.5"
-          >
-            <span class="text-accent text-[10px] font-medium shrink-0"
-              >我提供</span
-            >
-            <template v-if="selectedMy">
-              <span class="text-[10px] truncate min-w-0">{{
-                selectedMy.entry.name
-              }}</span>
-              <span class="text-[10px] text-muted tabular-nums shrink-0"
-                >×{{ selectedMy.quantity }}</span
-              >
-              <div class="flex items-center shrink-0 gap-0 h-7">
-                <button
-                  type="button"
-                  class="btn text-[10px] w-7 h-7 p-0 min-h-0 min-w-0 flex items-center justify-center"
-                  title="减少数量"
-                  @click="decrementMyQty"
-                >
-                  －
-                </button>
-                <button
-                  type="button"
-                  class="btn text-[10px] w-7 h-7 p-0 min-h-0 min-w-0 flex items-center justify-center"
-                  title="增加数量"
-                  @click="incrementMyQty"
-                >
-                  ＋
-                </button>
-              </div>
-              <span
-                class="text-[10px] text-accent tabular-nums shrink-0 ml-auto"
-                >{{ totalMyValue }}文</span
-              >
-            </template>
-            <p v-else class="text-muted/60 text-[10px]">
-              点击左侧物品（可只买不换）
-            </p>
           </div>
 
           <!-- 交换 / 购买 button -->
@@ -168,7 +214,7 @@
               :disabled="!canExchange"
               @click="executeExchange"
             >
-              {{ selectedMy ? "交换" : "购买" }}
+              {{ selectedMyList.length ? "交换" : "购买" }}
             </button>
           </div>
         </div>
@@ -192,8 +238,7 @@
             :key="entry.key"
             class="grid grid-cols-[1fr_60px] gap-1 items-center text-[10px] py-1 px-2 border-b border-muted/10 cursor-pointer hover:bg-accent/5 tabular-nums"
             :class="{
-              'bg-accent/10 border-accent/30':
-                selectedShop?.entry.key === entry.key,
+              'bg-accent/10 border-accent/30': isShopEntrySelected(entry.key),
             }"
             @click="addShopSelection(entry)"
           >
@@ -284,94 +329,115 @@ const sellList = computed<SellEntry[]>(() =>
 
 type BuyEntry = (typeof buyList.value)[number];
 
-/** My selection: entry + quantity (multiple clicks add). */
-const selectedMy = ref<{ entry: SellEntry; quantity: number } | null>(null);
-/** Shop selection: entry + quantity (multiple clicks add). */
-const selectedShop = ref<{ entry: BuyEntry; quantity: number } | null>(null);
+type MySelectionItem = { entry: SellEntry; quantity: number };
+type ShopSelectionItem = { entry: BuyEntry; quantity: number };
+
+/** My list: each click adds or increments. */
+const selectedMyList = ref<MySelectionItem[]>([]);
+/** Shop list: each click adds or increments. */
+const selectedShopList = ref<ShopSelectionItem[]>([]);
 
 /** Shop/NPC wallet (how much they can pay for your sales). Wire to NPC/shop data when needed. */
 const shopMoney = ref(1000);
 
+function isMyEntrySelected(entryKey: string): boolean {
+  return selectedMyList.value.some((item) => item.entry.key === entryKey);
+}
+
+function isShopEntrySelected(entryKey: string): boolean {
+  return selectedShopList.value.some((item) => item.entry.key === entryKey);
+}
+
 function addMySelection(entry: SellEntry) {
-  if (selectedMy.value?.entry.key === entry.key) {
-    const max = entry.quantity;
-    if (selectedMy.value.quantity < max)
-      selectedMy.value = {
-        ...selectedMy.value,
-        quantity: selectedMy.value.quantity + 1,
-      };
+  const existing = selectedMyList.value.find((item) => item.entry.key === entry.key);
+  if (existing) {
+    if (existing.quantity < entry.quantity)
+      existing.quantity += 1;
   } else {
-    selectedMy.value = { entry, quantity: 1 };
+    selectedMyList.value = [...selectedMyList.value, { entry, quantity: 1 }];
   }
 }
 
 function addShopSelection(entry: BuyEntry) {
-  if (selectedShop.value?.entry.key === entry.key) {
-    selectedShop.value = {
-      ...selectedShop.value,
-      quantity: selectedShop.value.quantity + 1,
-    };
+  const existing = selectedShopList.value.find((item) => item.entry.key === entry.key);
+  if (existing) {
+    existing.quantity += 1;
   } else {
-    selectedShop.value = { entry, quantity: 1 };
+    selectedShopList.value = [...selectedShopList.value, { entry, quantity: 1 }];
   }
 }
 
-function decrementMyQty() {
-  if (!selectedMy.value) return;
-  if (selectedMy.value.quantity <= 1) {
-    selectedMy.value = null;
+function removeMyItem(idx: number) {
+  selectedMyList.value = selectedMyList.value.filter((_, i) => i !== idx);
+}
+
+function removeShopItem(idx: number) {
+  selectedShopList.value = selectedShopList.value.filter((_, i) => i !== idx);
+}
+
+function decrementMyQty(idx: number) {
+  const list = selectedMyList.value;
+  const item = list[idx];
+  if (!item) return;
+  if (item.quantity <= 1) {
+    selectedMyList.value = list.filter((_, i) => i !== idx);
     return;
   }
-  selectedMy.value = {
-    ...selectedMy.value,
-    quantity: selectedMy.value.quantity - 1,
-  };
-}
-
-function decrementShopQty() {
-  if (!selectedShop.value) return;
-  if (selectedShop.value.quantity <= 1) {
-    selectedShop.value = null;
-    return;
-  }
-  selectedShop.value = {
-    ...selectedShop.value,
-    quantity: selectedShop.value.quantity - 1,
-  };
-}
-
-function incrementMyQty() {
-  if (!selectedMy.value) return;
-  const max = selectedMy.value.entry.quantity;
-  if (selectedMy.value.quantity >= max) return;
-  selectedMy.value = {
-    ...selectedMy.value,
-    quantity: selectedMy.value.quantity + 1,
-  };
-}
-
-function incrementShopQty() {
-  if (!selectedShop.value) return;
-  selectedShop.value = {
-    ...selectedShop.value,
-    quantity: selectedShop.value.quantity + 1,
-  };
-}
-
-const totalMyValue = computed(() => {
-  if (!selectedMy.value) return 0;
-  return selectedMy.value.entry.sellPrice * selectedMy.value.quantity;
-});
-
-const totalShopCost = computed(() => {
-  if (!selectedShop.value) return 0;
-  return (
-    discounted(selectedShop.value.entry.price) * selectedShop.value.quantity
+  selectedMyList.value = list.map((x, i) =>
+    i === idx ? { ...x, quantity: x.quantity - 1 } : x
   );
-});
+}
+
+function decrementShopQty(idx: number) {
+  const list = selectedShopList.value;
+  const item = list[idx];
+  if (!item) return;
+  if (item.quantity <= 1) {
+    selectedShopList.value = list.filter((_, i) => i !== idx);
+    return;
+  }
+  selectedShopList.value = list.map((x, i) =>
+    i === idx ? { ...x, quantity: x.quantity - 1 } : x
+  );
+}
+
+function incrementMyQty(idx: number) {
+  const list = selectedMyList.value;
+  const item = list[idx];
+  if (!item) return;
+  const max = item.entry.quantity;
+  if (item.quantity >= max) return;
+  selectedMyList.value = list.map((x, i) =>
+    i === idx ? { ...x, quantity: x.quantity + 1 } : x
+  );
+}
+
+function incrementShopQty(idx: number) {
+  const list = selectedShopList.value;
+  const item = list[idx];
+  if (!item) return;
+  selectedShopList.value = list.map((x, i) =>
+    i === idx ? { ...x, quantity: x.quantity + 1 } : x
+  );
+}
+
+const totalMyValue = computed(() =>
+  selectedMyList.value.reduce(
+    (sum, item) => sum + item.entry.sellPrice * item.quantity,
+    0
+  )
+);
+
+const totalShopCost = computed(() =>
+  selectedShopList.value.reduce(
+    (sum, item) => sum + discounted(item.entry.price) * item.quantity,
+    0
+  )
+);
 
 const breakEvenDiff = computed(() => {
-  if (!selectedShop.value || !selectedMy.value) return null;
+  if (!selectedShopList.value.length || !selectedMyList.value.length)
+    return null;
   return totalMyValue.value - totalShopCost.value;
 });
 
@@ -384,9 +450,9 @@ const breakEvenLabel = computed(() => {
 });
 
 const canExchange = computed(() => {
-  if (!selectedShop.value || selectedShop.value.quantity < 1) return false;
+  if (!selectedShopList.value.length) return false;
   const cost = totalShopCost.value;
-  if (selectedMy.value) {
+  if (selectedMyList.value.length) {
     const afterSell = playerStore.money + totalMyValue.value;
     if (afterSell < cost) return false;
     const shopPaysUs = totalMyValue.value - cost;
@@ -397,24 +463,22 @@ const canExchange = computed(() => {
 });
 
 function executeExchange() {
-  if (!canExchange.value || !selectedShop.value) return;
-  const shop = selectedShop.value;
-  const shopQty = shop.quantity;
-  if (selectedMy.value) {
-    const my = selectedMy.value;
+  if (!canExchange.value || !selectedShopList.value.length) return;
+  const cost = totalShopCost.value;
+  const myValue = totalMyValue.value;
+  for (const my of selectedMyList.value) {
     shopStore.sellItem(my.entry.itemId, my.quantity, my.entry.quality);
-    shopMoney.value =
-      shopMoney.value - totalMyValue.value + totalShopCost.value;
-    selectedMy.value = null;
-  } else {
-    shopMoney.value = shopMoney.value + totalShopCost.value;
   }
-  if (shop.entry.type === "seed") {
-    shopStore.buySeed(shop.entry.seedId, shopQty);
-  } else {
-    shopStore.buyItem(shop.entry.itemId, shop.entry.price, shopQty);
+  shopMoney.value = shopMoney.value - myValue + cost;
+  selectedMyList.value = [];
+  for (const shop of selectedShopList.value) {
+    if (shop.entry.type === "seed") {
+      shopStore.buySeed(shop.entry.seedId, shop.quantity);
+    } else {
+      shopStore.buyItem(shop.entry.itemId, shop.entry.price, shop.quantity);
+    }
   }
-  selectedShop.value = null;
+  selectedShopList.value = [];
 }
 
 type ConfirmState =
