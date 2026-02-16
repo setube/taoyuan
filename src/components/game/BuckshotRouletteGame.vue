@@ -352,7 +352,7 @@
       background-color: var(--color-panel);
     }
     50% {
-      background-color: rgba(195, 64, 67, 0.4);
+      background-color: oklch(from var(--color-danger) l c h / 0.4);
     }
   }
 </style>

@@ -48,6 +48,14 @@ export const useSettingsStore = defineStore("settings", () => {
     document.documentElement.style.setProperty("--color-bg", t.bg);
     document.documentElement.style.setProperty("--color-panel", t.panel);
     document.documentElement.style.setProperty("--color-text", t.text);
+    if (t.accent != null) document.documentElement.style.setProperty("--color-accent", t.accent);
+    else document.documentElement.style.removeProperty("--color-accent");
+    if (t.danger != null) document.documentElement.style.setProperty("--color-danger", t.danger);
+    else document.documentElement.style.removeProperty("--color-danger");
+    if (t.success != null) document.documentElement.style.setProperty("--color-success", t.success);
+    else document.documentElement.style.removeProperty("--color-success");
+    if (t.muted != null) document.documentElement.style.setProperty("--color-muted", t.muted);
+    else document.documentElement.style.removeProperty("--color-muted");
   };
 
   const changeFontSize = (delta: number) => {

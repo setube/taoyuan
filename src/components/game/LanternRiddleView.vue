@@ -372,7 +372,7 @@
       background-color: transparent;
     }
     30% {
-      background-color: rgba(90, 158, 111, 0.2);
+      background-color: oklch(from var(--color-success) l c h / 0.2);
     }
     100% {
       background-color: transparent;

@@ -480,9 +480,9 @@ const confirmSleep = () => {
 .mobile-setting-btn {
   position: fixed;
   bottom: calc(
-    calc(var(--spacing) * 10) + constant(safe-area-inset-bottom, 0px)
+    calc(var(--spacing-2) * 10) + constant(safe-area-inset-bottom, 0px)
   );
-  bottom: calc(calc(var(--spacing) * 10) + env(safe-area-inset-bottom, 0px));
+  bottom: calc(calc(var(--spacing-2) * 10) + env(safe-area-inset-bottom, 0px));
   right: 12px;
   z-index: 40;
   width: 40px;
@@ -495,7 +495,7 @@ const confirmSleep = () => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 8px oklch(from var(--color-bg) l c h / 0.4);
   transition:
     background-color 0.15s,
     color 0.15s;
@@ -503,10 +503,10 @@ const confirmSleep = () => {
 
 .mobile-setting-btn {
   bottom: calc(
-    calc(var(--spacing) * 10) + 48px + constant(safe-area-inset-bottom, 0px)
+    calc(var(--spacing-2) * 10) + 48px + constant(safe-area-inset-bottom, 0px)
   );
   bottom: calc(
-    calc(var(--spacing) * 10) + 48px + env(safe-area-inset-bottom, 0px)
+    calc(var(--spacing-2) * 10) + 48px + env(safe-area-inset-bottom, 0px)
   );
 }
 

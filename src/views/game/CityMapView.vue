@@ -134,21 +134,21 @@ function travelToCell(row: number, col: number) {
   min-height: 2rem;
   font-size: 0.75rem;
   padding: 0.25rem;
-  border: 1px solid var(--color-border, #333);
+  border: 1px solid oklch(from var(--color-muted) l c h / 0.5);
   border-radius: 4px;
-  background: var(--color-bg-secondary, #222);
-  color: var(--color-text, #eee);
+  background: var(--color-panel);
+  color: var(--color-text);
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .map-cell:hover {
-  background: var(--color-bg-hover, #333);
+  background: oklch(from var(--color-accent) l c h / 0.15);
 }
 
 .map-cell--current {
-  background: var(--color-accent, #4a9);
-  color: #000;
+  background: var(--color-accent);
+  color: var(--color-bg);
   font-weight: 600;
 }
 

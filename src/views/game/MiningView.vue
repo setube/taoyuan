@@ -1021,7 +1021,7 @@
       background-color: transparent;
     }
     50% {
-      background-color: rgba(195, 64, 67, 0.3);
+      background-color: oklch(from var(--color-danger) l c h / 0.3);
     }
   }
 
@@ -1031,7 +1031,7 @@
       background-color: transparent;
     }
     50% {
-      background-color: rgba(76, 110, 138, 0.3);
+      background-color: oklch(from var(--color-water) l c h / 0.3);
     }
   }
 
@@ -1049,10 +1049,10 @@
   @keyframes combat-victory-flash {
     0%,
     100% {
-      border-color: rgba(200, 164, 92, 0.3);
+      border-color: oklch(from var(--color-accent) l c h / 0.3);
     }
     50% {
-      border-color: rgba(200, 164, 92, 0.8);
+      border-color: oklch(from var(--color-accent) l c h / 0.8);
     }
   }
 

@@ -151,6 +151,7 @@
   const recallTimeLeft = ref(0)
   const recallTimeLimit = ref(0)
 
+  /** Design tokens: accent, danger, success (matches --color-accent, --color-danger, --color-success) */
   const fireworkColors = ['#c8a45c', '#c34043', '#5a9e6f', '#c8a45c', '#c34043', '#5a9e6f']
 
   let showTimeout: ReturnType<typeof setTimeout> | null = null
@@ -317,7 +318,7 @@
 
 <style scoped>
   .night-sky {
-    background: linear-gradient(180deg, rgba(15, 15, 25, 0.6) 0%, rgba(26, 26, 26, 0.3) 100%);
+    background: linear-gradient(180deg, oklch(from var(--color-bg) l c h / 0.6) 0%, oklch(from var(--color-bg) l c h / 0.3) 100%);
   }
 
   .firework-bloom {
