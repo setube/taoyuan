@@ -1,24 +1,13 @@
 <template>
   <div ref="scrollRef" class="game-log-panel" tabindex="0">
+    <!-- Empty state when no messages and no pending choice -->
     <div
-      v-for="entry in logEntries"
-      :key="entry.id"
-      class="game-log-line"
-      :class="{
-        'game-log-line-pre-choice': entry.variant === 'narrator-before-choice',
-      }"
+      v-if="logEntries.length === 0 && !pendingChoice"
+      class="game-log-empty text-muted text-xs"
     >
-      <span class="game-log-meta">
-        <span class="game-log-speaker">{{
-          entry.speaker ?? DEFAULT_SPEAKER
-        }}</span>
-        <span class="game-log-time">{{
-          formatTime(entry.time || new Date())
-        }}</span>
-      </span>
-      <span class="game-log-msg whitespace-pre-line">{{ entry.text }}</span>
+      暂无消息
     </div>
-    <!-- Pending choice line (main character: gold clickable options) -->
+    <!-- Pending choice at top so user sees it without scrolling -->
     <div v-if="pendingChoice" class="game-log-line game-log-choice">
       <span class="game-log-meta">
         <span class="game-log-speaker">{{ pendingChoice.speaker }}</span>
@@ -37,22 +26,39 @@
         <span class="game-log-choice-hint">按 1 / 2 / 3 选择</span>
       </span>
     </div>
+    <!-- Newest messages first (reversed order) -->
     <div
-      v-if="logEntries.length === 0 && !pendingChoice"
-      class="game-log-empty text-muted text-xs"
+      v-for="entry in reversedEntries"
+      :key="entry.id"
+      class="game-log-line"
+      :class="{
+        'game-log-line-pre-choice': entry.variant === 'narrator-before-choice',
+        'game-log-line-player-choice': entry.variant === 'player-choice',
+      }"
     >
-      暂无消息
+      <span class="game-log-meta">
+        <span class="game-log-speaker">{{
+          entry.speaker ?? DEFAULT_SPEAKER
+        }}</span>
+        <span class="game-log-time">{{
+          formatTime(entry.time || new Date())
+        }}</span>
+      </span>
+      <span class="game-log-msg whitespace-pre-line">{{ entry.text }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useGameLog, DEFAULT_SPEAKER } from "@/composables/useGameLog";
 
 const { logEntries, pendingChoice, resolveChoice } = useGameLog();
 const scrollRef = ref<HTMLElement | null>(null);
 const choiceTime = ref(new Date());
+
+/** Newest first so user never has to scroll for new content */
+const reversedEntries = computed(() => [...logEntries.value].reverse());
 
 /** Real-world time display (locale time string). */
 function formatTime(date: Date): string {
@@ -64,17 +70,17 @@ function formatTime(date: Date): string {
   });
 }
 
-function scrollToBottom() {
+function scrollToTop() {
   nextTick(() => {
     if (scrollRef.value) {
-      scrollRef.value.scrollTop = scrollRef.value.scrollHeight;
+      scrollRef.value.scrollTop = 0;
     }
   });
 }
 
 watch(
   () => logEntries.value.length,
-  () => scrollToBottom(),
+  () => scrollToTop(),
 );
 
 watch(
@@ -82,7 +88,7 @@ watch(
   (hasChoice) => {
     if (hasChoice) {
       choiceTime.value = new Date();
-      scrollToBottom();
+      scrollToTop();
     }
   },
 );
@@ -175,6 +181,12 @@ onUnmounted(() => {
   font-style: italic;
 }
 
+/* Player's selected choice: accent so it's obvious this was a choice they made */
+.game-log-line-player-choice .game-log-msg {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
 .game-log-empty {
   padding: 8px 0;
   text-align: center;
@@ -193,14 +205,14 @@ onUnmounted(() => {
   padding: 0;
   font: inherit;
   font-size: 12px;
-  color: oklch(0.75 0.15 85);
+  color: var(--color-accent);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .game-log-choice-opt:hover {
-  color: oklch(0.85 0.18 85);
+  color: oklch(from var(--color-accent) min(1, l + 0.12) c h);
 }
 
 .game-log-choice-hint {

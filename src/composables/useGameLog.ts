@@ -8,8 +8,8 @@ export type FloatColor = "danger" | "success" | "accent" | "water";
 /** Default speaker when none is provided (narrator / void voice). */
 export const DEFAULT_SPEAKER = "旁白";
 
-/** Style variant for a log line (e.g. narrator text before a choice). */
-export type LogEntryVariant = "default" | "narrator-before-choice";
+/** Style variant for a log line (e.g. narrator text before a choice, or a choice the player made). */
+export type LogEntryVariant = "default" | "narrator-before-choice" | "player-choice";
 
 export interface LogEntry {
   id: number;
@@ -157,7 +157,7 @@ export function resolveChoice(index: number): void {
   const choice = pendingChoice.value;
   if (!choice || index < 0 || index > 2) return;
   const text = choice.options[index] ?? "";
-  addLog(text, { speaker: choice.speaker });
+  addLog(text, { speaker: choice.speaker, variant: "player-choice" });
   choice.resolve(index);
   pendingChoice.value = null;
 }
