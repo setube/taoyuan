@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-col items-center gap-4 p-4 min-h-0">
     <div class="w-full max-w-[600px] flex items-center justify-between gap-2">
-      <h3 class="text-accent text-xs">真实俯视图 (10×20)</h3>
+      <h3 class="text-accent text-xs">{{ BASE_LAYOUT_TITLE }}</h3>
       <button
         type="button"
         class="btn text-xs"
@@ -10,7 +10,7 @@
         "
         @click="toggleRearrangeMode"
       >
-        {{ rearrangeMode ? "完成摆放" : "重新摆放" }}
+        {{ rearrangeMode ? BASE_REARRANGE_DONE_BTN : BASE_REARRANGE_BTN }}
       </button>
     </div>
 
@@ -144,17 +144,37 @@ function saveLayout(layout: FurnitureDef[]) {
   localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(map));
 }
 import { getRandomFlavor } from "@/data/baseFlavor";
+import {
+  BASE_ACTION_LABELS,
+  BASE_LAYOUT_TITLE,
+  BASE_REARRANGE_BTN,
+  BASE_REARRANGE_DONE_BTN,
+  getBarricadeSuccessMessage,
+  BASE_MSG_BARRICADE_MAX,
+  BASE_MSG_REST,
+  BASE_LOOK_OUT_DOOR_MESSAGES,
+  BASE_MSG_READ,
+  BASE_MSG_SEARCH,
+  BASE_MSG_ORGANIZE,
+  BASE_MSG_COOK,
+  BASE_MSG_BOIL_WATER,
+  BASE_MSG_WASH,
+  BASE_MSG_GET_WATER,
+  BASE_FURNITURE_NAME_DOOR,
+  BASE_FURNITURE_NAME_WINDOW,
+} from "@/data/baseCopy";
 import type { RoomAction } from "@/components/game/BaseRoomModal.vue";
 import { useBaseStore } from "@/stores/useBaseStore";
 import { useGameStore } from "@/stores/useGameStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useGameLog } from "@/composables/useGameLog";
+import { getScript } from "@/data/scripts";
 
 const router = useRouter();
 const baseStore = useBaseStore();
 const gameStore = useGameStore();
 const playerStore = usePlayerStore();
-const { addLog, runChoiceScene } = useGameLog();
+const { addLog, runScript } = useGameLog();
 
 const requestSleep = inject<() => void>("requestSleep");
 
@@ -400,12 +420,12 @@ const primaryActions = computed<RoomAction[]>(() => {
     case "bed":
       actions.push({
         id: "rest",
-        label: "休息 (2回合)",
+        label: BASE_ACTION_LABELS.rest,
         handler: handleRest,
       });
       actions.push({
         id: "sleep",
-        label: "长眠至早晨",
+        label: BASE_ACTION_LABELS.sleep,
         handler: handleSleep,
       });
       break;
@@ -418,14 +438,14 @@ const primaryActions = computed<RoomAction[]>(() => {
           : baseStore.getWindowBarricade();
       actions.push({
         id: "barricade",
-        label: `加固${furniture.name}`,
+        label: BASE_ACTION_LABELS.barricade(furniture.name),
         badge: `${barricadeLevel}/3`,
         disabled: barricadeLevel >= 3,
         handler: () => handleBarricade(furniture.id),
       });
       actions.push({
         id: "lookOut",
-        label: `观察外面`,
+        label: BASE_ACTION_LABELS.lookOut,
         handler: () => void handleLookOut(furniture.id),
       });
       break;
@@ -433,12 +453,12 @@ const primaryActions = computed<RoomAction[]>(() => {
     case "crafting":
       actions.push({
         id: "craft",
-        label: "制作物品",
+        label: BASE_ACTION_LABELS.craft,
         handler: handleCraft,
       });
       actions.push({
         id: "read",
-        label: "阅读书籍",
+        label: BASE_ACTION_LABELS.read,
         handler: () => handleRead(),
       });
       break;
@@ -446,12 +466,12 @@ const primaryActions = computed<RoomAction[]>(() => {
     case "storage":
       actions.push({
         id: "search",
-        label: "翻找物品",
+        label: BASE_ACTION_LABELS.search,
         handler: () => handleSearch(furniture.id),
       });
       actions.push({
         id: "organize",
-        label: "整理物资",
+        label: BASE_ACTION_LABELS.organize,
         handler: () => handleOrganize(furniture.id),
       });
       break;
@@ -459,12 +479,12 @@ const primaryActions = computed<RoomAction[]>(() => {
     case "kitchen":
       actions.push({
         id: "cook",
-        label: "做简单的饭",
+        label: BASE_ACTION_LABELS.cook,
         handler: handleCook,
       });
       actions.push({
         id: "boilWater",
-        label: "烧水",
+        label: BASE_ACTION_LABELS.boilWater,
         handler: handleBoilWater,
       });
       break;
@@ -472,12 +492,12 @@ const primaryActions = computed<RoomAction[]>(() => {
     case "bathroom":
       actions.push({
         id: "wash",
-        label: "洗漱",
+        label: BASE_ACTION_LABELS.wash,
         handler: handleWash,
       });
       actions.push({
         id: "getWater",
-        label: "取水",
+        label: BASE_ACTION_LABELS.getWater,
         handler: handleGetWater,
       });
       break;
@@ -489,12 +509,12 @@ const primaryActions = computed<RoomAction[]>(() => {
 const generalActions = computed<RoomAction[]>(() => [
   {
     id: "viewInventory",
-    label: "查看背包",
+    label: BASE_ACTION_LABELS.viewInventory,
     handler: () => router.push("/game/inventory"),
   },
   {
     id: "quickRest",
-    label: "休息一会儿",
+    label: BASE_ACTION_LABELS.quickRest,
     handler: handleRest,
   },
 ]);
@@ -505,7 +525,7 @@ const handleRest = () => {
   const restoreAmount = 30;
   playerStore.stamina = Math.min(100, playerStore.stamina + restoreAmount);
   playerStore.hp = Math.min(playerStore.getMaxHp(), playerStore.hp + 5);
-  addLog(`你休息了一会儿，恢复了体力。`);
+  addLog(BASE_MSG_REST);
 };
 
 const handleSleep = () => {
@@ -521,33 +541,22 @@ const handleBarricade = (furnitureId: string) => {
       furnitureId === "door"
         ? baseStore.getDoorBarricade()
         : baseStore.getWindowBarricade();
-    const name = furnitureId === "door" ? "门" : "窗户";
-    addLog(`你加固了${name}，当前等级: ${level}/3`);
+    const name =
+      furnitureId === "door" ? BASE_FURNITURE_NAME_DOOR : BASE_FURNITURE_NAME_WINDOW;
+    addLog(getBarricadeSuccessMessage(name, level));
   } else {
-    addLog("已经达到最大加固等级");
+    addLog(BASE_MSG_BARRICADE_MAX);
   }
 };
 
 const handleLookOut = async (furnitureId: string) => {
   if (furnitureId === "window") {
-    await runChoiceScene({
-      flavorText:
-        "你凑到窗边。外面天色阴沉，街道上零星有影子在动；远处有一缕黑烟缓缓升起。",
-      options: ["向左看", "向下看", "盯着远处的烟多看一会儿"],
-      followUps: [
-        "左边那栋楼的阳台上有几盆枯死的植物，晾衣绳空荡荡的。",
-        "楼下人行道上有几具倒伏的躯体，分不清是人是尸。",
-        "那缕烟像是从几条街外的工厂区飘来的，说不清是火情还是有人在生火。",
-      ],
-    });
+    const script = getScript("base_look_out_window");
+    if (script) await runScript(script);
     gameStore.advanceTurns(1);
     return;
   }
-  const messages = [
-    "街上一片死寂，偶尔有游荡的尸群经过",
-    "对面楼的窗户紧闭，不知道里面还有没有活人",
-    "远处传来汽车警报声，引来了更多的僵尸",
-  ];
+  const messages = BASE_LOOK_OUT_DOOR_MESSAGES;
   addLog(messages[Math.floor(Math.random() * messages.length)] ?? "...");
   gameStore.advanceTurns(1);
 };
@@ -557,37 +566,37 @@ const handleCraft = () => {
 };
 
 const handleRead = () => {
-  addLog("你翻阅着旧书，暂时忘记了外面的恐怖。");
+  addLog(BASE_MSG_READ);
   gameStore.advanceTurns(2);
 };
 
 const handleSearch = (_furnitureId: string) => {
-  addLog("你翻找了一番，但没有发现什么有用的东西。");
+  addLog(BASE_MSG_SEARCH);
   gameStore.advanceTurns(1);
 };
 
 const handleOrganize = (_furnitureId: string) => {
-  addLog("你整理了一下物资，心里稍微安心了一些。");
+  addLog(BASE_MSG_ORGANIZE);
   gameStore.advanceTurns(1);
 };
 
 const handleCook = () => {
-  addLog("你做了一顿简单的饭，填饱了肚子。");
+  addLog(BASE_MSG_COOK);
   gameStore.advanceTurns(3);
 };
 
 const handleBoilWater = () => {
-  addLog("你烧了一壶开水，可以喝上热水了。");
+  addLog(BASE_MSG_BOIL_WATER);
   gameStore.advanceTurns(2);
 };
 
 const handleWash = () => {
-  addLog("你简单洗漱了一下，感觉清爽了些。");
+  addLog(BASE_MSG_WASH);
   gameStore.advanceTurns(1);
 };
 
 const handleGetWater = () => {
-  addLog("你从浴缸里取了一些水，得省着用。");
+  addLog(BASE_MSG_GET_WATER);
   gameStore.advanceTurns(1);
 };
 </script>

@@ -31,6 +31,7 @@ import { useFamiliarityStore } from "./useFamiliarityStore";
 import { useMapStateStore } from "./useMapStateStore";
 import { useSurvivalNpcStore } from "./useSurvivalNpcStore";
 import { useSurvivalStore } from "./useSurvivalStore";
+import { useScriptTriggerStore } from "./useScriptTriggerStore";
 
 const SAVE_KEY_PREFIX = "taoyuanxiang_save_";
 const MAX_SLOTS = 3;
@@ -161,6 +162,7 @@ export const useSaveStore = defineStore("save", () => {
       const mapStateStore = useMapStateStore();
       const survivalNpcStore = useSurvivalNpcStore();
       const survivalStore = useSurvivalStore();
+      const scriptTriggerStore = useScriptTriggerStore();
 
       const data = {
         gameId: GAME_ID,
@@ -194,6 +196,7 @@ export const useSaveStore = defineStore("save", () => {
         mapState: mapStateStore.serialize(),
         survivalNpc: survivalNpcStore.serialize(),
         survival: survivalStore.serialize(),
+        scriptTriggers: scriptTriggerStore.serialize(),
         savedAt: new Date().toISOString(),
       };
       localStorage.setItem(
@@ -260,6 +263,7 @@ export const useSaveStore = defineStore("save", () => {
       const mapStateStore = useMapStateStore();
       const survivalNpcStore = useSurvivalNpcStore();
       const survivalStore = useSurvivalStore();
+      const scriptTriggerStore = useScriptTriggerStore();
 
       gameStore.deserialize(data.game);
       playerStore.deserialize(data.player);
@@ -290,6 +294,7 @@ export const useSaveStore = defineStore("save", () => {
       if (data.mapState) mapStateStore.deserialize(data.mapState);
       if (data.survivalNpc) survivalNpcStore.deserialize(data.survivalNpc);
       if (data.survival) survivalStore.deserialize(data.survival);
+      if (data.scriptTriggers) scriptTriggerStore.deserialize(data.scriptTriggers);
       activeSlot.value = slot;
       return true;
     } catch {

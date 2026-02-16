@@ -5,13 +5,9 @@
       <span>{{ locationName }}</span>
     </div>
 
-    <template v-if="isApartment">
-      <p class="text-xs text-muted">这里是公寓，请从地图前往其他地点。</p>
-      <button class="btn text-xs mt-2" @click="goToMap">返回地图</button>
-    </template>
-    <template v-else-if="locationId === 'street'">
-      <p class="text-xs text-muted">你在街道上，无特别之处。</p>
-      <button class="btn text-xs mt-2" @click="goToMap">返回地图</button>
+    <template v-if="locationBlurb">
+      <p class="text-xs text-muted">{{ locationBlurb }}</p>
+      <button class="btn text-xs mt-2" @click="goToMap">{{ locationCopy.LOCATION_BTN_BACK_MAP }}</button>
     </template>
     <template v-else>
       <!-- NPC interaction: chip(s) and action buttons on the same row -->
@@ -19,6 +15,7 @@
         <div class="flex flex-wrap items-center gap-1.5 mb-3">
           <LocationNpcConceptC
             :npcs="npcsAtThisLocation"
+            :chip-suffix="locationCopy.LOCATION_NPC_CHIP_SUFFIX"
             @interact="startNpcConversation"
           />
           <template v-if="activeNpc">
@@ -27,98 +24,139 @@
               class="btn text-[10px] px-2 py-1 rounded-full bg-panel border border-muted/30 hover:border-accent/40 text-muted hover:text-accent"
               @click="handleNpcAction('talk')"
             >
-              交谈
+              {{ locationCopy.LOCATION_NPC_BTN_TALK }}
             </button>
             <button
               type="button"
               class="btn text-[10px] px-2 py-1 rounded-full bg-panel border border-muted/30 hover:border-accent/40 text-muted hover:text-accent"
               @click="handleNpcAction('buy')"
             >
-              购买
+              {{ locationCopy.LOCATION_NPC_BTN_BUY }}
             </button>
             <button
               type="button"
               class="btn text-[10px] px-2 py-1 rounded-full bg-panel border border-muted/30 hover:border-accent/40 text-muted hover:text-accent"
               @click="handleNpcAction('rob')"
             >
-              抢劫
+              {{ locationCopy.LOCATION_NPC_BTN_ROB }}
             </button>
             <button
               type="button"
               class="btn text-[10px] px-2 py-1 rounded-full bg-panel border border-muted/30 hover:border-accent/40 text-muted hover:text-accent"
               @click="handleNpcAction('scare')"
             >
-              恐吓
+              {{ locationCopy.LOCATION_NPC_BTN_SCARE }}
             </button>
             <button
               type="button"
               class="btn text-[10px] px-2 py-1 rounded-full border border-muted/50 text-muted"
               @click="activeNpc = null"
             >
-              结束
+              {{ locationCopy.LOCATION_NPC_BTN_END }}
             </button>
           </template>
         </div>
       </template>
 
       <template v-if="gameStore.phase === 'pre'">
-        <p class="text-xs text-muted mb-2">疫情尚未爆发，可以购物。</p>
+        <p class="text-xs text-muted mb-2">{{ locationCopy.LOCATION_HINT_PRE }}</p>
         <button class="btn text-xs w-full" @click="handleShop">
-          购物（1 回合）
+          {{ locationCopy.LOCATION_BTN_SHOP }}
         </button>
       </template>
       <template v-else>
-        <p class="text-xs text-muted mb-2">搜寻物资。</p>
+        <p class="text-xs text-muted mb-2">{{ locationCopy.LOCATION_HINT_POST }}</p>
         <button class="btn text-xs w-full" @click="handleScavenge">
-          搜寻（1 回合）
+          {{ locationCopy.LOCATION_BTN_SCAVENGE }}
         </button>
       </template>
-      <button class="btn text-xs mt-2 w-full" @click="goToMap">返回地图</button>
+      <button class="btn text-xs mt-2 w-full" @click="goToMap">{{ locationCopy.LOCATION_BTN_BACK_MAP }}</button>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Store } from "lucide-vue-next";
 import { useGameStore } from "@/stores/useGameStore";
 import { getLocationName } from "@/data/locations";
-import { getAllSurvivalNpcs } from "@/data/survivalNpcs";
-import type { SurvivalNpcDef } from "@/data/survivalNpcs";
+import {
+  getAllSurvivalNpcs,
+  DEFAULT_NPC_GREETING,
+  DEFAULT_NPC_ACTION_MESSAGES,
+} from "@/data/survivalNpcs";
+import type { SurvivalNpcDef, NpcActionKey } from "@/data/survivalNpcs";
+import * as locationCopy from "@/data/locationCopy";
 import { TURN_COSTS } from "@/data/timeConstants";
-import { addLog } from "@/composables/useGameLog";
+import { addLog, useGameLog } from "@/composables/useGameLog";
+import { getScript } from "@/data/scripts";
+import {
+  locationFirstVisitKey,
+  npcFirstTalkKey,
+  getScriptIdForTrigger,
+} from "@/data/scriptTriggers";
+import { useScriptTriggerStore } from "@/stores/useScriptTriggerStore";
+import type { CityLocationId } from "@/types/game";
+import type { SurvivalNpcId } from "@/types/survival";
 import LocationNpcConceptC from "./location/LocationNpcConceptC.vue";
 
 const route = useRoute();
 const router = useRouter();
 const gameStore = useGameStore();
+const scriptTriggerStore = useScriptTriggerStore();
+const { runScript } = useGameLog();
 
 const locationId = computed(() => (route.params.id as string) || "apartment");
 const locationName = computed(() => getLocationName(locationId.value as any));
-const isApartment = computed(() => locationId.value === "apartment");
+const locationBlurb = computed(() =>
+  locationCopy.getLocationBlurb(locationId.value as any),
+);
 
 const npcsAtThisLocation = computed(() =>
   getAllSurvivalNpcs().filter((def) => def.locationId === locationId.value),
 );
 
 const activeNpc = ref<SurvivalNpcDef | null>(null);
-function startNpcConversation(npc: SurvivalNpcDef) {
-  activeNpc.value = npc;
-  addLog("欢迎，需要什么？", { speaker: npc.name });
+
+/** Fire location_first_visit trigger if registered and not yet fired. */
+async function tryFireLocationFirstVisit(id: CityLocationId) {
+  const key = locationFirstVisitKey(id);
+  if (scriptTriggerStore.hasFired(key)) return;
+  const scriptId = getScriptIdForTrigger(key);
+  if (!scriptId) return;
+  const script = getScript(scriptId);
+  if (!script) return;
+  await runScript(script);
+  scriptTriggerStore.markFired(key);
 }
 
-type NpcActionKey = "talk" | "buy" | "rob" | "scare";
+/** Fire npc_first_talk trigger if registered and not yet fired. Returns true if a script ran. */
+async function tryFireNpcFirstTalk(npcId: SurvivalNpcId): Promise<boolean> {
+  const key = npcFirstTalkKey(npcId);
+  if (scriptTriggerStore.hasFired(key)) return false;
+  const scriptId = getScriptIdForTrigger(key);
+  if (!scriptId) return false;
+  const script = getScript(scriptId);
+  if (!script) return false;
+  await runScript(script);
+  scriptTriggerStore.markFired(key);
+  return true;
+}
+
+async function startNpcConversation(npc: SurvivalNpcDef) {
+  activeNpc.value = npc;
+  await tryFireNpcFirstTalk(npc.id);
+  const msg = npc.greeting ?? DEFAULT_NPC_GREETING;
+  addLog(msg, { speaker: npc.name });
+}
+
 function handleNpcAction(action: NpcActionKey) {
   const npc = activeNpc.value;
   if (!npc) return;
-  const messages: Record<NpcActionKey, string> = {
-    talk: "你们随便聊了几句。",
-    buy: "（购买功能尚未开放）",
-    rob: "（抢劫会带来后果，尚未开放）",
-    scare: "（恐吓会影响关系，尚未开放）",
-  };
-  addLog(messages[action], { speaker: npc.name });
+  const msg =
+    npc.actionMessages?.[action] ?? DEFAULT_NPC_ACTION_MESSAGES[action];
+  addLog(msg, { speaker: npc.name });
 }
 
 function goToMap() {
@@ -127,11 +165,19 @@ function goToMap() {
 
 function handleShop() {
   gameStore.advanceTurns(TURN_COSTS.shop);
-  addLog(`在${locationName.value}逛了逛，暂时没有购买。`);
+  addLog(locationCopy.getShopResultMessage(locationName.value));
 }
 
 function handleScavenge() {
   gameStore.advanceTurns(TURN_COSTS.scavenge);
-  addLog(`在${locationName.value}搜寻了一番。`);
+  addLog(locationCopy.getScavengeResultMessage(locationName.value));
 }
+
+onMounted(() => {
+  tryFireLocationFirstVisit(locationId.value as CityLocationId);
+});
+
+watch(locationId, (id) => {
+  tryFireLocationFirstVisit(id as CityLocationId);
+});
 </script>

@@ -1,9 +1,9 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 /* zpix 像素字体（支持中英文） */
 @font-face {
-  font-family: 'zpix';
-  src: url('@/assets/fonts/zpix.woff2') format('woff2');
+  font-family: "zpix";
+  src: url("@/assets/fonts/zpix.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -19,7 +19,14 @@
   --color-success: #5a9e6f;
   --color-water: #4c6e8a;
   --color-earth: #8b6914;
-  --color-muted: #6b7280;
+  --color-muted: #d8dee9;
+
+  /* 状态条五档：好 / 略差 / 较差 / 严重 / 特殊 */
+  --color-status-good: #a3be8c;
+  --color-status-warning: #ebcb8b;
+  --color-status-caution: #d08770;
+  --color-status-danger: #bf616a;
+  --color-status-special: #b48ead;
 
   /* 品质颜色 */
   --color-quality-fine: #d4976a;
@@ -27,7 +34,7 @@
   --color-quality-supreme: #ffd700;
 
   /* 字体 */
-  --font-game: 'zpix', monospace;
+  --font-game: "zpix", monospace;
 
   /* 间距基准 4px */
   --spacing-1: 4px;
@@ -163,18 +170,18 @@ body {
   background: var(--color-accent) !important;
 }
 
-.qmsg .qmsg-content-text[data-limitwidthwrap='wrap'] {
+.qmsg .qmsg-content-text[data-limitwidthwrap="wrap"] {
   white-space: normal !important;
   word-break: break-word !important;
 }
 
-.qmsg .qmsg-content-text[data-limitwidthwrap='ellipsis'] {
+.qmsg .qmsg-content-text[data-limitwidthwrap="ellipsis"] {
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
 }
 
-.qmsg .qmsg-content-text[data-limitwidthwrap='no-wrap'] {
+.qmsg .qmsg-content-text[data-limitwidthwrap="no-wrap"] {
   white-space: nowrap !important;
 }
 

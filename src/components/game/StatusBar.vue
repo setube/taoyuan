@@ -230,15 +230,18 @@ const effectRows = computed(() => {
     FATIGUE_STAGES,
   );
   const moraleTurns = getTurnsUntilNextStage(m, 0, MORALE_STAGES);
+  /** Five-tier status: good (green) → warning (yellow) → caution (orange) → danger (red). Special (purple) reserved for effects like 被魅惑/催眠. */
   const rowClass = (val: number, isMorale: boolean) => {
     if (isMorale) {
-      if (val <= 25) return "text-danger";
-      if (val <= 50) return "text-accent";
-      return "text-success";
+      if (val <= 25) return "text-status-danger";
+      if (val <= 50) return "text-status-caution";
+      if (val <= 75) return "text-status-warning";
+      return "text-status-good";
     }
-    if (val >= 75) return "text-danger";
-    if (val >= 50) return "text-accent";
-    return "text-success";
+    if (val >= 75) return "text-status-danger";
+    if (val >= 50) return "text-status-caution";
+    if (val >= 25) return "text-status-warning";
+    return "text-status-good";
   };
   return [
     {

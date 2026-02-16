@@ -29,7 +29,9 @@
             class="dynamic-bar-row text-[10px] flex items-center justify-between gap-1 shrink-0"
           >
             <span class="text-muted">警觉</span>
-            <span class="tabular-nums text-muted shrink-0">{{ alertLevel }}</span>
+            <span class="tabular-nums text-muted shrink-0">{{
+              alertLevel
+            }}</span>
           </div>
           <div
             class="dynamic-bar-row text-[10px] flex items-center justify-between gap-1 shrink-0"
@@ -55,9 +57,7 @@
             :key="npc.id"
             class="flex flex-col gap-0.5 shrink-0 mt-0.5"
           >
-            <span
-              class="text-[10px] text-accent/90 font-medium truncate"
-            >
+            <span class="text-[10px] text-accent/90 font-medium truncate">
               {{ npc.name }}
             </span>
             <div
@@ -115,9 +115,7 @@ const survivalNpcStore = useSurvivalNpcStore();
 
 const currentCityLocation = computed(() => gameStore.currentCityLocation);
 
-const locationDef = computed(() =>
-  getLocationById(currentCityLocation.value),
-);
+const locationDef = computed(() => getLocationById(currentCityLocation.value));
 
 const alertLevel = computed(() =>
   mapStateStore.getAlertLevel(currentCityLocation.value),

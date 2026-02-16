@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import Qmsg from "qmsg";
 import { usePlayerStore } from "@/stores/usePlayerStore";
+import type { TextScript, LogStep, ChoiceStep } from "@/types/script";
 
 export type FloatColor = "danger" | "success" | "accent" | "water";
 
@@ -155,7 +156,7 @@ export function showChoice(
 export function resolveChoice(index: number): void {
   const choice = pendingChoice.value;
   if (!choice || index < 0 || index > 2) return;
-  const text = choice.options[index];
+  const text = choice.options[index] ?? "";
   addLog(text, { speaker: choice.speaker });
   choice.resolve(index);
   pendingChoice.value = null;
@@ -182,12 +183,33 @@ export async function runChoiceScene(
   addLog(opts.flavorText, { variant: "narrator-before-choice" });
   try {
     const index = await showChoice(opts.options, opts.speaker);
-    if (opts.followUps) {
-      addLog(opts.followUps[index]);
+    if (opts.followUps && index >= 0) {
+      addLog(opts.followUps[index] ?? "");
     }
     return index;
   } catch {
     return -1;
+  }
+}
+
+/**
+ * Run a text script: execute each step in order (log → addLog, choice → runChoiceScene).
+ * Used for event-triggered sequences and reusable flows (e.g. base_look_out_window).
+ */
+export async function runScript(script: TextScript): Promise<void> {
+  for (const step of script.steps) {
+    if (step.type === "log") {
+      const logStep = step as LogStep;
+      addLog(logStep.text, { speaker: logStep.speaker });
+    } else if (step.type === "choice") {
+      const choiceStep = step as ChoiceStep;
+      await runChoiceScene({
+        flavorText: choiceStep.flavorText,
+        options: choiceStep.options,
+        followUps: choiceStep.followUps,
+        speaker: choiceStep.speaker,
+      });
+    }
   }
 }
 
@@ -210,6 +232,7 @@ export const useGameLog = () => {
     showChoice,
     resolveChoice,
     runChoiceScene,
+    runScript,
     resetLogs,
   };
 };

@@ -39,6 +39,11 @@ import {
 import { useEncounterStore } from "@/stores/useEncounterStore";
 import { useCombatStore } from "@/stores/useCombatStore";
 import { getZombieById } from "@/data/zombies";
+import {
+  getTravelResultMessage,
+  MAP_MSG_STEALTH_SUCCESS,
+  MAP_MSG_ENCOUNTER_PREFIX,
+} from "@/data/mapCopy";
 import { addLog } from "@/composables/useGameLog";
 import router from "@/router";
 
@@ -96,7 +101,7 @@ function travelToCell(row: number, col: number) {
   const fromId = gameStore.currentCityLocation;
   const result = gameStore.travelToGridCell(row, col);
   const toId = gameStore.currentCityLocation;
-  addLog(result.message || `到达${getLocationName(toId)}。`);
+  addLog(getTravelResultMessage(result.message, toId));
   if (result.passedOut) {
     // TODO: handleEndDay
   }
@@ -108,13 +113,13 @@ function travelToCell(row: number, col: number) {
     const zombie = getZombieById(encounter.zombieId);
     if (zombie) {
       combatStore.startCombat(zombie);
-      addLog(`遭遇了${zombie.name}！`);
+      addLog(`${MAP_MSG_ENCOUNTER_PREFIX}${zombie.name}！`);
       router.push("/game/combat");
       return;
     }
   }
   if (encounter.stealthSuccess) {
-    addLog("你悄悄避开了危险。");
+    addLog(MAP_MSG_STEALTH_SUCCESS);
   }
   if (toId !== "street") {
     router.push(`/game/location/${toId}`);

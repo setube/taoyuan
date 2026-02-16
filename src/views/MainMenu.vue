@@ -692,6 +692,7 @@ import { getAllBackgrounds } from "@/data/backgrounds";
 import { useFamiliarityStore } from "@/stores/useFamiliarityStore";
 import { useMapStateStore } from "@/stores/useMapStateStore";
 import { useSurvivalNpcStore } from "@/stores/useSurvivalNpcStore";
+import { useScriptTriggerStore } from "@/stores/useScriptTriggerStore";
 import { useSurvivalStore } from "@/stores/useSurvivalStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useCombatStore } from "@/stores/useCombatStore";
@@ -850,10 +851,12 @@ function ensureGameStarted() {
   const mapStateStore = useMapStateStore();
   const survivalNpcStore = useSurvivalNpcStore();
   const survivalStore = useSurvivalStore();
+  const scriptTriggerStore = useScriptTriggerStore();
   familiarityStore.reset();
   mapStateStore.reset();
   survivalNpcStore.reset();
   survivalStore.reset();
+  scriptTriggerStore.reset();
   familiarityStore.applyBackgroundBonuses(null);
   farmStore.resetFarm(6);
   questStore.initMainQuest();
@@ -958,10 +961,12 @@ const handleStartGameFromFlavor = () => {
   const mapStateStore = useMapStateStore();
   const survivalNpcStore = useSurvivalNpcStore();
   const survivalStore = useSurvivalStore();
+  const scriptTriggerStore = useScriptTriggerStore();
   familiarityStore.reset();
   mapStateStore.reset();
   survivalNpcStore.reset();
   survivalStore.reset();
+  scriptTriggerStore.reset();
   familiarityStore.applyBackgroundBonuses(
     playerStore.selectedBackgroundId ?? null,
   );
