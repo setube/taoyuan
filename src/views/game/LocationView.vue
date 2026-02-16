@@ -75,7 +75,6 @@
       </template>
       <button class="btn text-xs mt-2 w-full" @click="goToMap">返回地图</button>
     </template>
-
   </div>
 </template>
 

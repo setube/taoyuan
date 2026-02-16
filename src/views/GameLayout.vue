@@ -48,6 +48,15 @@
             <component :is="t.icon" :size="16" class="block" />
           </button>
           <button
+            v-if="settingsStore.developerMode"
+            type="button"
+            class="game-layout-topbar-icon p-1.5 rounded-xs border border-accent/30 text-accent hover:bg-accent/20 transition-colors cursor-pointer"
+            title="商店（中心弹窗）"
+            @click="showShopCenterModal = true"
+          >
+            <ShoppingCart :size="16" class="block" />
+          </button>
+          <button
             type="button"
             class="game-layout-topbar-icon p-1.5 rounded-xs border border-transparent text-text hover:bg-accent/10 hover:border-accent/20 hover:text-accent transition-colors cursor-pointer"
             title="设置"
@@ -257,20 +266,56 @@
         </div>
       </div>
     </Transition>
+
+    <!-- 商店中心弹窗（dev 模式可开） -->
+    <Transition name="panel-fade">
+      <div
+        v-if="showShopCenterModal"
+        class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+        @click.self="showShopCenterModal = false"
+      >
+        <div
+          class="game-panel max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col relative"
+        >
+          <button
+            type="button"
+            class="absolute top-2 right-2 z-10 text-muted hover:text-text transition-colors p-1 rounded-xs border border-transparent hover:border-accent/20"
+            aria-label="关闭"
+            @click="showShopCenterModal = false"
+          >
+            <X :size="16" />
+          </button>
+          <div class="flex-1 min-h-0 overflow-y-auto pr-8">
+            <ShopView />
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, provide } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useGameStore, usePlayerStore, useAnimalStore } from "@/stores";
+import {
+  useGameStore,
+  usePlayerStore,
+  useAnimalStore,
+  useSettingsStore,
+} from "@/stores";
 import { getLocationName } from "@/data/locations";
 import { TABS, navigateToPanel } from "@/composables/useNavigation";
 import { useDialogs } from "@/composables/useDialogs";
 import { handleEndDay } from "@/composables/useEndDay";
 import { useGameClock } from "@/composables/useGameClock";
 import { useAudio } from "@/composables/useAudio";
-import { Moon, X, Map, Settings as SettingsIcon } from "lucide-vue-next";
+import {
+  Moon,
+  X,
+  Map,
+  Settings as SettingsIcon,
+  ShoppingCart,
+} from "lucide-vue-next";
 import MobileMapMenu from "@/components/game/MobileMapMenu.vue";
 import StatusBar from "@/components/game/StatusBar.vue";
 import BackpackBar from "@/components/game/BackpackBar.vue";
@@ -289,11 +334,13 @@ import FireworkShowView from "@/components/game/FireworkShowView.vue";
 import TeaContestView from "@/components/game/TeaContestView.vue";
 import KiteFlyingView from "@/components/game/KiteFlyingView.vue";
 import SettingsDialog from "@/components/game/SettingsDialog.vue";
+import ShopView from "@/views/game/ShopView.vue";
 
 const router = useRouter();
 const route = useRoute();
 const gameStore = useGameStore();
 const playerStore = usePlayerStore();
+const settingsStore = useSettingsStore();
 /** 当前地点名（顶栏显示） */
 const locationName = computed(() =>
   getLocationName(gameStore.currentCityLocation),
@@ -332,6 +379,9 @@ const showSleepConfirm = ref(false);
 /** 设置弹窗 */
 const showSettings = ref(false);
 
+/** 商店中心弹窗（dev 可开） */
+const showShopCenterModal = ref(false);
+
 /** 供子视图（如基地）请求打开休息/结束今日确认 */
 provide("requestSleep", () => {
   showSleepConfirm.value = true;
@@ -350,7 +400,8 @@ watch(
       currentFestival.value ||
       pendingPerk.value ||
       pendingPetAdoption.value ||
-      showSleepConfirm.value
+      showSleepConfirm.value ||
+      showShopCenterModal.value
     ),
   (hasModal) => {
     if (hasModal) pauseClock();
