@@ -21,6 +21,7 @@ import { getShoeById } from '@/data/shoes'
 import { EQUIPMENT_SETS } from '@/data/equipmentSets'
 import { usePlayerStore } from './usePlayerStore'
 import { useAchievementStore } from './useAchievementStore'
+import { hasCombinedItem, removeCombinedItem } from '@/composables/useCombinedInventory'
 
 const INITIAL_CAPACITY = 24
 const MAX_CAPACITY = 60
@@ -615,7 +616,7 @@ export const useInventoryStore = defineStore('inventory', () => {
 
     // 检查材料
     for (const mat of def.recipe) {
-      if (getItemCount(mat.itemId) < mat.quantity) {
+      if (!hasCombinedItem(mat.itemId, mat.quantity)) {
         const matName = getItemById(mat.itemId)?.name ?? mat.itemId
         return { success: false, message: `材料不足：${matName}。` }
       }
@@ -629,7 +630,7 @@ export const useInventoryStore = defineStore('inventory', () => {
 
     // 消耗材料
     for (const mat of def.recipe) {
-      removeItem(mat.itemId, mat.quantity)
+      removeCombinedItem(mat.itemId, mat.quantity)
     }
     playerStore.spendMoney(def.recipeMoney)
 
@@ -689,7 +690,7 @@ export const useInventoryStore = defineStore('inventory', () => {
     const def = getHatById(defId)
     if (!def || !def.recipe) return { success: false, message: '该帽子无法合成。' }
     for (const mat of def.recipe) {
-      if (getItemCount(mat.itemId) < mat.quantity) {
+      if (!hasCombinedItem(mat.itemId, mat.quantity)) {
         const matName = getItemById(mat.itemId)?.name ?? mat.itemId
         return { success: false, message: `材料不足：${matName}。` }
       }
@@ -699,7 +700,7 @@ export const useInventoryStore = defineStore('inventory', () => {
       return { success: false, message: `铜钱不足（需要${def.recipeMoney}文）。` }
     }
     for (const mat of def.recipe) {
-      removeItem(mat.itemId, mat.quantity)
+      removeCombinedItem(mat.itemId, mat.quantity)
     }
     playerStore.spendMoney(def.recipeMoney)
     addHat(defId)
@@ -757,7 +758,7 @@ export const useInventoryStore = defineStore('inventory', () => {
     const def = getShoeById(defId)
     if (!def || !def.recipe) return { success: false, message: '该鞋子无法合成。' }
     for (const mat of def.recipe) {
-      if (getItemCount(mat.itemId) < mat.quantity) {
+      if (!hasCombinedItem(mat.itemId, mat.quantity)) {
         const matName = getItemById(mat.itemId)?.name ?? mat.itemId
         return { success: false, message: `材料不足：${matName}。` }
       }
@@ -767,7 +768,7 @@ export const useInventoryStore = defineStore('inventory', () => {
       return { success: false, message: `铜钱不足（需要${def.recipeMoney}文）。` }
     }
     for (const mat of def.recipe) {
-      removeItem(mat.itemId, mat.quantity)
+      removeCombinedItem(mat.itemId, mat.quantity)
     }
     playerStore.spendMoney(def.recipeMoney)
     addShoe(defId)

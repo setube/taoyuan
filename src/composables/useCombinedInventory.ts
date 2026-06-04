@@ -2,17 +2,48 @@ import { useInventoryStore } from '@/stores/useInventoryStore'
 import { useWarehouseStore } from '@/stores/useWarehouseStore'
 import type { Quality } from '@/types'
 
-/** 合计背包 + 仓库所有箱子中某物品数量 */
-export const getCombinedItemCount = (itemId: string, quality?: Quality): number => {
-  const inv = useInventoryStore()
+export interface MaterialStockBreakdown {
+  inventory: number
+  warehouse: number
+  total: number
+}
+
+/** 背包中某物品数量 */
+export const getInventoryItemCount = (itemId: string, quality?: Quality): number => {
+  return useInventoryStore().getItemCount(itemId, quality)
+}
+
+/** 仓库所有箱子中某物品数量（未解锁为 0） */
+export const getWarehouseItemCount = (itemId: string, quality?: Quality): number => {
   const wh = useWarehouseStore()
-  let total = inv.getItemCount(itemId, quality)
-  if (wh.unlocked) {
-    for (const chest of wh.chests) {
-      total += wh.getChestItemCount(chest.id, itemId, quality)
-    }
+  if (!wh.unlocked) return 0
+  let total = 0
+  for (const chest of wh.chests) {
+    total += wh.getChestItemCount(chest.id, itemId, quality)
   }
   return total
+}
+
+/** 背包 + 仓库数量明细 */
+export const getMaterialStockBreakdown = (itemId: string, quality?: Quality): MaterialStockBreakdown => {
+  const inventory = getInventoryItemCount(itemId, quality)
+  const warehouse = getWarehouseItemCount(itemId, quality)
+  return { inventory, warehouse, total: inventory + warehouse }
+}
+
+/** 合计背包 + 仓库所有箱子中某物品数量 */
+export const getCombinedItemCount = (itemId: string, quality?: Quality): number => {
+  return getMaterialStockBreakdown(itemId, quality).total
+}
+
+/** 材料是否足够（含仓库） */
+export const hasEnoughMaterial = (itemId: string, quantity: number, quality?: Quality): boolean => {
+  return getCombinedItemCount(itemId, quality) >= quantity
+}
+
+/** 批量材料是否足够 */
+export const materialsAreSufficient = (materials: { itemId: string; quantity: number }[]): boolean => {
+  return materials.every(m => hasEnoughMaterial(m.itemId, m.quantity))
 }
 
 /** 背包+仓库所有箱子是否合计拥有足够数量 */

@@ -8,6 +8,7 @@ import { useAchievementStore } from './useAchievementStore'
 import { useNpcStore } from './useNpcStore'
 import { useQuestStore } from './useQuestStore'
 import { useInventoryStore } from './useInventoryStore'
+import { getCombinedItemCount, hasCombinedItem, removeCombinedItem } from '@/composables/useCombinedInventory'
 import { usePlayerStore } from './usePlayerStore'
 import router from '@/router'
 import type { HiddenNpcState, DiscoveryCondition, DiscoveryStep, AffinityLevel, BondBonusType } from '@/types/hiddenNpc'
@@ -113,7 +114,7 @@ export const useHiddenNpcStore = defineStore('hiddenNpc', () => {
         return routeName === cond.panel
       }
       case 'item':
-        return inventoryStore.getItemCount(cond.itemId) >= (cond.quantity ?? 1)
+        return getCombinedItemCount(cond.itemId) >= (cond.quantity ?? 1)
       case 'skill':
         return skillStore.getSkill(cond.skillType as any).level >= cond.minLevel
       case 'npcFriendship': {
@@ -351,14 +352,14 @@ export const useHiddenNpcStore = defineStore('hiddenNpc', () => {
 
     // 检查材料
     for (const cost of costs) {
-      if (inventoryStore.getItemCount(cost.itemId) < cost.quantity) {
+      if (!hasCombinedItem(cost.itemId, cost.quantity)) {
         return { success: false, message: '材料不足。' }
       }
     }
 
     // 扣除材料
     for (const cost of costs) {
-      inventoryStore.removeItem(cost.itemId, cost.quantity)
+      removeCombinedItem(cost.itemId, cost.quantity)
     }
 
     // 添加产物

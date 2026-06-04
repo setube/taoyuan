@@ -5,6 +5,7 @@ import { usePlayerStore } from './usePlayerStore'
 import { useInventoryStore } from './useInventoryStore'
 import { useGameStore } from './useGameStore'
 import { addLog } from '@/composables/useGameLog'
+import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
 
 export const useGuildStore = defineStore('guild', () => {
   /** 按怪物ID记录击杀数 */
@@ -225,7 +226,7 @@ export const useGuildStore = defineStore('guild', () => {
     // 检查材料是否足够
     if (item.materials) {
       for (const mat of item.materials) {
-        if (inventoryStore.getItemCount(mat.itemId) < mat.quantity) return false
+        if (getCombinedItemCount(mat.itemId) < mat.quantity) return false
       }
     }
 
@@ -241,7 +242,7 @@ export const useGuildStore = defineStore('guild', () => {
     // 扣除材料
     if (item.materials) {
       for (const mat of item.materials) {
-        inventoryStore.removeItem(mat.itemId, mat.quantity)
+        removeCombinedItem(mat.itemId, mat.quantity)
       }
     }
 

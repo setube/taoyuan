@@ -1,8 +1,25 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { InventoryItem, Quality, Chest, ChestTier, VoidChestRole, ItemCategory } from '@/types'
+
+/** 仓库总览：某物品在各箱中的分布 */
+export interface WarehouseItemLocation {
+  chestId: string
+  chestLabel: string
+  tier: ChestTier
+  quantity: number
+}
+
+/** 仓库总览：按物品聚合 */
+export interface WarehouseAggregatedEntry {
+  itemId: string
+  quality: Quality
+  category: ItemCategory
+  totalQuantity: number
+  locations: WarehouseItemLocation[]
+}
 import { getItemById, CHEST_DEFS } from '@/data/items'
-import { getNextChestUpgradeTier } from '@/data/warehouse'
+import { CHEST_FILTER_CATEGORIES, getNextChestUpgradeTier } from '@/data/warehouse'
 import { useInventoryStore } from './useInventoryStore'
 
 const INITIAL_MAX_CHESTS = 5
@@ -301,6 +318,85 @@ export const useWarehouseStore = defineStore('warehouse', () => {
     return true
   }
 
+  /** 仓库内某物品总数量 */
+  const getWarehouseTotalItemCount = (itemId: string, quality?: Quality): number => {
+    let total = 0
+    for (const chest of chests.value) {
+      total += getChestItemCount(chest.id, itemId, quality)
+    }
+    return total
+  }
+
+  /** 聚合所有箱子物品（可按分类筛选） */
+  const aggregateAllItems = (categoryFilter?: ItemCategory): WarehouseAggregatedEntry[] => {
+    const map = new Map<string, WarehouseAggregatedEntry>()
+    for (const chest of chests.value) {
+      for (const slot of chest.items) {
+        const def = getItemById(slot.itemId)
+        if (!def) continue
+        if (categoryFilter !== undefined && def.category !== categoryFilter) continue
+        const key = `${slot.itemId}::${slot.quality}`
+        let entry = map.get(key)
+        if (!entry) {
+          entry = {
+            itemId: slot.itemId,
+            quality: slot.quality,
+            category: def.category,
+            totalQuantity: 0,
+            locations: []
+          }
+          map.set(key, entry)
+        }
+        entry.totalQuantity += slot.quantity
+        const loc = entry.locations.find(l => l.chestId === chest.id)
+        if (loc) loc.quantity += slot.quantity
+        else {
+          entry.locations.push({
+            chestId: chest.id,
+            chestLabel: chest.label,
+            tier: chest.tier,
+            quantity: slot.quantity
+          })
+        }
+      }
+    }
+    return [...map.values()].sort((a, b) => {
+      const ca = CHEST_FILTER_CATEGORIES.indexOf(a.category as ItemCategory)
+      const cb = CHEST_FILTER_CATEGORIES.indexOf(b.category as ItemCategory)
+      if (ca !== cb) return (ca < 0 ? 99 : ca) - (cb < 0 ? 99 : cb)
+      const na = getItemById(a.itemId)?.name ?? a.itemId
+      const nb = getItemById(b.itemId)?.name ?? b.itemId
+      return na.localeCompare(nb, 'zh')
+    })
+  }
+
+  /** 从仓库任意箱子取出到背包（按箱子顺序） */
+  const withdrawFromAnyChest = (itemId: string, quantity: number, quality: Quality): number => {
+    let remaining = quantity
+    let withdrawn = 0
+    for (const chest of chests.value) {
+      if (remaining <= 0) break
+      const available = getChestItemCount(chest.id, itemId, quality)
+      if (available <= 0) continue
+      const take = Math.min(remaining, available)
+      if (withdrawFromChest(chest.id, itemId, take, quality)) {
+        withdrawn += take
+        remaining -= take
+      }
+    }
+    return withdrawn
+  }
+
+  /** 将背包物品存入第一个可接受的箱子 */
+  const depositToFirstAvailableChest = (itemId: string, quantity: number, quality: Quality): number => {
+    for (const chest of chests.value) {
+      if (!canDepositItemToChest(chest.id, itemId)) continue
+      const actual = depositToChest(chest.id, itemId, quantity, quality)
+      if (actual > 0) return actual
+    }
+    return 0
+  }
+
   // ---- 整理 ----
 
   /** 物品分类排序优先级 */
@@ -448,6 +544,10 @@ export const useWarehouseStore = defineStore('warehouse', () => {
     getVoidChests,
     moveChest,
     sortChest,
+    getWarehouseTotalItemCount,
+    aggregateAllItems,
+    withdrawFromAnyChest,
+    depositToFirstAvailableChest,
     serialize,
     deserialize
   }

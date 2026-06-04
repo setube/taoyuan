@@ -70,6 +70,40 @@ describe('useWarehouseStore', () => {
     expect(wh.getChest(idB)!.filterCategories).toContain('food')
   })
 
+  it('aggregateAllItems 按分类聚合全仓库物品', () => {
+    const wh = useWarehouseStore()
+    wh.unlocked = true
+    wh.addChest('wood', 'A')
+    wh.addChest('copper', 'B')
+    wh.addItemToChest(wh.chests[0]!.id, 'seed_cabbage', 2)
+    wh.addItemToChest(wh.chests[1]!.id, 'hay', 5)
+
+    const all = wh.aggregateAllItems()
+    expect(all).toHaveLength(2)
+    const seed = all.find(e => e.itemId === 'seed_cabbage')!
+    expect(seed.totalQuantity).toBe(2)
+    expect(seed.locations[0]!.chestLabel).toBe('A')
+
+    const seedsOnly = wh.aggregateAllItems('seed')
+    expect(seedsOnly).toHaveLength(1)
+    expect(seedsOnly[0]!.itemId).toBe('seed_cabbage')
+  })
+
+  it('withdrawFromAnyChest 可从多箱取出到背包', () => {
+    const wh = useWarehouseStore()
+    const inv = useInventoryStore()
+    wh.unlocked = true
+    wh.addChest('wood')
+    wh.addChest('wood')
+    wh.addItemToChest(wh.chests[0]!.id, 'wood', 3)
+    wh.addItemToChest(wh.chests[1]!.id, 'wood', 4)
+
+    const n = wh.withdrawFromAnyChest('wood', 5, 'normal')
+    expect(n).toBe(5)
+    expect(inv.getItemCount('wood')).toBe(5)
+    expect(wh.getWarehouseTotalItemCount('wood')).toBe(2)
+  })
+
   it('木箱可升级为铜箱并提升容量', () => {
     const wh = useWarehouseStore()
     wh.unlocked = true

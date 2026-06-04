@@ -1050,6 +1050,7 @@
   import { SHOP_SHOES, CRAFTABLE_SHOES } from '@/data/shoes'
   import { HAY_PRICE } from '@/data/animals'
   import { addLog } from '@/composables/useGameLog'
+  import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
   import { sfxBuy } from '@/composables/useAudio'
   import { showFloat } from '@/composables/useGameLog'
   import { handleBuySeed, handleSellItem, handleSellItemAll, handleSellAll, QUALITY_NAMES } from '@/composables/useFarmActions'
@@ -1623,7 +1624,7 @@
 
   const hasWeaponMaterials = (w: WeaponDef): boolean => {
     for (const mat of w.shopMaterials) {
-      if (inventoryStore.getItemCount(mat.itemId) < mat.quantity) return false
+      if (getCombinedItemCount(mat.itemId) < mat.quantity) return false
     }
     return true
   }
@@ -1640,7 +1641,7 @@
       return
     }
     for (const mat of w.shopMaterials) {
-      if (!inventoryStore.removeItem(mat.itemId, mat.quantity)) {
+      if (!removeCombinedItem(mat.itemId, mat.quantity)) {
         playerStore.earnMoney(actualPrice)
         addLog('材料不足。')
         return
@@ -1685,7 +1686,7 @@
     if (!ring.recipe) return false
     if (playerStore.money < ring.recipeMoney) return false
     for (const mat of ring.recipe) {
-      if (inventoryStore.getItemCount(mat.itemId) < mat.quantity) return false
+      if (getCombinedItemCount(mat.itemId) < mat.quantity) return false
     }
     return true
   }
@@ -1838,7 +1839,7 @@
     if (!hat.recipe) return false
     if (playerStore.money < hat.recipeMoney) return false
     for (const mat of hat.recipe) {
-      if (inventoryStore.getItemCount(mat.itemId) < mat.quantity) return false
+      if (getCombinedItemCount(mat.itemId) < mat.quantity) return false
     }
     return true
   }
@@ -1847,7 +1848,7 @@
     if (!shoe.recipe) return false
     if (playerStore.money < shoe.recipeMoney) return false
     for (const mat of shoe.recipe) {
-      if (inventoryStore.getItemCount(mat.itemId) < mat.quantity) return false
+      if (getCombinedItemCount(mat.itemId) < mat.quantity) return false
     }
     return true
   }

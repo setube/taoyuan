@@ -408,9 +408,7 @@
               <p class="text-xs text-muted mb-1">所需材料</p>
               <div v-for="mat in nextSeedBoxUpgrade.materials" :key="mat.itemId" class="flex items-center justify-between">
                 <span class="text-xs text-muted">{{ getItemById(mat.itemId)?.name }}</span>
-                <span class="text-xs" :class="getCombinedItemCount(mat.itemId) >= mat.quantity ? '' : 'text-danger'">
-                  {{ getCombinedItemCount(mat.itemId) }}/{{ mat.quantity }}
-                </span>
+                <CombinedMaterialCount :item-id="mat.itemId" :required="mat.quantity" always-show-breakdown />
               </div>
               <div class="flex items-center justify-between mt-0.5">
                 <span class="text-xs text-muted">铜钱</span>
@@ -535,6 +533,7 @@
   import { useGameStore } from '@/stores/useGameStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
   import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
+  import CombinedMaterialCount from '@/components/game/CombinedMaterialCount.vue'
   import { getCropById } from '@/data/crops'
   import { getItemById } from '@/data/items'
   import {

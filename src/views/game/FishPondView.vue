@@ -345,7 +345,7 @@
             <p class="text-xs text-muted mb-1">所需材料</p>
             <div v-for="mat in modalMaterials" :key="mat.itemId" class="flex items-center justify-between mt-0.5">
               <span class="text-xs">{{ mat.name }}</span>
-              <span class="text-xs" :class="mat.enough ? 'text-success' : 'text-danger'">{{ mat.owned }}/{{ mat.required }}</span>
+              <CombinedMaterialCount :item-id="mat.itemId" :required="mat.required" text-class="text-xs" always-show-breakdown />
             </div>
           </div>
 
@@ -384,6 +384,8 @@
   import Divider from '@/components/game/Divider.vue'
   import { useFishPondStore } from '@/stores/useFishPondStore'
   import { useInventoryStore } from '@/stores/useInventoryStore'
+  import { getCombinedItemCount } from '@/composables/useCombinedInventory'
+  import CombinedMaterialCount from '@/components/game/CombinedMaterialCount.vue'
   import { useGameStore } from '@/stores/useGameStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
   import { addLog, showFloat } from '@/composables/useGameLog'
@@ -481,8 +483,8 @@
       itemId: m.itemId,
       name: getItemName(m.itemId),
       required: m.quantity,
-      owned: inventoryStore.getItemCount(m.itemId),
-      enough: inventoryStore.getItemCount(m.itemId) >= m.quantity
+      owned: getCombinedItemCount(m.itemId),
+      enough: getCombinedItemCount(m.itemId) >= m.quantity
     }))
   })
 

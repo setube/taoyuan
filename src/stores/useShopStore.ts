@@ -15,6 +15,7 @@ import type { Quality } from '@/types'
 import { useHiddenNpcStore } from './useHiddenNpcStore'
 import { isShopAvailable, getShopById } from '@/data/shops'
 import { HAY_PRICE } from '@/data/animals'
+import { getCombinedItemCount } from '@/composables/useCombinedInventory'
 
 const WANWUPU_MISC_PRICES: { itemId: string; price: number }[] = [
   { itemId: 'hay', price: HAY_PRICE },
@@ -231,7 +232,7 @@ export const useShopStore = defineStore('shop', () => {
     const summaryParts: string[] = []
 
     for (const mat of materials) {
-      const have = inventoryStore.getItemCount(mat.itemId)
+      const have = getCombinedItemCount(mat.itemId)
       const need = mat.quantity - have
       if (need <= 0) continue
       const entry = catalog.get(mat.itemId)

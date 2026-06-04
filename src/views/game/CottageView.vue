@@ -311,9 +311,7 @@
             <p class="text-xs text-muted mb-1">所需材料</p>
             <div v-for="mat in homeStore.nextUpgrade.materialCost" :key="mat.itemId" class="flex items-center justify-between">
               <span class="text-xs text-muted">{{ getItemName(mat.itemId) }}</span>
-              <span class="text-xs" :class="getCombinedItemCount(mat.itemId) >= mat.quantity ? '' : 'text-danger'">
-                {{ getCombinedItemCount(mat.itemId) }}/{{ mat.quantity }}
-              </span>
+              <CombinedMaterialCount :item-id="mat.itemId" :required="mat.quantity" always-show-breakdown />
             </div>
             <div class="flex items-center justify-between">
               <span class="text-xs text-muted">铜钱</span>
@@ -633,9 +631,7 @@
             <p class="text-xs text-muted mb-1">所需材料</p>
             <div v-for="mat in homeStore.nextCellarUpgrade.materialCost" :key="mat.itemId" class="flex items-center justify-between">
               <span class="text-xs text-muted">{{ getItemName(mat.itemId) }}</span>
-              <span class="text-xs" :class="getCombinedItemCount(mat.itemId) >= mat.quantity ? '' : 'text-danger'">
-                {{ getCombinedItemCount(mat.itemId) }}/{{ mat.quantity }}
-              </span>
+              <CombinedMaterialCount :item-id="mat.itemId" :required="mat.quantity" always-show-breakdown />
             </div>
             <div class="flex items-center justify-between">
               <span class="text-xs text-muted">铜钱</span>
@@ -673,6 +669,7 @@
   import { usePlayerStore } from '@/stores/usePlayerStore'
   import { SEASON_NAMES } from '@/stores/useGameStore'
   import { getCombinedItemCount } from '@/composables/useCombinedInventory'
+  import CombinedMaterialCount from '@/components/game/CombinedMaterialCount.vue'
   import { getItemById, getNpcById, NPCS } from '@/data'
   import { SEASON_EVENTS } from '@/data/events'
   import { ACTION_TIME_COSTS, WEEKDAYS, WEEKDAY_NAMES } from '@/data/timeConstants'

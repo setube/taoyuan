@@ -579,7 +579,7 @@
             </div>
             <div v-for="mat in upgradeModal.materials" :key="mat.itemId" class="flex items-center justify-between mt-0.5">
               <span class="text-xs">{{ mat.name }}</span>
-              <span class="text-xs" :class="mat.have >= mat.need ? 'text-success' : 'text-danger'">{{ mat.have }} / {{ mat.need }}</span>
+              <CombinedMaterialCount :item-id="mat.itemId" :required="mat.need" always-show-breakdown />
             </div>
           </div>
 
@@ -613,7 +613,12 @@
   import { addLog } from '@/composables/useGameLog'
   import { handleEndDay } from '@/composables/useEndDay'
   import { useTutorialStore } from '@/stores/useTutorialStore'
-  import { getCombinedItemCount } from '@/composables/useCombinedInventory'
+  import {
+    getCombinedItemCount,
+    getInventoryItemCount,
+    getWarehouseItemCount
+  } from '@/composables/useCombinedInventory'
+  import CombinedMaterialCount from '@/components/game/CombinedMaterialCount.vue'
 
   const animalStore = useAnimalStore()
   const inventoryStore = useInventoryStore()
@@ -878,7 +883,9 @@
         itemId: m.itemId,
         name: getItemName(m.itemId),
         need: m.quantity,
-        have: inventoryStore.getItemCount(m.itemId)
+        have: getCombinedItemCount(m.itemId),
+        warehouse: getWarehouseItemCount(m.itemId),
+        inventory: getInventoryItemCount(m.itemId)
       }))
     }
   }
@@ -886,7 +893,7 @@
   const canConfirmUpgrade = computed(() => {
     if (!upgradeModal.value) return false
     if (playerStore.money < upgradeModal.value.cost) return false
-    return upgradeModal.value.materials.every(m => inventoryStore.getItemCount(m.itemId) >= m.need)
+    return upgradeModal.value.materials.every(m => getCombinedItemCount(m.itemId) >= m.need)
   })
 
   const confirmUpgradeBuilding = () => {

@@ -105,9 +105,7 @@
               </div>
               <div v-for="mat in selectedUpgradeCost.materials" :key="mat.itemId" class="flex items-center justify-between mt-0.5">
                 <span class="text-xs text-muted">{{ getItemById(mat.itemId)?.name ?? mat.itemId }}</span>
-                <span class="text-xs" :class="getCombinedItemCount(mat.itemId) >= mat.quantity ? '' : 'text-danger'">
-                  {{ getCombinedItemCount(mat.itemId) }}/{{ mat.quantity }}
-                </span>
+                <CombinedMaterialCount :item-id="mat.itemId" :required="mat.quantity" always-show-breakdown />
               </div>
               <template v-if="selectedFriendshipReq">
                 <div class="flex items-center justify-between mt-0.5">
@@ -186,6 +184,7 @@
   import { useNpcStore } from '@/stores/useNpcStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
   import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
+  import CombinedMaterialCount from '@/components/game/CombinedMaterialCount.vue'
   import { getUpgradeCost, TOOL_NAMES, TIER_NAMES, getItemById } from '@/data'
   import { ACTION_TIME_COSTS } from '@/data/timeConstants'
   import { addLog } from '@/composables/useGameLog'

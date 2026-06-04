@@ -65,9 +65,7 @@
           <div class="space-y-0.5 mb-1.5">
             <div v-for="mat in homeStore.nextCaveUpgrade.materialCost" :key="mat.itemId" class="flex items-center justify-between">
               <span class="text-[10px] text-muted">{{ getItemName(mat.itemId) }}</span>
-              <span class="text-[10px]" :class="getCombinedItemCount(mat.itemId) >= mat.quantity ? '' : 'text-danger'">
-                {{ getCombinedItemCount(mat.itemId) }}/{{ mat.quantity }}
-              </span>
+              <CombinedMaterialCount :item-id="mat.itemId" :required="mat.quantity" text-class="text-[10px]" always-show-breakdown />
             </div>
             <div class="flex items-center justify-between">
               <span class="text-[10px] text-muted">铜钱</span>
@@ -226,6 +224,15 @@
         <Button
           v-if="warehouseStore.chests.length > 0"
           class="w-full mb-1"
+          :icon="LayoutGrid"
+          :icon-size="12"
+          @click="showWarehouseOverview = true"
+        >
+          仓库总览（{{ warehouseOverviewKindCount }}种）
+        </Button>
+        <Button
+          v-if="warehouseStore.chests.length > 0"
+          class="w-full mb-1"
           :icon="ArrowDownToLine"
           :icon-size="12"
           @click="handleAutoDepositAll"
@@ -267,9 +274,7 @@
             <p class="text-xs text-muted mb-1">所需材料</p>
             <div v-for="mat in GREENHOUSE_MATERIAL_COST" :key="mat.itemId" class="flex items-center justify-between">
               <span class="text-xs text-muted">{{ getItemName(mat.itemId) }}</span>
-              <span class="text-xs" :class="getCombinedItemCount(mat.itemId) >= mat.quantity ? '' : 'text-danger'">
-                {{ getCombinedItemCount(mat.itemId) }}/{{ mat.quantity }}
-              </span>
+              <CombinedMaterialCount :item-id="mat.itemId" :required="mat.quantity" always-show-breakdown />
             </div>
             <div class="flex items-center justify-between">
               <span class="text-xs text-muted">铜钱</span>
@@ -316,9 +321,7 @@
               <p class="text-xs text-muted mb-1">所需材料</p>
               <div v-for="mat in WAREHOUSE_UNLOCK_MATERIALS" :key="mat.itemId" class="flex items-center justify-between">
                 <span class="text-xs text-muted">{{ getItemName(mat.itemId) }}</span>
-                <span class="text-xs" :class="getCombinedItemCount(mat.itemId) >= mat.quantity ? '' : 'text-danger'">
-                  {{ getCombinedItemCount(mat.itemId) }}/{{ mat.quantity }}
-                </span>
+                <CombinedMaterialCount :item-id="mat.itemId" :required="mat.quantity" always-show-breakdown />
               </div>
             </template>
             <div class="flex items-center justify-between">
@@ -613,6 +616,104 @@
       </div>
     </Transition>
 
+    <!-- 仓库总览 -->
+    <Transition name="panel-fade">
+      <div
+        v-if="showWarehouseOverview"
+        class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+        @click.self="showWarehouseOverview = false"
+      >
+        <div class="game-panel max-w-md w-full max-h-[85vh] flex flex-col">
+          <div class="flex items-center justify-between mb-2 shrink-0">
+            <p class="text-sm text-accent">仓库总览</p>
+            <Button class="py-0 px-1" :icon="X" :icon-size="12" @click="showWarehouseOverview = false" />
+          </div>
+          <p class="text-[10px] text-muted mb-2 shrink-0">共 {{ warehouseOverviewKindCount }} 种物品，可按分类查看并取出到背包</p>
+          <div class="flex flex-wrap gap-1 mb-2 shrink-0 max-h-24 overflow-y-auto">
+            <button
+              type="button"
+              class="text-[10px] px-1.5 py-0.5 rounded-xs border"
+              :class="overviewCategory === 'all' ? 'border-accent text-accent bg-accent/10' : 'border-accent/20 text-muted'"
+              @click="overviewCategory = 'all'"
+            >
+              全部
+            </button>
+            <button
+              v-for="cat in overviewUsedCategories"
+              :key="cat"
+              type="button"
+              class="text-[10px] px-1.5 py-0.5 rounded-xs border"
+              :class="overviewCategory === cat ? 'border-accent text-accent bg-accent/10' : 'border-accent/20 text-muted'"
+              @click="overviewCategory = cat"
+            >
+              {{ CHEST_CATEGORY_LABELS[cat] }}
+            </button>
+          </div>
+          <div v-if="filteredOverviewEntries.length > 0" class="flex flex-col space-y-1 overflow-y-auto flex-1 min-h-0">
+            <div
+              v-for="entry in filteredOverviewEntries"
+              :key="entry.itemId + entry.quality"
+              class="border border-accent/10 rounded-xs px-2 py-1.5"
+            >
+              <div class="flex items-center justify-between">
+                <span class="text-xs truncate mr-2" :class="qualityTextClass(entry.quality)">
+                  {{ getItemName(entry.itemId) }}
+                  <span v-if="entry.quality !== 'normal'" class="text-[10px]">({{ QUALITY_LABEL[entry.quality] }})</span>
+                  <span class="text-muted">&times;{{ entry.totalQuantity }}</span>
+                </span>
+                <div class="flex items-center space-x-1 shrink-0">
+                  <Button class="py-0 px-1 text-[10px]" @click="openOverviewWithdraw(entry)">取出</Button>
+                  <Button
+                    v-if="entry.locations[0]"
+                    class="py-0 px-1 text-[10px]"
+                    @click="openChestFromOverview(entry.locations[0]!.chestId)"
+                  >
+                    开箱
+                  </Button>
+                </div>
+              </div>
+              <p class="text-[10px] text-muted mt-0.5">
+                {{ entry.locations.map(l => `${l.chestLabel}×${l.quantity}`).join('、') }}
+              </p>
+            </div>
+          </div>
+          <div v-else class="flex flex-col items-center py-8 text-muted">
+            <Warehouse :size="32" class="opacity-30 mb-2" />
+            <p class="text-xs">该分类下暂无物品</p>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 总览取出数量 -->
+    <Transition name="panel-fade">
+      <div
+        v-if="overviewWithdrawModal"
+        class="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4"
+        @click.self="overviewWithdrawModal = null"
+      >
+        <div class="game-panel max-w-xs w-full">
+          <p class="text-sm text-accent mb-2">取出到背包</p>
+          <p class="text-xs mb-2" :class="qualityTextClass(overviewWithdrawModal.quality)">
+            {{ getItemName(overviewWithdrawModal.itemId) }}（仓库共{{ overviewWithdrawModal.max }}）
+          </p>
+          <div class="border border-accent/10 rounded-xs p-2 mb-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-muted">数量</span>
+              <input
+                v-model.number="overviewWithdrawQty"
+                type="number"
+                min="1"
+                :max="overviewWithdrawModal.max"
+                class="w-20 h-6 px-2 bg-bg border border-accent/30 rounded-xs text-xs text-center"
+              />
+            </div>
+          </div>
+          <Button class="w-full justify-center !bg-accent !text-bg" @click="confirmOverviewWithdraw">确认取出</Button>
+        </div>
+      </div>
+    </Transition>
+
     <!-- 添加箱子弹窗 -->
     <Transition name="panel-fade">
       <div
@@ -645,13 +746,9 @@
               </div>
               <p class="text-[10px] text-muted mb-1">{{ CHEST_DEFS[tier].description }}</p>
               <div class="flex flex-wrap gap-x-3 gap-y-0.5">
-                <span
-                  v-for="mat in CHEST_DEFS[tier].craftCost"
-                  :key="mat.itemId"
-                  class="text-[10px]"
-                  :class="getCombinedItemCount(mat.itemId) >= mat.quantity ? 'text-muted' : 'text-danger'"
-                >
-                  {{ getItemName(mat.itemId) }} {{ getCombinedItemCount(mat.itemId) }}/{{ mat.quantity }}
+                <span v-for="mat in CHEST_DEFS[tier].craftCost" :key="mat.itemId" class="text-[10px] inline-flex items-center gap-1">
+                  {{ getItemName(mat.itemId) }}
+                  <CombinedMaterialCount :item-id="mat.itemId" :required="mat.quantity" text-class="text-[10px]" always-show-breakdown />
                 </span>
                 <span class="text-[10px]" :class="playerStore.money >= CHEST_DEFS[tier].craftMoney ? 'text-muted' : 'text-danger'">
                   {{ CHEST_DEFS[tier].craftMoney }}文
@@ -681,6 +778,7 @@
     Plus,
     Trash2,
     Unlock,
+    LayoutGrid,
     Warehouse,
     X
   } from 'lucide-vue-next'
@@ -690,6 +788,8 @@
   import { useProcessingStore } from '@/stores/useProcessingStore'
   import { useWarehouseStore } from '@/stores/useWarehouseStore'
   import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
+  import CombinedMaterialCount from '@/components/game/CombinedMaterialCount.vue'
+  import type { WarehouseAggregatedEntry } from '@/stores/useWarehouseStore'
   import { getItemById } from '@/data'
   import { GREENHOUSE_UNLOCK_COST, GREENHOUSE_MATERIAL_COST, WAREHOUSE_UNLOCK_MATERIALS, getCaveUpgrade } from '@/data/buildings'
   import { CHEST_DEFS, CHEST_TIER_ORDER } from '@/data/items'
@@ -708,6 +808,10 @@
   const showWarehouseUnlockModal = ref(false)
   const showAddChestModal = ref(false)
   const showChestDepositModal = ref(false)
+  const showWarehouseOverview = ref(false)
+  const overviewCategory = ref<ItemCategory | 'all'>('all')
+  const overviewWithdrawModal = ref<{ itemId: string; quality: Quality; max: number } | null>(null)
+  const overviewWithdrawQty = ref(1)
   const openChestId = ref<string | null>(null)
   const renamingChestId = ref<string | null>(null)
   const renameInput = ref('')
@@ -825,6 +929,47 @@
     if (!openChestId.value) return null
     return warehouseStore.getChest(openChestId.value) ?? null
   })
+
+  const allOverviewEntries = computed(() => warehouseStore.aggregateAllItems())
+
+  const warehouseOverviewKindCount = computed(() => allOverviewEntries.value.length)
+
+  const overviewUsedCategories = computed(() => {
+    const set = new Set<ItemCategory>()
+    for (const e of allOverviewEntries.value) set.add(e.category)
+    return CHEST_FILTER_CATEGORIES.filter(c => set.has(c))
+  })
+
+  const filteredOverviewEntries = computed(() => {
+    if (overviewCategory.value === 'all') return allOverviewEntries.value
+    return warehouseStore.aggregateAllItems(overviewCategory.value)
+  })
+
+  const openChestFromOverview = (chestId: string) => {
+    showWarehouseOverview.value = false
+    openChestId.value = chestId
+  }
+
+  const openOverviewWithdraw = (entry: WarehouseAggregatedEntry) => {
+    if (entry.totalQuantity <= 1) {
+      const n = warehouseStore.withdrawFromAnyChest(entry.itemId, 1, entry.quality)
+      if (n > 0) addLog(`取出了${getItemName(entry.itemId)}×${n}。`)
+      else addLog('背包已满，无法取出。')
+      return
+    }
+    overviewWithdrawModal.value = { itemId: entry.itemId, quality: entry.quality, max: entry.totalQuantity }
+    overviewWithdrawQty.value = entry.totalQuantity
+  }
+
+  const confirmOverviewWithdraw = () => {
+    if (!overviewWithdrawModal.value) return
+    const { itemId, quality, max } = overviewWithdrawModal.value
+    const qty = Math.max(1, Math.min(overviewWithdrawQty.value, max))
+    const n = warehouseStore.withdrawFromAnyChest(itemId, qty, quality)
+    if (n > 0) addLog(`取出了${getItemName(itemId)}×${n}。`)
+    else addLog('背包已满，无法取出。')
+    overviewWithdrawModal.value = null
+  }
 
   /** 背包中可存入当前箱子的物品 */
   const depositableItems = computed(() => {

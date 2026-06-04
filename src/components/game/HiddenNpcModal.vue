@@ -109,10 +109,10 @@
                 v-for="cost in npcDef.bondCraftCost"
                 :key="cost.itemId"
                 class="text-[10px]"
-                :class="inventoryStore.getItemCount(cost.itemId) >= cost.quantity ? 'text-success' : 'text-muted/50'"
+                :class="getCombinedItemCount(cost.itemId) >= cost.quantity ? 'text-success' : 'text-muted/50'"
               >
                 {{ getItemById(cost.itemId)?.name ?? cost.itemId }} ×{{ cost.quantity }}
-                <span class="text-muted/30">（持有{{ inventoryStore.getItemCount(cost.itemId) }}）</span>
+                <span class="text-muted/30">（{{ formatStockHint(cost.itemId) }}）</span>
               </span>
             </div>
             <Button class="w-full" :disabled="!canCraftBond" @click="handleCraft('bond')">制作</Button>
@@ -147,10 +147,10 @@
                 v-for="cost in npcDef.courtshipCraftCost"
                 :key="cost.itemId"
                 class="text-[10px]"
-                :class="inventoryStore.getItemCount(cost.itemId) >= cost.quantity ? 'text-success' : 'text-muted/50'"
+                :class="getCombinedItemCount(cost.itemId) >= cost.quantity ? 'text-success' : 'text-muted/50'"
               >
                 {{ getItemById(cost.itemId)?.name ?? cost.itemId }} ×{{ cost.quantity }}
-                <span class="text-muted/30">（持有{{ inventoryStore.getItemCount(cost.itemId) }}）</span>
+                <span class="text-muted/30">（{{ formatStockHint(cost.itemId) }}）</span>
               </span>
             </div>
             <Button class="w-full" :disabled="!canCraftCourtship" @click="handleCraft('courtship')">制作</Button>
@@ -264,6 +264,13 @@
   import { addLog } from '@/composables/useGameLog'
   import { handleEndDay } from '@/composables/useEndDay'
   import Button from '@/components/game/Button.vue'
+  import { getCombinedItemCount, getMaterialStockBreakdown } from '@/composables/useCombinedInventory'
+
+  const formatStockHint = (itemId: string): string => {
+    const s = getMaterialStockBreakdown(itemId)
+    if (s.warehouse > 0) return `共${s.total}（背包${s.inventory}+仓${s.warehouse}）`
+    return `共${s.total}（背包${s.inventory}）`
+  }
 
   const props = defineProps<{
     npcId: string
@@ -323,12 +330,12 @@
 
   const canCraftCourtship = computed(() => {
     const d = npcDef.value
-    return d.courtshipCraftCost.every(c => inventoryStore.getItemCount(c.itemId) >= c.quantity)
+    return d.courtshipCraftCost.every(c => getCombinedItemCount(c.itemId) >= c.quantity)
   })
 
   const canCraftBond = computed(() => {
     const d = npcDef.value
-    return d.bondCraftCost.every(c => inventoryStore.getItemCount(c.itemId) >= c.quantity)
+    return d.bondCraftCost.every(c => getCombinedItemCount(c.itemId) >= c.quantity)
   })
 
   const canBond = computed(() => {

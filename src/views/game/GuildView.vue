@@ -262,7 +262,7 @@
             <span
               v-for="(mat, idx) in item.materials"
               :key="mat.itemId"
-              :class="inventoryStore.getItemCount(mat.itemId) >= mat.quantity ? 'text-success' : 'text-danger'"
+              :class="getCombinedItemCount(mat.itemId) >= mat.quantity ? 'text-success' : 'text-danger'"
             >
               {{ getMaterialName(mat.itemId) }}×{{ mat.quantity }}
               <span v-if="idx < item.materials.length - 1">、</span>
@@ -339,9 +339,14 @@
                 <span class="text-xs">{{ getMaterialName(mat.itemId) }} ×{{ mat.quantity * shopBuyQty }}</span>
                 <span
                   class="text-xs"
-                  :class="inventoryStore.getItemCount(mat.itemId) >= mat.quantity * shopBuyQty ? 'text-success' : 'text-danger'"
+                  :class="getCombinedItemCount(mat.itemId) >= mat.quantity * shopBuyQty ? 'text-success' : 'text-danger'"
                 >
-                  {{ inventoryStore.getItemCount(mat.itemId) }}/{{ mat.quantity * shopBuyQty }}
+                  <CombinedMaterialCount
+                    :item-id="mat.itemId"
+                    :required="mat.quantity * shopBuyQty"
+                    text-class="text-xs"
+                    always-show-breakdown
+                  />
                 </span>
               </div>
             </template>
@@ -550,6 +555,8 @@
   import { useGuildStore } from '@/stores/useGuildStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
   import { useInventoryStore } from '@/stores/useInventoryStore'
+  import { getCombinedItemCount } from '@/composables/useCombinedInventory'
+  import CombinedMaterialCount from '@/components/game/CombinedMaterialCount.vue'
   import { MONSTER_GOALS, GUILD_SHOP_ITEMS, GUILD_DONATIONS } from '@/data/guild'
   import { MONSTERS, BOSS_MONSTERS, ZONE_MONSTERS, SKULL_CAVERN_MONSTERS } from '@/data/mine'
   import { MONSTER_DROP_WEAPONS, BOSS_DROP_WEAPONS, getWeaponById } from '@/data/weapons'
@@ -592,7 +599,7 @@
     }
     if (item.materials) {
       for (const mat of item.materials) {
-        max = Math.min(max, Math.floor(inventoryStore.getItemCount(mat.itemId) / mat.quantity))
+        max = Math.min(max, Math.floor(getCombinedItemCount(mat.itemId) / mat.quantity))
       }
     }
     if (item.dailyLimit) max = Math.min(max, guildStore.getDailyRemaining(item.itemId, item.dailyLimit))
@@ -680,7 +687,7 @@
     if (item.totalLimit && guildStore.getTotalRemaining(item.itemId, item.totalLimit) <= 0) return false
     if (item.materials) {
       for (const mat of item.materials) {
-        if (inventoryStore.getItemCount(mat.itemId) < mat.quantity) return false
+        if (getCombinedItemCount(mat.itemId) < mat.quantity) return false
       }
     }
     if (item.contributionCost) return guildStore.contributionPoints >= item.contributionCost

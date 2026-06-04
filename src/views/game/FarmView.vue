@@ -912,9 +912,7 @@
             </div>
             <div v-for="mat in nextGhUpgrade.materialCost" :key="mat.itemId" class="flex items-center justify-between text-xs">
               <span class="text-muted">{{ getItemName(mat.itemId) }}</span>
-              <span :class="inventoryStore.getItemCount(mat.itemId) >= mat.quantity ? 'text-success' : 'text-danger'">
-                {{ inventoryStore.getItemCount(mat.itemId) }}/{{ mat.quantity }}
-              </span>
+              <CombinedMaterialCount :item-id="mat.itemId" :required="mat.quantity" text-class="text-xs" always-show-breakdown />
             </div>
           </div>
 
@@ -1120,6 +1118,8 @@
   import { FERTILIZERS, getFertilizerById } from '@/data/processing'
   import { ACTION_TIME_COSTS } from '@/data/timeConstants'
   import { addLog, showFloat } from '@/composables/useGameLog'
+  import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
+  import CombinedMaterialCount from '@/components/game/CombinedMaterialCount.vue'
   import { navigateToPanel } from '@/composables/useNavigation'
   import { handleEndDay } from '@/composables/useEndDay'
   import { getShopById, isShopAvailable, getShopClosedReason } from '@/data/shops'
@@ -2157,7 +2157,7 @@
     const upgrade = nextGhUpgrade.value
     if (!upgrade) return
     for (const mat of upgrade.materialCost) {
-      if (inventoryStore.getItemCount(mat.itemId) < mat.quantity) {
+      if (getCombinedItemCount(mat.itemId) < mat.quantity) {
         addLog('材料不足，无法升级温室。')
         return
       }
@@ -2167,7 +2167,7 @@
       return
     }
     for (const mat of upgrade.materialCost) {
-      inventoryStore.removeItem(mat.itemId, mat.quantity)
+      removeCombinedItem(mat.itemId, mat.quantity)
     }
     farmStore.upgradeGreenhouse(upgrade.plotCount)
     addLog(`温室已升级至${upgrade.name}！（${upgrade.plotCount}个地块）`)

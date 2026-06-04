@@ -255,9 +255,7 @@
               <p class="text-xs text-muted mb-1">所需材料</p>
               <div v-for="mat in nextUpgrade.materials" :key="mat.itemId" class="flex items-center justify-between">
                 <span class="text-xs text-muted">{{ getItemById(mat.itemId)?.name }}</span>
-                <span class="text-xs" :class="getCombinedItemCount(mat.itemId) >= mat.quantity ? '' : 'text-danger'">
-                  {{ getCombinedItemCount(mat.itemId) }}/{{ mat.quantity }}
-                </span>
+                <CombinedMaterialCount :item-id="mat.itemId" :required="mat.quantity" always-show-breakdown />
               </div>
               <div class="flex items-center justify-between mt-0.5">
                 <span class="text-xs text-muted">铜钱</span>
@@ -356,9 +354,11 @@
             <p class="text-xs text-muted mb-1">所需材料</p>
             <div v-for="mat in craftModal.materials" :key="mat.itemId" class="flex items-center justify-between">
               <span class="text-xs text-muted">{{ getItemName(mat.itemId) }}</span>
-              <span class="text-xs" :class="getCombinedItemCount(mat.itemId) >= mat.quantity * displayQty ? '' : 'text-danger'">
-                {{ getCombinedItemCount(mat.itemId) }}/{{ mat.quantity * displayQty }}
-              </span>
+              <CombinedMaterialCount
+                :item-id="mat.itemId"
+                :required="mat.quantity * displayQty"
+                always-show-breakdown
+              />
             </div>
             <div v-if="craftModal.cost > 0" class="flex items-center justify-between mt-0.5">
               <span class="text-xs text-muted">铜钱</span>
@@ -436,6 +436,7 @@
   import { useSkillStore } from '@/stores/useSkillStore'
   import { useWarehouseStore } from '@/stores/useWarehouseStore'
   import { getCombinedItemCount, hasCombinedItem, removeCombinedItem } from '@/composables/useCombinedInventory'
+  import CombinedMaterialCount from '@/components/game/CombinedMaterialCount.vue'
   import {
     PROCESSING_MACHINES,
     SPRINKLERS,
