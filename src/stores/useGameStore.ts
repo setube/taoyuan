@@ -75,6 +75,12 @@ export const useGameStore = defineStore('game', () => {
   /** 溪流田庄：溪流鱼获（日结生成，在农场面板收取后清除） */
   const creekCatch = ref<{ fishId: string; quality: Quality }[]>([])
 
+  /** 山洞产出（日结生成，在农场面板拾取后清除） */
+  const pendingCaveLoot = ref<{ itemId: string; quantity: number; quality: Quality }[]>([])
+
+  /** 果林产出（日结生成，在农场面板拾取后清除） */
+  const pendingFruitLoot = ref<{ itemId: string; quantity: number; quality: Quality }[]>([])
+
   const seasonIndex = computed(() => SEASON_ORDER.indexOf(season.value))
   const seasonName = computed(() => SEASON_NAMES[season.value])
   const weatherName = computed(() => WEATHER_NAMES[weather.value])
@@ -262,7 +268,9 @@ export const useGameStore = defineStore('game', () => {
       farmMapType: farmMapType.value,
       dailyLuck: dailyLuck.value,
       surfaceOrePatch: surfaceOrePatch.value,
-      creekCatch: creekCatch.value
+      creekCatch: creekCatch.value,
+      pendingCaveLoot: pendingCaveLoot.value,
+      pendingFruitLoot: pendingFruitLoot.value
     }
   }
 
@@ -281,6 +289,8 @@ export const useGameStore = defineStore('game', () => {
     dailyLuck.value = data.dailyLuck ?? 0
     surfaceOrePatch.value = data.surfaceOrePatch ?? null
     creekCatch.value = data.creekCatch ?? []
+    pendingCaveLoot.value = data.pendingCaveLoot ?? []
+    pendingFruitLoot.value = data.pendingFruitLoot ?? []
     isGameStarted.value = true
   }
 
@@ -299,6 +309,8 @@ export const useGameStore = defineStore('game', () => {
     dailyLuck,
     surfaceOrePatch,
     creekCatch,
+    pendingCaveLoot,
+    pendingFruitLoot,
     seasonIndex,
     seasonName,
     weatherName,

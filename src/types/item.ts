@@ -112,4 +112,6 @@ export interface Chest {
   label: string
   items: InventoryItem[]
   voidRole: VoidChestRole
+  /** 绑定分类（空=不限制；每分类全仓库仅可绑一个箱子） */
+  filterCategories: ItemCategory[]
 }

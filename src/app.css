@@ -42,11 +42,50 @@
   --spacing-8: 32px;
 }
 
-/* 生产环境禁止选中和复制 */
+/* 生产环境禁止选中和复制（桌面 APK/Web 构建） */
 body.no-select {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
+}
+
+/*
+ * iOS Safari / iOS Chrome（WebKit）：抑制双击放大、长按菜单、输入框聚焦缩放
+ * 仅触控设备生效，不改游戏交互逻辑
+ */
+@media (hover: none) and (pointer: coarse) {
+  html {
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
+  }
+
+  body {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #app {
+    touch-action: manipulation;
+  }
+
+  button,
+  a,
+  label,
+  .btn,
+  .cursor-pointer,
+  .farm-plot,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+
+  /* iOS 聚焦字号 <16px 会触发页面放大 */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 /* 全局基础样式 */

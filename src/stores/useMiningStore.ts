@@ -63,7 +63,17 @@ export const useMiningStore = defineStore('mining', () => {
   const skullCavernFloor = ref(0)
   const skullCavernBestFloor = ref(0)
   const skullSafePointFloor = ref(0)
+  /** 新解锁安全点：下次可直接进入的层数（弹窗提示用，读后清零） */
+  const pendingSafePointEntryFloor = ref<number | null>(null)
   const cachedSkullFloorData = ref<SkullCavernFloorDef | null>(null)
+
+  const _notifySafePointUnlocked = (safeFloor: number) => {
+    pendingSafePointEntryFloor.value = safeFloor + 1
+  }
+
+  const clearSafePointNotice = () => {
+    pendingSafePointEntryFloor.value = null
+  }
 
   /** 战斗状态 */
   const inCombat = ref(false)
@@ -1212,6 +1222,7 @@ export const useMiningStore = defineStore('mining', () => {
       const skullFloor = cachedSkullFloorData.value
       if (skullFloor?.isSafePoint && skullCavernFloor.value > skullSafePointFloor.value) {
         skullSafePointFloor.value = skullCavernFloor.value
+        _notifySafePointUnlocked(skullCavernFloor.value)
       }
     } else {
       // 主矿洞：最多 120 层
@@ -1234,6 +1245,7 @@ export const useMiningStore = defineStore('mining', () => {
       const newFloorData = getFloor(currentFloor.value)
       if (newFloorData?.isSafePoint && currentFloor.value > safePointFloor.value) {
         safePointFloor.value = currentFloor.value
+        _notifySafePointUnlocked(currentFloor.value)
       }
     }
 
@@ -1263,6 +1275,7 @@ export const useMiningStore = defineStore('mining', () => {
       const floor = getActiveFloorData()
       if (floor?.isSafePoint && currentFloor.value > safePointFloor.value) {
         safePointFloor.value = currentFloor.value
+        _notifySafePointUnlocked(currentFloor.value)
       }
     }
     // 骷髅矿穴：离开前保存安全点
@@ -1270,6 +1283,7 @@ export const useMiningStore = defineStore('mining', () => {
       const skullFloor = cachedSkullFloorData.value
       if (skullFloor?.isSafePoint && skullCavernFloor.value > skullSafePointFloor.value) {
         skullSafePointFloor.value = skullCavernFloor.value
+        _notifySafePointUnlocked(skullCavernFloor.value)
       }
     }
     isExploring.value = false
@@ -1497,6 +1511,8 @@ export const useMiningStore = defineStore('mining', () => {
     skullCavernFloor,
     skullCavernBestFloor,
     skullSafePointFloor,
+    pendingSafePointEntryFloor,
+    clearSafePointNotice,
     inCombat,
     combatMonster,
     combatMonsterHp,

@@ -1,13 +1,15 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import type { InventoryItem, Quality, Chest, ChestTier, VoidChestRole } from '@/types'
+import type { InventoryItem, Quality, Chest, ChestTier, VoidChestRole, ItemCategory } from '@/types'
 import { getItemById, CHEST_DEFS } from '@/data/items'
+import { getNextChestUpgradeTier } from '@/data/warehouse'
 import { useInventoryStore } from './useInventoryStore'
 
-const INITIAL_MAX_CHESTS = 3
-const MAX_CHESTS_CAP = 10
+const INITIAL_MAX_CHESTS = 5
+const MAX_CHESTS_CAP = 20
+const CHEST_SLOTS_PER_EXPAND = 3
 const MAX_STACK = 999
-const UNLOCK_COST = 50000
+const UNLOCK_COST = 500
 
 export const useWarehouseStore = defineStore('warehouse', () => {
   const unlocked = ref(false)
@@ -23,11 +25,12 @@ export const useWarehouseStore = defineStore('warehouse', () => {
     if (chests.value.length >= maxChests.value) return false
     const def = CHEST_DEFS[tier]
     chests.value.push({
-      id: `chest_${Date.now()}`,
+      id: `chest_${Date.now()}_${chests.value.length}`,
       tier,
       label: label ?? def.name,
       items: [],
-      voidRole: 'none'
+      voidRole: 'none',
+      filterCategories: []
     })
     return true
   }
@@ -68,6 +71,48 @@ export const useWarehouseStore = defineStore('warehouse', () => {
     const chest = chests.value.find(c => c.id === chestId)
     if (!chest) return true
     return chest.items.length >= CHEST_DEFS[chest.tier].capacity
+  }
+
+  /** 物品是否可存入该箱子（分类限制） */
+  const canDepositItemToChest = (chestId: string, itemId: string): boolean => {
+    const chest = chests.value.find(c => c.id === chestId)
+    const def = getItemById(itemId)
+    if (!chest || !def) return false
+    if (chest.filterCategories.length === 0) return true
+    return chest.filterCategories.includes(def.category)
+  }
+
+  /** 查找绑定某分类的箱子 */
+  const getChestForCategory = (category: ItemCategory): Chest | undefined => {
+    return chests.value.find(c => c.filterCategories.includes(category))
+  }
+
+  /** 切换箱子绑定分类（每分类全仓库仅一个箱子） */
+  const toggleChestCategory = (chestId: string, category: ItemCategory): boolean => {
+    const chest = chests.value.find(c => c.id === chestId)
+    if (!chest) return false
+    const idx = chest.filterCategories.indexOf(category)
+    if (idx >= 0) {
+      chest.filterCategories.splice(idx, 1)
+      return true
+    }
+    for (const c of chests.value) {
+      if (c.id !== chestId && c.filterCategories.includes(category)) {
+        c.filterCategories = c.filterCategories.filter(cat => cat !== category)
+      }
+    }
+    chest.filterCategories.push(category)
+    return true
+  }
+
+  /** 升级箱子至下一材质（仅 wood→copper→iron→gold） */
+  const upgradeChestTier = (chestId: string): boolean => {
+    const chest = chests.value.find(c => c.id === chestId)
+    if (!chest) return false
+    const next = getNextChestUpgradeTier(chest.tier)
+    if (!next) return false
+    chest.tier = next
+    return true
   }
 
   // ---- 物品操作 ----
@@ -140,6 +185,7 @@ export const useWarehouseStore = defineStore('warehouse', () => {
     const inv = useInventoryStore()
     const chest = chests.value.find(c => c.id === chestId)
     if (!chest) return 0
+    if (!canDepositItemToChest(chestId, itemId)) return 0
 
     // 计算箱子可容纳数量
     const cap = CHEST_DEFS[chest.tier].capacity
@@ -181,8 +227,30 @@ export const useWarehouseStore = defineStore('warehouse', () => {
   /** 扩容仓库（增加箱子槽位） */
   const expandMaxChests = (): boolean => {
     if (maxChests.value >= MAX_CHESTS_CAP) return false
-    maxChests.value += 1
+    maxChests.value += CHEST_SLOTS_PER_EXPAND
     return true
+  }
+
+  /** 按箱子绑定分类，将背包物品一键存入对应箱子 */
+  const autoDepositByCategories = (): string[] => {
+    const inv = useInventoryStore()
+    const fullLabels = new Set<string>()
+    const hasAnyCategory = chests.value.some(c => c.filterCategories.length > 0)
+    if (!hasAnyCategory) return ['请先在箱子上设置存放分类。']
+
+    const pending = inv.items.filter(i => !i.locked)
+    for (const slot of pending) {
+      const def = getItemById(slot.itemId)
+      if (!def) continue
+      const chest = getChestForCategory(def.category)
+      if (!chest) continue
+      const available = inv.getItemCount(slot.itemId, slot.quality)
+      if (available <= 0) continue
+      const actual = depositToChest(chest.id, slot.itemId, available, slot.quality)
+      if (actual <= 0) fullLabels.add(chest.label)
+      else if (actual < available) fullLabels.add(chest.label)
+    }
+    return [...fullLabels].map(label => `${label}已满`)
   }
 
   // ---- 虚空箱管理 ----
@@ -326,7 +394,8 @@ export const useWarehouseStore = defineStore('warehouse', () => {
             tier: 'gold',
             label: migratedChests.length === 0 ? '旧仓库' : `旧仓库${migratedChests.length + 1}`,
             items: oldItems.slice(i, i + goldCap),
-            voidRole: 'none'
+            voidRole: 'none',
+            filterCategories: []
           })
         }
         chests.value = migratedChests
@@ -338,7 +407,10 @@ export const useWarehouseStore = defineStore('warehouse', () => {
         chests.value = []
       }
     } else {
-      chests.value = (data.chests as Chest[]) ?? []
+      chests.value = ((data.chests as Chest[]) ?? []).map(c => ({
+        ...c,
+        filterCategories: c.filterCategories ?? []
+      }))
     }
 
     // 兼容旧存档：如果有箱子但未标记解锁，自动解锁
@@ -352,12 +424,18 @@ export const useWarehouseStore = defineStore('warehouse', () => {
     hasVoidChest,
     UNLOCK_COST,
     MAX_CHESTS_CAP,
+    CHEST_SLOTS_PER_EXPAND,
     addChest,
     removeChest,
     renameChest,
     getChest,
     getChestCapacity,
     isChestFull,
+    canDepositItemToChest,
+    getChestForCategory,
+    toggleChestCategory,
+    upgradeChestTier,
+    autoDepositByCategories,
     addItemToChest,
     removeItemFromChest,
     getChestItemCount,

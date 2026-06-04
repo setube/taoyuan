@@ -2,8 +2,35 @@
   <div>
     <!-- 标题 -->
     <div class="flex items-center space-x-1.5 text-sm text-accent mb-3">
-      <ClipboardList :size="14" />
-      <span>任务</span>
+      <ScrollText :size="14" />
+      <span>告示栏</span>
+    </div>
+
+    <!-- 更新公告 -->
+    <div class="border border-accent/30 rounded-xs p-3 mb-3 bg-accent/5">
+      <p class="text-xs text-accent mb-2">
+        <ScrollText :size="12" class="inline" />
+        {{ announcement.title }}
+      </p>
+      <p v-for="(line, i) in announcement.lines" :key="i" class="text-xs text-muted leading-relaxed">{{ line }}</p>
+      <div class="border-t border-accent/20 mt-2 pt-2">
+        <p class="text-xs text-muted mb-1.5">
+          口令「{{ announcement.rewardCode }}」（每存档一次，{{ announcement.rewardAmount }}文）
+        </p>
+        <template v-if="announcementClaimed">
+          <p class="text-xs text-success">已领取本次更新奖励。</p>
+        </template>
+        <template v-else>
+          <input
+            v-model="announcementCodeInput"
+            class="w-full bg-bg border border-accent/30 rounded-xs px-2 py-1 text-xs text-text mb-1.5 focus:border-accent outline-none"
+            placeholder="输入口令领取奖励"
+            maxlength="32"
+            @keyup.enter="handleClaimAnnouncementReward"
+          />
+          <Button class="w-full justify-center" :icon="CheckCircle" :icon-size="12" @click="handleClaimAnnouncementReward">领取奖励</Button>
+        </template>
+      </div>
     </div>
 
     <!-- 主线任务 -->
@@ -302,16 +329,38 @@
 
 <script setup lang="ts">
   import { ref, computed } from 'vue'
-  import { ClipboardList, Calendar, Clock, Plus, CheckCircle, CircleCheck, Circle, Star, BookOpen, X } from 'lucide-vue-next'
+  import { Calendar, Clock, Plus, CheckCircle, CircleCheck, Circle, Star, BookOpen, X, ScrollText } from 'lucide-vue-next'
   import Button from '@/components/game/Button.vue'
   import type { QuestInstance } from '@/types'
   import { useInventoryStore } from '@/stores/useInventoryStore'
   import { useQuestStore } from '@/stores/useQuestStore'
+  import { useTutorialStore } from '@/stores/useTutorialStore'
+  import { usePlayerStore } from '@/stores/usePlayerStore'
   import { getItemById, getStoryQuestById, CHAPTER_TITLES } from '@/data'
+  import { LATEST_GAME_ANNOUNCEMENT } from '@/data/gameAnnouncements'
   import { addLog } from '@/composables/useGameLog'
 
   const questStore = useQuestStore()
   const inventoryStore = useInventoryStore()
+  const tutorialStore = useTutorialStore()
+  const playerStore = usePlayerStore()
+
+  const announcement = LATEST_GAME_ANNOUNCEMENT
+  const announcementCodeInput = ref('')
+  const announcementClaimed = computed(() => tutorialStore.getFlag(announcement.rewardFlag))
+
+  const handleClaimAnnouncementReward = () => {
+    if (announcementClaimed.value) return
+    const input = announcementCodeInput.value.trim()
+    if (input !== announcement.rewardCode) {
+      addLog('口令不正确。')
+      return
+    }
+    tutorialStore.setFlag(announcement.rewardFlag, true)
+    playerStore.earnMoney(announcement.rewardAmount)
+    announcementCodeInput.value = ''
+    addLog(`领取更新奖励：${announcement.rewardAmount}文。`)
+  }
 
   const getItemName = (id: string): string => {
     return getItemById(id)?.name ?? id

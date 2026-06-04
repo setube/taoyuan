@@ -176,7 +176,7 @@
               @click="
                 openBuyModal(
                   '仓库扩建',
-                  `箱子槽位 ${warehouseStore.maxChests} → ${warehouseStore.maxChests + 1}`,
+                  `箱子槽位 ${warehouseStore.maxChests} → ${warehouseStore.maxChests + warehouseStore.CHEST_SLOTS_PER_EXPAND}`,
                   discounted(warehouseExpandPrice),
                   handleBuyWarehouseExpand,
                   () => playerStore.money >= discounted(warehouseExpandPrice)
@@ -185,7 +185,7 @@
             >
               <div>
                 <p class="text-sm">仓库扩建</p>
-                <p class="text-muted text-xs">箱子槽位 {{ warehouseStore.maxChests }} → {{ warehouseStore.maxChests + 1 }}</p>
+                <p class="text-muted text-xs">箱子槽位 {{ warehouseStore.maxChests }} → {{ warehouseStore.maxChests + warehouseStore.CHEST_SLOTS_PER_EXPAND }}</p>
               </div>
               <span class="text-xs text-accent whitespace-nowrap">{{ discounted(warehouseExpandPrice) }}文</span>
             </div>
@@ -875,6 +875,10 @@
             </div>
           </div>
 
+          <div v-if="buyModalData.bundleBuy" class="border border-accent/10 rounded-xs p-2 mb-2">
+            <p v-for="(line, i) in buyModalData.bundleBuy.extraLines" :key="'b' + i" class="text-xs text-muted">{{ line }}</p>
+          </div>
+
           <div class="flex flex-col space-y-1.5">
             <Button
               v-if="buyModalData.batchBuy"
@@ -895,6 +899,16 @@
               @click="buyModalData.onBuy()"
             >
               {{ buyModalData.buttonText ?? '购买' }}
+            </Button>
+            <Button
+              v-if="buyModalData.bundleBuy && !buyModalData.batchBuy"
+              class="w-full justify-center"
+              :class="{ '!bg-accent !text-bg': buyModalData.bundleBuy.canBuy() }"
+              :disabled="!buyModalData.bundleBuy.canBuy()"
+              :icon="ShoppingCart"
+              @click="buyModalData.bundleBuy.onBuy()"
+            >
+              连原材料一起{{ buyModalData.buttonText ?? '购买' }}（{{ buyModalData.bundleBuy.price }}文）
             </Button>
           </div>
         </div>
@@ -1108,6 +1122,13 @@
 
   // === 弹窗系统 ===
 
+  type BundleBuyOption = {
+    price: number
+    extraLines: string[]
+    onBuy: () => void
+    canBuy: () => boolean
+  }
+
   type BuyModalState = {
     type: 'buy'
     name: string
@@ -1122,6 +1143,7 @@
       onBuy: (count: number) => void
       maxCount: () => number
     }
+    bundleBuy?: BundleBuyOption
   }
 
   type SellModalState = {
@@ -1197,9 +1219,39 @@
     canBuy: () => boolean,
     extraLines?: string[],
     buttonText?: string,
-    itemId?: string
+    itemId?: string,
+    bundleBuy?: BundleBuyOption
   ) => {
-    shopModal.value = { type: 'buy', name, description, price, onBuy, canBuy, extraLines, buttonText, itemId }
+    shopModal.value = { type: 'buy', name, description, price, onBuy, canBuy, extraLines, buttonText, itemId, bundleBuy }
+  }
+
+  /** 材料不足时，从当前营业商铺代购原材料 + 完成购买/合成 */
+  const makeBundleBuy = (
+    materials: { itemId: string; quantity: number }[],
+    productCost: number,
+    complete: () => boolean,
+    canProduct: () => boolean
+  ): BundleBuyOption | undefined => {
+    const offer = shopStore.computeMaterialBundle(materials)
+    if (!offer) return undefined
+    const total = offer.materialCost + productCost
+    return {
+      price: total,
+      extraLines: [...offer.summaryLines, `合计 ${total}文（含${productCost}文）`],
+      onBuy: () => {
+        const result = shopStore.executeMaterialBundlePurchase(materials, productCost, complete)
+        shopModal.value = null
+        if (result.success) {
+          sfxBuy()
+          showFloat(`-${total}文`, 'danger')
+          addLog(result.message)
+        } else {
+          addLog(result.message)
+        }
+      },
+      canBuy: () =>
+        canProduct() && playerStore.money >= total && shopStore.canFitBundleItems(offer.missingPurchases)
+    }
   }
 
   const openBatchBuyModal = (
@@ -1262,6 +1314,7 @@
   }
 
   const openWeaponModal = (w: WeaponDef) => {
+    const weaponPrice = discounted(w.shopPrice!)
     const lines = [`${WEAPON_TYPE_NAMES[w.type]} · 攻击${w.attack} · 暴击${Math.round(w.critRate * 100)}%`]
     if (w.shopMaterials.length > 0) {
       lines.push('需要材料：' + w.shopMaterials.map(m => `${getItemById(m.itemId)?.name ?? m.itemId}×${m.quantity}`).join('、'))
@@ -1269,10 +1322,25 @@
     openBuyModal(
       w.name,
       w.description,
-      discounted(w.shopPrice!),
+      weaponPrice,
       () => handleBuyWeapon(w),
-      () => !inventoryStore.hasWeapon(w.id) && playerStore.money >= discounted(w.shopPrice!) && hasWeaponMaterials(w),
-      lines
+      () => !inventoryStore.hasWeapon(w.id) && playerStore.money >= weaponPrice && hasWeaponMaterials(w),
+      lines,
+      undefined,
+      undefined,
+      makeBundleBuy(
+        w.shopMaterials,
+        weaponPrice,
+        () => {
+          if (inventoryStore.hasWeapon(w.id)) return false
+          for (const mat of w.shopMaterials) {
+            if (!inventoryStore.removeItem(mat.itemId, mat.quantity)) return false
+          }
+          inventoryStore.addWeapon(w.id)
+          return true
+        },
+        () => !inventoryStore.hasWeapon(w.id)
+      )
     )
   }
 
@@ -1293,7 +1361,23 @@
       () => handleCraftRing(ring.id),
       () => canCraftRing(ring),
       lines,
-      '合成'
+      '合成',
+      undefined,
+      ring.recipe
+        ? makeBundleBuy(
+            ring.recipe,
+            ring.recipeMoney,
+            () => {
+              if (inventoryStore.hasRing(ring.id) || !ring.recipe) return false
+              for (const mat of ring.recipe) {
+                if (!inventoryStore.removeItem(mat.itemId, mat.quantity)) return false
+              }
+              inventoryStore.addRing(ring.id)
+              return true
+            },
+            () => !inventoryStore.hasRing(ring.id)
+          )
+        : undefined
     )
   }
 
@@ -1398,7 +1482,7 @@
   }
 
   const warehouseExpandPrice = computed(() => {
-    const level = warehouseStore.maxChests - 3
+    const level = Math.floor((warehouseStore.maxChests - 5) / warehouseStore.CHEST_SLOTS_PER_EXPAND)
     return 2000 + level * 2000
   })
 
@@ -1662,7 +1746,23 @@
       () => handleCraftHat(hat.id),
       () => canCraftHat(hat),
       lines,
-      '合成'
+      '合成',
+      undefined,
+      hat.recipe
+        ? makeBundleBuy(
+            hat.recipe,
+            hat.recipeMoney,
+            () => {
+              if (inventoryStore.hasHat(hat.id) || !hat.recipe) return false
+              for (const mat of hat.recipe) {
+                if (!inventoryStore.removeItem(mat.itemId, mat.quantity)) return false
+              }
+              inventoryStore.addHat(hat.id)
+              return true
+            },
+            () => !inventoryStore.hasHat(hat.id)
+          )
+        : undefined
     )
   }
 
@@ -1680,7 +1780,23 @@
       () => handleCraftShoe(shoe.id),
       () => canCraftShoe(shoe),
       lines,
-      '合成'
+      '合成',
+      undefined,
+      shoe.recipe
+        ? makeBundleBuy(
+            shoe.recipe,
+            shoe.recipeMoney,
+            () => {
+              if (inventoryStore.hasShoe(shoe.id) || !shoe.recipe) return false
+              for (const mat of shoe.recipe) {
+                if (!inventoryStore.removeItem(mat.itemId, mat.quantity)) return false
+              }
+              inventoryStore.addShoe(shoe.id)
+              return true
+            },
+            () => !inventoryStore.hasShoe(shoe.id)
+          )
+        : undefined
     )
   }
 

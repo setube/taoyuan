@@ -137,7 +137,7 @@ export const PROCESSING_MACHINES: ProcessingMachineDef[] = [
   {
     id: 'furnace',
     name: '熔炉',
-    description: '将矿石冶炼成金属锭。完成后自动收取。',
+    description: '投入同类矿石冶炼金属锭，每次最多5个。完成后自动收取。',
     craftCost: [
       { itemId: 'copper_ore', quantity: 10 },
       { itemId: 'iron_ore', quantity: 5 },
@@ -1314,44 +1314,48 @@ export const PROCESSING_RECIPES: ProcessingRecipeDef[] = [
     machineType: 'furnace',
     name: '铜锭',
     inputItemId: 'copper_ore',
-    inputQuantity: 5,
+    inputQuantity: 1,
+    maxInputQuantity: 5,
     outputItemId: 'copper_bar',
     outputQuantity: 1,
     processingDays: 1,
-    description: '将铜矿冶炼成铜锭。'
+    description: '将铜矿冶炼成铜锭，每次最多投入5个。'
   },
   {
     id: 'smelt_iron',
     machineType: 'furnace',
     name: '铁锭',
     inputItemId: 'iron_ore',
-    inputQuantity: 5,
+    inputQuantity: 1,
+    maxInputQuantity: 5,
     outputItemId: 'iron_bar',
     outputQuantity: 1,
     processingDays: 1,
-    description: '将铁矿冶炼成铁锭。'
+    description: '将铁矿冶炼成铁锭，每次最多投入5个。'
   },
   {
     id: 'smelt_gold',
     machineType: 'furnace',
     name: '金锭',
     inputItemId: 'gold_ore',
-    inputQuantity: 5,
+    inputQuantity: 1,
+    maxInputQuantity: 5,
     outputItemId: 'gold_bar',
     outputQuantity: 1,
     processingDays: 1,
-    description: '将金矿冶炼成金锭。'
+    description: '将金矿冶炼成金锭，每次最多投入5个。'
   },
   {
     id: 'smelt_iridium',
     machineType: 'furnace',
     name: '铱锭',
     inputItemId: 'iridium_ore',
-    inputQuantity: 5,
+    inputQuantity: 1,
+    maxInputQuantity: 5,
     outputItemId: 'iridium_bar',
     outputQuantity: 1,
     processingDays: 2,
-    description: '将铱矿冶炼成铱锭。'
+    description: '将铱矿冶炼成铱锭，每次最多投入5个。'
   },
   // 炭窑
   {
@@ -1975,6 +1979,25 @@ export const getMachineById = (id: string): ProcessingMachineDef | undefined => 
 
 export const getProcessingRecipeById = (id: string): ProcessingRecipeDef | undefined => {
   return PROCESSING_RECIPES.find(r => r.id === id)
+}
+
+/** 配方单次最多投入数 */
+export const getRecipeMaxInput = (recipe: ProcessingRecipeDef): number => recipe.maxInputQuantity ?? recipe.inputQuantity
+
+/** 配方单次最少投入数 */
+export const getRecipeMinInput = (recipe: ProcessingRecipeDef): number => recipe.inputQuantity
+
+/** 根据实际投入数计算产出数量 */
+export const getOutputQuantityForInput = (recipe: ProcessingRecipeDef, inputAmount: number): number => {
+  if (recipe.maxInputQuantity) return inputAmount * recipe.outputQuantity
+  return recipe.outputQuantity
+}
+
+/** 槽位实际投入数（旧存档熔炉加工中缺省为5） */
+export const getSlotInputAmount = (recipe: ProcessingRecipeDef, slot: { inputAmount?: number }): number => {
+  if (slot.inputAmount !== undefined) return slot.inputAmount
+  if (recipe.maxInputQuantity && recipe.machineType === 'furnace') return 5
+  return recipe.inputQuantity
 }
 
 export const getRecipesForMachine = (machineType: string): ProcessingRecipeDef[] => {

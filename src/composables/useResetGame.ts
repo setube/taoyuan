@@ -21,6 +21,7 @@ import { useShopStore } from '@/stores/useShopStore'
 import { useSkillStore } from '@/stores/useSkillStore'
 import { useTutorialStore } from '@/stores/useTutorialStore'
 import { useWalletStore } from '@/stores/useWalletStore'
+import { useBankStore } from '@/stores/useBankStore'
 import { useWarehouseStore } from '@/stores/useWarehouseStore'
 
 /**
@@ -52,4 +53,5 @@ export const resetAllStoresForNewGame = () => {
   useHanhaiStore().$reset()
   useFishPondStore().$reset()
   useTutorialStore().$reset()
+  useBankStore().$reset()
 }

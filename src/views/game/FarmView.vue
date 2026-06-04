@@ -51,9 +51,10 @@
         <Button class="w-full md:w-auto" :icon-size="12" :icon="Wrench" @click="showBatchActions = true">一键操作</Button>
       </div>
 
-      <!-- 田庄特殊功能 -->
-      <div v-if="gameStore.farmMapType === 'riverland' && gameStore.creekCatch.length > 0" class="mb-3">
+      <!-- 田庄待拾取产出（溪流鱼获 / 山洞 / 果林） -->
+      <div v-if="hasPendingPickups" class="mb-3 flex flex-col space-y-1.5">
         <div
+          v-if="gameStore.farmMapType === 'riverland' && gameStore.creekCatch.length > 0"
           class="flex items-center justify-between border border-accent/20 rounded-xs px-3 py-2 cursor-pointer hover:bg-accent/5"
           @click="handleCollectCreekCatch"
         >
@@ -61,7 +62,29 @@
             <p class="text-xs text-accent">溪流鱼获</p>
             <p class="text-[10px] text-muted">溪流中捕获了{{ gameStore.creekCatch.length }}条鱼</p>
           </div>
-          <span class="text-xs text-success">收取</span>
+          <span class="text-xs text-success">拾取</span>
+        </div>
+        <div
+          v-if="gameStore.pendingCaveLoot.length > 0"
+          class="flex items-center justify-between border border-accent/20 rounded-xs px-3 py-2 cursor-pointer hover:bg-accent/5"
+          @click="handleCollectCaveLoot"
+        >
+          <div>
+            <p class="text-xs text-accent">山洞产出</p>
+            <p class="text-[10px] text-muted">{{ pendingCaveLootSummary }}</p>
+          </div>
+          <span class="text-xs text-success">拾取</span>
+        </div>
+        <div
+          v-if="gameStore.pendingFruitLoot.length > 0"
+          class="flex items-center justify-between border border-accent/20 rounded-xs px-3 py-2 cursor-pointer hover:bg-accent/5"
+          @click="handleCollectFruitLoot"
+        >
+          <div>
+            <p class="text-xs text-accent">果林产出</p>
+            <p class="text-[10px] text-muted">果林中有{{ gameStore.pendingFruitLoot.length }}个果实待拾取</p>
+          </div>
+          <span class="text-xs text-success">拾取</span>
         </div>
       </div>
 
@@ -1153,6 +1176,43 @@
     return getItemById(patch.oreId)?.name ?? '矿石'
   })
 
+  const hasPendingPickups = computed(
+    () =>
+      (gameStore.farmMapType === 'riverland' && gameStore.creekCatch.length > 0) ||
+      gameStore.pendingCaveLoot.length > 0 ||
+      gameStore.pendingFruitLoot.length > 0
+  )
+
+  const pendingCaveLootSummary = computed(() => {
+    const count = gameStore.pendingCaveLoot.reduce((s, l) => s + l.quantity, 0)
+    return `山洞中有${count}份产出待拾取`
+  })
+
+  const collectPendingLoot = (
+    loot: { itemId: string; quantity: number; quality: Quality }[],
+    label: string
+  ): { itemId: string; quantity: number; quality: Quality }[] => {
+    const names: string[] = []
+    const failed: typeof loot = []
+    for (const entry of loot) {
+      const added = inventoryStore.addItem(entry.itemId, entry.quantity, entry.quality)
+      if (added) {
+        const def = getItemById(entry.itemId)
+        const qty = entry.quantity > 1 ? `${entry.quantity}个` : ''
+        names.push(`${qty}${def?.name ?? entry.itemId}`)
+      } else {
+        failed.push(entry)
+      }
+    }
+    if (names.length > 0) {
+      addLog(`拾取了${label}：${names.join('、')}。`)
+    }
+    if (failed.length > 0) {
+      addLog(`背包已满，部分${label}未能拾取。`)
+    }
+    return failed
+  }
+
   const handleCollectCreekCatch = () => {
     const catches = gameStore.creekCatch
     if (catches.length === 0) return
@@ -1169,11 +1229,21 @@
     }
     gameStore.creekCatch = failed
     if (names.length > 0) {
-      addLog(`收取了溪流鱼获：${names.join('、')}。`)
+      addLog(`拾取了溪流鱼获：${names.join('、')}。`)
     }
     if (failed.length > 0) {
-      addLog('背包已满，部分鱼获未能收取。')
+      addLog('背包已满，部分鱼获未能拾取。')
     }
+  }
+
+  const handleCollectCaveLoot = () => {
+    if (gameStore.pendingCaveLoot.length === 0) return
+    gameStore.pendingCaveLoot = collectPendingLoot(gameStore.pendingCaveLoot, '山洞产出')
+  }
+
+  const handleCollectFruitLoot = () => {
+    if (gameStore.pendingFruitLoot.length === 0) return
+    gameStore.pendingFruitLoot = collectPendingLoot(gameStore.pendingFruitLoot, '果林果实')
   }
 
   const handleMineSurfaceOre = () => {

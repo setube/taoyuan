@@ -11,7 +11,11 @@ import {
   CRAB_POT_CRAFT,
   BOMBS,
   getRecipesForMachine,
-  getProcessingRecipeById
+  getProcessingRecipeById,
+  getRecipeMaxInput,
+  getRecipeMinInput,
+  getOutputQuantityForInput,
+  getSlotInputAmount
 } from '@/data/processing'
 import { useInventoryStore } from './useInventoryStore'
 import { usePlayerStore } from './usePlayerStore'
@@ -164,27 +168,41 @@ export const useProcessingStore = defineStore('processing', () => {
     return getLowestCombinedQuality(itemId)
   }
 
-  /** 向已放置的机器投入原料开始加工。specifiedQuality 可指定消耗的品质 */
-  const startProcessing = (slotIndex: number, recipeId: string, specifiedQuality?: Quality): boolean => {
+  /** 向已放置的机器投入原料开始加工。specifiedQuality 可指定消耗的品质；inputAmount 用于可变批量（如熔炉1~5） */
+  const startProcessing = (
+    slotIndex: number,
+    recipeId: string,
+    specifiedQuality?: Quality,
+    inputAmount?: number
+  ): boolean => {
     const slot = machines.value[slotIndex]
     if (!slot || slot.recipeId !== null) return false // 正在加工中
     const recipe = getProcessingRecipeById(recipeId)
     if (!recipe || recipe.machineType !== slot.machineType) return false
+
+    const minIn = getRecipeMinInput(recipe)
+    const maxIn = getRecipeMaxInput(recipe)
+    let consumeQty = recipe.inputQuantity
+    if (recipe.maxInputQuantity) {
+      consumeQty = inputAmount ?? maxIn
+      consumeQty = Math.max(minIn, Math.min(maxIn, consumeQty))
+    }
 
     // 消耗输入材料（蜂箱无需输入），记录投入品质
     let quality: Quality = 'normal'
     if (recipe.inputItemId !== null) {
       if (specifiedQuality !== undefined) {
         quality = specifiedQuality
-        if (!removeCombinedItem(recipe.inputItemId, recipe.inputQuantity, specifiedQuality)) return false
+        if (!removeCombinedItem(recipe.inputItemId, consumeQty, specifiedQuality)) return false
       } else {
         quality = getLowestQuality(recipe.inputItemId)
-        if (!removeCombinedItem(recipe.inputItemId, recipe.inputQuantity)) return false
+        if (!removeCombinedItem(recipe.inputItemId, consumeQty)) return false
       }
     }
 
     slot.recipeId = recipeId
     slot.inputItemId = recipe.inputItemId
+    slot.inputAmount = recipe.maxInputQuantity ? consumeQty : undefined
     slot.inputQuality = quality
     slot.daysProcessed = 0
     slot.totalDays = recipe.processingDays
@@ -208,8 +226,9 @@ export const useProcessingStore = defineStore('processing', () => {
     const warehouseStore = useWarehouseStore()
     const voidOutput = warehouseStore.getVoidOutputChest()
     const outputQuality = slot.inputQuality ?? 'normal'
-    if (!voidOutput || !warehouseStore.addItemToChest(voidOutput.id, recipe.outputItemId, recipe.outputQuantity, outputQuality)) {
-      inventoryStore.addItem(recipe.outputItemId, recipe.outputQuantity, outputQuality)
+    const outputQty = getOutputQuantityForInput(recipe, getSlotInputAmount(recipe, slot))
+    if (!voidOutput || !warehouseStore.addItemToChest(voidOutput.id, recipe.outputItemId, outputQty, outputQuality)) {
+      inventoryStore.addItem(recipe.outputItemId, outputQty, outputQuality)
     }
 
     // 种子制造机额外触发育种种子生成
@@ -224,6 +243,7 @@ export const useProcessingStore = defineStore('processing', () => {
     // 重置槽位
     slot.recipeId = null
     slot.inputItemId = null
+    slot.inputAmount = undefined
     slot.inputQuality = undefined
     slot.daysProcessed = 0
     slot.totalDays = 0
@@ -244,8 +264,9 @@ export const useProcessingStore = defineStore('processing', () => {
         const warehouseStore = useWarehouseStore()
         const voidOutput = warehouseStore.getVoidOutputChest()
         const outputQuality = slot.inputQuality ?? 'normal'
-        if (!voidOutput || !warehouseStore.addItemToChest(voidOutput.id, recipe.outputItemId, recipe.outputQuantity, outputQuality)) {
-          inventoryStore.addItem(recipe.outputItemId, recipe.outputQuantity, outputQuality)
+        const outputQty = getOutputQuantityForInput(recipe, getSlotInputAmount(recipe, slot))
+        if (!voidOutput || !warehouseStore.addItemToChest(voidOutput.id, recipe.outputItemId, outputQty, outputQuality)) {
+          inventoryStore.addItem(recipe.outputItemId, outputQty, outputQuality)
         }
       }
     }
@@ -253,7 +274,7 @@ export const useProcessingStore = defineStore('processing', () => {
     else if (slot.recipeId && !slot.ready && slot.inputItemId) {
       const recipe = getProcessingRecipeById(slot.recipeId)
       if (recipe && recipe.inputItemId) {
-        inventoryStore.addItem(recipe.inputItemId, recipe.inputQuantity, slot.inputQuality ?? 'normal')
+        inventoryStore.addItem(recipe.inputItemId, getSlotInputAmount(recipe, slot), slot.inputQuality ?? 'normal')
       }
     }
 
@@ -278,12 +299,13 @@ export const useProcessingStore = defineStore('processing', () => {
     if (!slot.ready && slot.inputItemId) {
       const recipe = getProcessingRecipeById(slot.recipeId)
       if (recipe && recipe.inputItemId) {
-        inventoryStore.addItem(recipe.inputItemId, recipe.inputQuantity, slot.inputQuality ?? 'normal')
+        inventoryStore.addItem(recipe.inputItemId, getSlotInputAmount(recipe, slot), slot.inputQuality ?? 'normal')
       }
     }
     // 重置为空闲
     slot.recipeId = null
     slot.inputItemId = null
+    slot.inputAmount = undefined
     slot.inputQuality = undefined
     slot.daysProcessed = 0
     slot.totalDays = 0
@@ -318,8 +340,9 @@ export const useProcessingStore = defineStore('processing', () => {
           if (recipe.inputItemId === null || machineDef?.autoCollect) {
             // 自动收取：无需原料的机器（蜂箱/蚯蚓箱）或标记了 autoCollect 的机器（熔炉）
             const outputQuality = slot.inputQuality ?? 'normal'
-            if (!voidOutput || !warehouseStore.addItemToChest(voidOutput.id, recipe.outputItemId, recipe.outputQuantity, outputQuality)) {
-              inventoryStore.addItem(recipe.outputItemId, recipe.outputQuantity, outputQuality)
+            const outputQty = getOutputQuantityForInput(recipe, getSlotInputAmount(recipe, slot))
+            if (!voidOutput || !warehouseStore.addItemToChest(voidOutput.id, recipe.outputItemId, outputQty, outputQuality)) {
+              inventoryStore.addItem(recipe.outputItemId, outputQty, outputQuality)
             }
             collected.push(recipe.name)
             // 无需原料的机器自动重启，有原料的机器回到空闲
@@ -330,6 +353,7 @@ export const useProcessingStore = defineStore('processing', () => {
             } else {
               slot.recipeId = null
               slot.inputItemId = null
+              slot.inputAmount = undefined
               slot.inputQuality = undefined
               slot.daysProcessed = 0
               slot.totalDays = 0
@@ -341,8 +365,9 @@ export const useProcessingStore = defineStore('processing', () => {
             if (voidInput && recipe.inputItemId) {
               // 自动收取当前产物
               const outputQuality = slot.inputQuality ?? 'normal'
-              if (!voidOutput || !warehouseStore.addItemToChest(voidOutput.id, recipe.outputItemId, recipe.outputQuantity, outputQuality)) {
-                inventoryStore.addItem(recipe.outputItemId, recipe.outputQuantity, outputQuality)
+              const outputQty = getOutputQuantityForInput(recipe, getSlotInputAmount(recipe, slot))
+              if (!voidOutput || !warehouseStore.addItemToChest(voidOutput.id, recipe.outputItemId, outputQty, outputQuality)) {
+                inventoryStore.addItem(recipe.outputItemId, outputQty, outputQuality)
               }
               collected.push(recipe.name)
 
@@ -357,18 +382,26 @@ export const useProcessingStore = defineStore('processing', () => {
 
               // 尝试从虚空原料箱取材料开始下一轮
               const available = warehouseStore.getChestItemCount(voidInput.id, recipe.inputItemId)
-              if (available >= recipe.inputQuantity) {
+              const desiredBatch = getSlotInputAmount(recipe, slot)
+              const minIn = getRecipeMinInput(recipe)
+              const maxIn = getRecipeMaxInput(recipe)
+              const nextBatch = recipe.maxInputQuantity
+                ? Math.max(minIn, Math.min(desiredBatch, maxIn, available))
+                : desiredBatch
+              if (available >= nextBatch && nextBatch >= minIn) {
                 // 查找最低品质
                 const qOrder: Quality[] = ['normal', 'fine', 'excellent', 'supreme']
                 const newQuality = qOrder.find(q => warehouseStore.getChestItemCount(voidInput.id, recipe.inputItemId!, q) > 0) ?? 'normal'
-                warehouseStore.removeItemFromChest(voidInput.id, recipe.inputItemId, recipe.inputQuantity, newQuality)
+                warehouseStore.removeItemFromChest(voidInput.id, recipe.inputItemId, nextBatch, newQuality)
                 slot.daysProcessed = 0
+                slot.inputAmount = recipe.maxInputQuantity ? nextBatch : undefined
                 slot.inputQuality = newQuality
                 slot.ready = false
               } else {
                 // 虚空箱无足够原料，回到空闲
                 slot.recipeId = null
                 slot.inputItemId = null
+                slot.inputAmount = undefined
                 slot.inputQuality = undefined
                 slot.daysProcessed = 0
                 slot.totalDays = 0

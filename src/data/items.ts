@@ -1895,47 +1895,47 @@ export const CHEST_DEFS: Record<
 > = {
   wood: {
     name: '木箱',
-    capacity: 9,
+    capacity: 18,
     craftCost: [{ itemId: 'wood', quantity: 50 }],
     craftMoney: 500,
-    description: '基础储物箱，可存放9格物品。'
+    description: '基础储物箱，可存放18格物品。'
   },
   copper: {
     name: '铜箱',
-    capacity: 18,
+    capacity: 36,
     craftCost: [{ itemId: 'copper_bar', quantity: 15 }],
     craftMoney: 2000,
-    description: '坚固的铜制储物箱，可存放18格物品。'
+    description: '坚固的铜制储物箱，可存放36格物品。'
   },
   iron: {
     name: '铁箱',
-    capacity: 27,
+    capacity: 64,
     craftCost: [
       { itemId: 'iron_bar', quantity: 10 },
       { itemId: 'wood', quantity: 20 }
     ],
     craftMoney: 5000,
-    description: '耐用的铁制储物箱，可存放27格物品。'
+    description: '耐用的铁制储物箱，可存放64格物品。'
   },
   gold: {
     name: '金箱',
-    capacity: 36,
+    capacity: 128,
     craftCost: [
       { itemId: 'gold_bar', quantity: 8 },
       { itemId: 'iron_bar', quantity: 5 }
     ],
     craftMoney: 10000,
-    description: '华贵的金制储物箱，可存放36格物品。'
+    description: '华贵的金制储物箱，可存放128格物品。'
   },
   void: {
     name: '虚空箱',
-    capacity: 27,
+    capacity: 64,
     craftCost: [
       { itemId: 'iridium_bar', quantity: 5 },
       { itemId: 'void_ore', quantity: 20 }
     ],
     craftMoney: 25000,
-    description: '可远程存取，并可设为作坊原料箱/成品箱。容量27格。'
+    description: '可远程存取，并可设为作坊原料箱/成品箱。容量64格。'
   }
 }
 

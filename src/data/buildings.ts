@@ -136,11 +136,8 @@ export const getCaveQuality = (daysActive: number): 'normal' | 'fine' | 'excelle
   return result
 }
 
-/** 仓库解锁材料需求 */
-export const WAREHOUSE_UNLOCK_MATERIALS = [
-  { itemId: 'wood', quantity: 300 },
-  { itemId: 'iron_ore', quantity: 20 }
-]
+/** 仓库解锁材料需求（空数组表示仅需铜钱） */
+export const WAREHOUSE_UNLOCK_MATERIALS: { itemId: string; quantity: number }[] = []
 
 /** 温室解锁价格 */
 export const GREENHOUSE_UNLOCK_COST = 35000

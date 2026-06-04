@@ -15,6 +15,7 @@ node_modules
 dist
 dist-ssr
 dist-electron
+*.tar.gz
 docs
 *.local
 

@@ -13,6 +13,30 @@ import type { MarketCategory } from '@/data/market'
 import type { TravelingMerchantStock } from '@/data/travelingMerchant'
 import type { Quality } from '@/types'
 import { useHiddenNpcStore } from './useHiddenNpcStore'
+import { isShopAvailable, getShopById } from '@/data/shops'
+import { HAY_PRICE } from '@/data/animals'
+
+const WANWUPU_MISC_PRICES: { itemId: string; price: number }[] = [
+  { itemId: 'hay', price: HAY_PRICE },
+  { itemId: 'wood', price: 50 },
+  { itemId: 'rain_totem', price: 300 }
+]
+
+/** 商圈代购：所缺原材料的购买明细 */
+export interface MaterialBundlePurchase {
+  itemId: string
+  quantity: number
+  unitPrice: number
+  shopId: string
+  shopName: string
+}
+
+/** 商圈代购：原材料+商品的一键报价 */
+export interface MaterialBundleOffer {
+  missingPurchases: MaterialBundlePurchase[]
+  materialCost: number
+  summaryLines: string[]
+}
 
 /** 商铺商品项 */
 export interface ShopItemEntry {
@@ -155,6 +179,138 @@ export const useShopStore = defineStore('shop', () => {
   ])
 
   // === 通用购买/出售 ===
+
+  // === 商圈：连原材料一起购买 ===
+
+  /** 当前营业商铺可售商品目录（同物品取最低价） */
+  const getOpenShopCatalog = (): Map<string, { itemId: string; basePrice: number; shopId: string; shopName: string }> => {
+    const catalog = new Map<string, { itemId: string; basePrice: number; shopId: string; shopName: string }>()
+    const day = gameStore.day
+    const hour = gameStore.hour
+    const weather = gameStore.weather
+    const season = gameStore.season
+
+    const addShopItems = (shopId: string, items: { itemId: string; price: number }[]) => {
+      const shop = getShopById(shopId)
+      if (!shop || !isShopAvailable(shop, day, hour, weather, season)) return
+      for (const item of items) {
+        const existing = catalog.get(item.itemId)
+        if (!existing || item.price < existing.basePrice) {
+          catalog.set(item.itemId, {
+            itemId: item.itemId,
+            basePrice: item.price,
+            shopId,
+            shopName: shop.name
+          })
+        }
+      }
+    }
+
+    addShopItems('wanwupu', WANWUPU_MISC_PRICES)
+    addShopItems('tiejiangpu', blacksmithItems.value.map(i => ({ itemId: i.itemId, price: i.price })))
+    addShopItems('yaopu', [
+      ...shopFertilizers.value.map(f => ({ itemId: f.id, price: f.price })),
+      ...apothecaryItems.value.map(i => ({ itemId: i.itemId, price: i.price }))
+    ])
+    addShopItems('yugupu', [
+      ...shopBaits.value.map(b => ({ itemId: b.id, price: b.price })),
+      ...shopTackles.value.map(t => ({ itemId: t.id, price: t.price })),
+      ...fishingShopItems.value.map(i => ({ itemId: i.itemId, price: i.price }))
+    ])
+    addShopItems('chouduanzhuang', textileItems.value.map(i => ({ itemId: i.itemId, price: i.price })))
+
+    return catalog
+  }
+
+  /** 计算所缺原材料是否可从营业商铺代购 */
+  const computeMaterialBundle = (materials: { itemId: string; quantity: number }[]): MaterialBundleOffer | null => {
+    if (materials.length === 0) return null
+    const catalog = getOpenShopCatalog()
+    const missingPurchases: MaterialBundlePurchase[] = []
+    let materialCost = 0
+    const summaryParts: string[] = []
+
+    for (const mat of materials) {
+      const have = inventoryStore.getItemCount(mat.itemId)
+      const need = mat.quantity - have
+      if (need <= 0) continue
+      const entry = catalog.get(mat.itemId)
+      if (!entry) return null
+      const unitPrice = applyDiscount(entry.basePrice)
+      missingPurchases.push({
+        itemId: mat.itemId,
+        quantity: need,
+        unitPrice,
+        shopId: entry.shopId,
+        shopName: entry.shopName
+      })
+      materialCost += unitPrice * need
+      const matName = getItemById(mat.itemId)?.name ?? mat.itemId
+      summaryParts.push(`${matName}×${need}（${entry.shopName}）`)
+    }
+
+    if (missingPurchases.length === 0) return null
+
+    return {
+      missingPurchases,
+      materialCost,
+      summaryLines: [`所缺材料：${summaryParts.join('、')}`, `材料费 ${materialCost}文`]
+    }
+  }
+
+  const canFitBundleItems = (purchases: MaterialBundlePurchase[]): boolean => {
+    for (const p of purchases) {
+      const canStack = inventoryStore.items.some(
+        s => s.itemId === p.itemId && s.quality === 'normal' && s.quantity + p.quantity <= 999
+      )
+      if (!canStack && inventoryStore.isAllFull) return false
+    }
+    return true
+  }
+
+  /**
+   * 支付「所缺材料费 + 商品费」，补购材料后执行 complete（不再扣商品费）。
+   * complete 失败时退款并收回已购入材料。
+   */
+  const executeMaterialBundlePurchase = (
+    materials: { itemId: string; quantity: number }[],
+    productCost: number,
+    complete: () => boolean
+  ): { success: boolean; message: string } => {
+    const offer = computeMaterialBundle(materials)
+    if (!offer) return { success: false, message: '所缺材料无法从营业商铺购齐。' }
+    if (!canFitBundleItems(offer.missingPurchases)) {
+      return { success: false, message: '背包空间不足，无法购入原材料。' }
+    }
+
+    const total = offer.materialCost + productCost
+    if (playerStore.money < total) return { success: false, message: '铜钱不足。' }
+    if (!playerStore.spendMoney(total)) return { success: false, message: '铜钱不足。' }
+
+    const added: { itemId: string; quantity: number }[] = []
+    for (const p of offer.missingPurchases) {
+      if (!inventoryStore.addItem(p.itemId, p.quantity)) {
+        for (const a of added) inventoryStore.removeItem(a.itemId, a.quantity)
+        playerStore.earnMoney(total)
+        return { success: false, message: '背包已满，购买已取消。' }
+      }
+      added.push({ itemId: p.itemId, quantity: p.quantity })
+    }
+
+    if (!complete()) {
+      for (const a of added) inventoryStore.removeItem(a.itemId, a.quantity)
+      playerStore.earnMoney(total)
+      return { success: false, message: '购买失败，已退款。' }
+    }
+
+    const matSummary = offer.missingPurchases
+      .map(p => `${getItemById(p.itemId)?.name ?? p.itemId}×${p.quantity}`)
+      .join('、')
+    return {
+      success: true,
+      message: `连同原材料（${matSummary}）一并购齐，共花费${total}文。`
+    }
+  }
 
   /** 购买通用物品 */
   const buyItem = (itemId: string, price: number, quantity: number = 1): boolean => {
@@ -405,6 +561,10 @@ export const useShopStore = defineStore('shop', () => {
     apothecaryItems,
     // 绸缎庄
     textileItems,
+    // 原材料代购
+    computeMaterialBundle,
+    canFitBundleItems,
+    executeMaterialBundlePurchase,
     // 通用
     buyItem,
     sellItem,

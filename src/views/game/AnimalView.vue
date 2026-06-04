@@ -5,7 +5,10 @@
         <Home :size="14" class="inline" />
         牧场
       </h3>
-      <Button v-if="unpettedCount > 0" :icon="Hand" @click="handlePetAll">一键抚摸（{{ unpettedCount }}只）</Button>
+      <div v-if="unpettedCount > 0 || unfedCount > 0" class="flex items-center space-x-1.5">
+        <Button v-if="unfedCount > 0" :icon="Apple" @click="showBatchFeed = true">一键喂食（{{ unfedCount }}只）</Button>
+        <Button v-if="unpettedCount > 0" :icon="Hand" @click="handlePetAll">一键抚摸（{{ unpettedCount }}只）</Button>
+      </div>
     </div>
 
     <p v-if="tutorialHint" class="text-[10px] text-muted/50 mb-2">{{ tutorialHint }}</p>
@@ -419,6 +422,41 @@
       </div>
     </div>
 
+    <!-- 一键喂食弹窗 -->
+    <Transition name="panel-fade">
+      <div
+        v-if="showBatchFeed"
+        class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+        @click.self="showBatchFeed = false"
+      >
+        <div class="game-panel max-w-xs w-full relative">
+          <button class="absolute top-2 right-2 text-muted hover:text-text" @click="showBatchFeed = false">
+            <X :size="14" />
+          </button>
+          <p class="text-accent text-sm mb-2">一键喂食</p>
+          <p class="text-xs text-muted mb-2">未喂食 {{ unfedCount }} 只，选择饲料：</p>
+          <div class="flex flex-col space-y-1 max-h-60 overflow-y-auto">
+            <button
+              v-for="feed in batchFeedItems"
+              :key="feed.id"
+              class="btn text-xs justify-between mr-1 shrink-0"
+              @click="doBatchFeed(feed.id)"
+            >
+              <span class="text-left">
+                <span class="text-accent">{{ feed.name }}</span>
+                <span class="text-[10px] text-muted ml-1">{{ feed.description }}</span>
+              </span>
+              <span class="text-muted whitespace-nowrap ml-2">×{{ feed.count }}</span>
+            </button>
+          </div>
+          <div v-if="batchFeedItems.length === 0" class="flex flex-col items-center py-4">
+            <Apple :size="32" class="text-muted/30" />
+            <p class="text-xs text-muted mt-2">没有可用的饲料</p>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- 购买动物列表弹窗 -->
     <Transition name="panel-fade">
       <div
@@ -575,6 +613,7 @@
   import { addLog } from '@/composables/useGameLog'
   import { handleEndDay } from '@/composables/useEndDay'
   import { useTutorialStore } from '@/stores/useTutorialStore'
+  import { getCombinedItemCount } from '@/composables/useCombinedInventory'
 
   const animalStore = useAnimalStore()
   const inventoryStore = useInventoryStore()
@@ -659,8 +698,18 @@
   /** 马厩建筑定义 */
   const stableDef = computed(() => ANIMAL_BUILDINGS.find(b => b.type === 'stable'))
 
+  const showBatchFeed = ref(false)
+
   /** 当前选择的饲料类型 */
   const selectedFeed = ref<string>(HAY_ITEM_ID)
+
+  /** 一键喂食弹窗：背包+仓库中有的饲料 */
+  const batchFeedItems = computed(() =>
+    FEED_DEFS.map(f => ({
+      ...f,
+      count: getCombinedItemCount(f.id)
+    })).filter(f => f.count > 0)
+  )
 
   /** 各类饲料库存数量 */
   const feedCounts = computed(() =>
@@ -955,9 +1004,9 @@
     }
   }
 
-  const handleFeedAll = () => {
-    const result = animalStore.feedAll(selectedFeed.value)
-    const feedName = selectedFeedName.value
+  const feedAllWithFeed = (feedId: string) => {
+    const feedName = FEED_DEFS.find(f => f.id === feedId)?.name ?? feedId
+    const result = animalStore.feedAll(feedId)
     if (result.fedCount > 0) {
       addLog(`用${feedName}喂食了${result.fedCount}只动物。`)
     }
@@ -972,6 +1021,15 @@
       if (tr.message) addLog(tr.message)
       if (tr.passedOut) handleEndDay()
     }
+  }
+
+  const handleFeedAll = () => {
+    feedAllWithFeed(selectedFeed.value)
+  }
+
+  const doBatchFeed = (feedId: string) => {
+    feedAllWithFeed(feedId)
+    showBatchFeed.value = false
   }
 
   const handleBuyFeed = () => {

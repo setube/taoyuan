@@ -19,6 +19,7 @@ import { useHanhaiStore } from '@/stores/useHanhaiStore'
 import { useFishPondStore } from '@/stores/useFishPondStore'
 import { useTutorialStore } from '@/stores/useTutorialStore'
 import { useHiddenNpcStore } from '@/stores/useHiddenNpcStore'
+import { useBankStore } from '@/stores/useBankStore'
 import { useMiningStore } from '@/stores/useMiningStore'
 import { getItemById, getTodayEvent, getNpcById, getCropById, getForageItems } from '@/data'
 import { getFertilizerById } from '@/data/processing'
@@ -367,6 +368,23 @@ export const handleEndDay = () => {
   sfxSleep()
 
   const gameStore = useGameStore()
+
+  // 睡前提醒：农场面板仍有待拾取产出
+  const pickupReminders: string[] = []
+  if (gameStore.creekCatch.length > 0) {
+    pickupReminders.push(`溪流鱼获${gameStore.creekCatch.length}条`)
+  }
+  if (gameStore.pendingCaveLoot.length > 0) {
+    const caveCount = gameStore.pendingCaveLoot.reduce((s, l) => s + l.quantity, 0)
+    pickupReminders.push(`山洞产出${caveCount}份`)
+  }
+  if (gameStore.pendingFruitLoot.length > 0) {
+    pickupReminders.push(`果林果实${gameStore.pendingFruitLoot.length}个`)
+  }
+  if (pickupReminders.length > 0) {
+    addLog(`睡前别忘了去农场面板拾取：${pickupReminders.join('、')}。`)
+  }
+
   const playerStore = usePlayerStore()
   const farmStore = useFarmStore()
   const inventoryStore = useInventoryStore()
@@ -675,6 +693,9 @@ export const handleEndDay = () => {
   // 主线任务进度检查
   questStore.updateMainQuestProgress()
 
+  // 钱庄日息（在日期推进前，按当日结算）
+  useBankStore().processEndOfDay()
+
   // === 日期推进 ===
   const { seasonChanged, oldSeason } = gameStore.nextDay()
 
@@ -814,22 +835,17 @@ export const handleEndDay = () => {
     homeStore.caveDaysActive++
   }
   const caveProducts = homeStore.dailyCaveUpdate()
-  for (const p of caveProducts) {
-    inventoryStore.addItem(p.itemId, p.quantity, p.quality)
-    const itemDef = getItemById(p.itemId)
-    const qualityLabel =
-      p.quality === 'normal' ? '' : p.quality === 'fine' ? '（优质）' : p.quality === 'excellent' ? '（精品）' : '（极品）'
-    const qtyText = p.quantity > 1 ? `${p.quantity}个` : ''
-    addLog(`山洞中发现了${qtyText}${itemDef?.name ?? p.itemId}${qualityLabel}。`)
+  if (caveProducts.length > 0) {
+    gameStore.pendingCaveLoot = [...gameStore.pendingCaveLoot, ...caveProducts]
+    addLog('山洞中有新产出，去农场面板拾取吧。')
   }
 
   // 果树更新
   const fruitResult = farmStore.dailyFruitTreeUpdate(gameStore.season)
-  for (const f of fruitResult.fruits) {
-    inventoryStore.addItem(f.fruitId, 1, f.quality)
-  }
   if (fruitResult.fruits.length > 0) {
-    addLog(`果树产出了${fruitResult.fruits.length}个水果。`)
+    const loot = fruitResult.fruits.map(f => ({ itemId: f.fruitId, quantity: 1, quality: f.quality }))
+    gameStore.pendingFruitLoot = [...gameStore.pendingFruitLoot, ...loot]
+    addLog('果林结出了果实，去农场面板拾取吧。')
   }
 
   // 野生树木更新
@@ -921,6 +937,11 @@ export const handleEndDay = () => {
   const bedHour = gameStore.hour
   const { moneyLost, recoveryPct } = playerStore.dailyReset(recoveryMode, bedHour)
 
+  const bankStore = useBankStore()
+  if (bankStore.hasActiveLoan && bankStore.isOverdue()) {
+    playerStore.stamina = Math.floor(playerStore.maxStamina * 0.5)
+  }
+
   // 仙灵结缘每日奖励（必须在 dailyReset 之后，否则 stamina_restore 会被覆盖）
   const bondMessages = hiddenNpcStore.dailyBondBonus()
   for (const msg of bondMessages.messages) addLog(msg)
@@ -934,6 +955,8 @@ export const handleEndDay = () => {
   } else if (recoveryMode === 'late') {
     const pct = Math.round(recoveryPct * 100)
     summary = `你熬夜到很晚才睡……次日仅恢复${pct}%体力。`
+  } else if (bankStore.hasActiveLoan && bankStore.isOverdue()) {
+    summary = '由于钱庄催债压力，睡眠体力只能恢复50%，请尽早去钱庄还清欠款！'
   } else {
     summary = '美好的一天结束了。'
   }

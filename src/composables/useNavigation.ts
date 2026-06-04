@@ -59,6 +59,7 @@ export type PanelKey =
   | 'hanhai'
   | 'fishpond'
   | 'cottage'
+  | 'bank'
 
 export const TABS: { key: PanelKey; label: string; icon: Component; getIcon?: () => Component }[] = [
   { key: 'farm', label: '农场', icon: Wheat },
@@ -69,6 +70,7 @@ export const TABS: { key: PanelKey; label: string; icon: Component; getIcon?: ()
   { key: 'fishpond', label: '鱼塘', icon: Waves },
   { key: 'village', label: '桃源村', icon: Users },
   { key: 'shop', label: '商圈', icon: Store },
+  { key: 'bank', label: '钱庄', icon: Landmark },
   { key: 'forage', label: '竹林', icon: TreePine },
   { key: 'fishing', label: '清溪', icon: Fish },
   { key: 'mining', label: '矿洞', icon: Pickaxe },

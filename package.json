@@ -13,7 +13,9 @@
     "preview": "vite preview",
     "lint": "eslint src --ext .ts,.vue",
     "type-check": "vue-tsc -b",
-    "check": "pnpm run type-check && pnpm run lint",
+    "check": "pnpm run type-check && pnpm run lint && pnpm run test",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "build:electron": "vue-tsc -b && vite build && esbuild electron/main.js --bundle --platform=node --format=esm --outfile=dist-electron/main.js --external:electron && esbuild electron/preload.js --bundle --platform=node --format=cjs --outfile=dist-electron/preload.js --external:electron && electron-builder",
     "build:android": "pnpm run build && npx cap sync android",
     "build:apk": "pnpm run build:android && cd android && ./gradlew assembleRelease"
@@ -55,10 +57,12 @@
     "eslint": "^9.39.2",
     "eslint-plugin-vue": "^10.6.2",
     "globals": "^17.0.0",
+    "happy-dom": "^17.6.3",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19",
     "typescript": "~5.9.3",
     "vite": "^7.2.4",
+    "vitest": "^3.2.6",
     "vue-eslint-parser": "^10.2.0",
     "vue-tsc": "^3.1.4"
   },

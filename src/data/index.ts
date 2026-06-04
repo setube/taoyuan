@@ -1,5 +1,6 @@
 export * from './crops'
 export * from './items'
+export * from './warehouse'
 export * from './fish'
 export * from './npcs'
 export * from './mine'

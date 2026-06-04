@@ -606,6 +606,21 @@
       </div>
     </Transition>
 
+    <!-- 安全点解锁提示 -->
+    <Transition name="panel-fade">
+      <div
+        v-if="miningStore.pendingSafePointEntryFloor != null"
+        class="fixed inset-0 bg-black/60 flex items-center justify-center z-[75] p-4"
+      >
+        <div class="game-panel max-w-xs w-full text-center">
+          <p class="text-sm text-accent mb-3">
+            太好了！找到了废弃的矿道，下次可以直接进入第{{ miningStore.pendingSafePointEntryFloor }}层
+          </p>
+          <Button class="w-full justify-center" @click="dismissSafePointNotice">太好了</Button>
+        </div>
+      </div>
+    </Transition>
+
     <!-- 快速切装：方案列表弹窗 -->
     <Transition name="panel-fade">
       <div
@@ -1330,6 +1345,11 @@
 
   const confirmLeave = () => {
     handleLeave()
+  }
+
+  const dismissSafePointNotice = () => {
+    sfxClick()
+    miningStore.clearSafePointNotice()
   }
 
   // ==================== 快速切装 ====================

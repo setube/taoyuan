@@ -94,14 +94,23 @@
             </button>
           </div>
         </div>
+
+        <div class="map-path">···</div>
+
+        <button type="button" class="wish-well-btn" @click="showWishWell = true">华熙小王许愿井</button>
       </div>
     </div>
+  </Transition>
+
+  <Transition name="panel-fade">
+    <WishWellDialog v-if="showWishWell" @close="showWishWell = false" />
   </Transition>
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue'
+  import { computed, ref } from 'vue'
   import { X } from 'lucide-vue-next'
+  import WishWellDialog from '@/components/game/WishWellDialog.vue'
   import { TABS, navigateToPanel } from '@/composables/useNavigation'
   import type { PanelKey } from '@/composables/useNavigation'
 
@@ -117,10 +126,12 @@
   const pick = (keys: PanelKey[]) => keys.map(k => tabMap.value.get(k)!).filter(Boolean)
 
   const farmGroup = computed(() => pick(['farm', 'animal', 'cottage', 'home', 'breeding', 'fishpond']))
-  const villageGroup = computed(() => pick(['village', 'shop', 'museum', 'guild']))
+  const villageGroup = computed(() => pick(['village', 'shop', 'bank', 'museum', 'guild']))
   const wildGroup = computed(() => pick(['forage', 'fishing', 'mining', 'hanhai']))
   const craftGroup = computed(() => pick(['cooking', 'workshop', 'upgrade']))
   const personalGroup = computed(() => pick(['charinfo', 'inventory', 'skills', 'achievement', 'wallet', 'quest']))
+
+  const showWishWell = ref(false)
 
   const go = (key: PanelKey) => {
     navigateToPanel(key)
@@ -188,5 +199,31 @@
     line-height: 1;
     padding: 4px 0;
     letter-spacing: 0.3em;
+  }
+
+  .wish-well-btn {
+    display: block;
+    width: 100%;
+    margin-top: 4px;
+    padding: 10px 8px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-align: center;
+    color: var(--color-accent);
+    background: rgb(var(--color-bg));
+    border: 1px dashed rgba(200, 164, 92, 0.45);
+    border-radius: 2px;
+    cursor: pointer;
+    transition:
+      background-color 0.15s,
+      border-color 0.15s,
+      color 0.15s;
+  }
+
+  .wish-well-btn:hover,
+  .wish-well-btn:active {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: rgb(var(--color-bg));
   }
 </style>

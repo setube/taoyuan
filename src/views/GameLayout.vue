@@ -443,6 +443,7 @@
   import { usePlayerStore } from '@/stores/usePlayerStore'
   import { useWarehouseStore } from '@/stores/useWarehouseStore'
   import { useFarmStore } from '@/stores/useFarmStore'
+  import { useBankStore } from '@/stores/useBankStore'
   import { useDialogs } from '@/composables/useDialogs'
   import type { MorningChoiceEvent } from '@/data/farmEvents'
   import { handleEndDay } from '@/composables/useEndDay'
@@ -605,6 +606,14 @@
 
   const sleepWarning = computed(() => {
     const warnings: string[] = []
+    const bankStore = useBankStore()
+    if (bankStore.hasActiveLoan) {
+      if (bankStore.isOverdue()) {
+        warnings.push(`钱庄借款已逾期，应还${bankStore.totalOwed}文；休息仅恢复50%体力`)
+      } else if (bankStore.daysRemaining <= 1) {
+        warnings.push(`钱庄借款即将到期，应还${bankStore.totalOwed}文`)
+      }
+    }
     const homeStore = useHomeStore()
     const staminaBonus = homeStore.getStaminaRecoveryBonus()
     if (playerStore.stamina <= 0 || gameStore.hour >= 26) {

@@ -193,6 +193,15 @@
                 </button>
               </div>
             </div>
+            <div v-if="chest.filterCategories.length > 0" class="flex flex-wrap gap-1 mt-1">
+              <span
+                v-for="cat in chest.filterCategories"
+                :key="cat"
+                class="text-[10px] px-1 rounded-xs border border-accent/25 text-muted"
+              >
+                {{ CHEST_CATEGORY_LABELS[cat] }}
+              </span>
+            </div>
             <!-- 虚空箱角色 -->
             <template v-if="chest.tier === 'void'">
               <div class="flex items-center space-x-1 mt-1">
@@ -214,6 +223,15 @@
           <p class="text-xs mt-1">仓库空空如也</p>
         </div>
 
+        <Button
+          v-if="warehouseStore.chests.length > 0"
+          class="w-full mb-1"
+          :icon="ArrowDownToLine"
+          :icon-size="12"
+          @click="handleAutoDepositAll"
+        >
+          一键放入
+        </Button>
         <!-- 添加箱子 -->
         <Button
           v-if="warehouseStore.chests.length < warehouseStore.maxChests"
@@ -290,16 +308,19 @@
           <p class="text-sm text-accent mb-2">解锁仓库</p>
 
           <div class="border border-accent/10 rounded-xs p-2 mb-2">
-            <p class="text-xs text-muted">解锁后可放置箱子分类存放物品，初始可放3个箱子，可在商店升级。</p>
+            <p class="text-xs text-muted">解锁后可放置箱子分类存放物品，初始可放5个箱子，可在商店每次扩建+3个槽位。</p>
           </div>
 
           <div class="border border-accent/10 rounded-xs p-2 mb-2 space-y-1">
-            <div v-for="mat in WAREHOUSE_UNLOCK_MATERIALS" :key="mat.itemId" class="flex items-center justify-between">
-              <span class="text-xs text-muted">{{ getItemName(mat.itemId) }}</span>
-              <span class="text-xs" :class="getCombinedItemCount(mat.itemId) >= mat.quantity ? '' : 'text-danger'">
-                {{ getCombinedItemCount(mat.itemId) }}/{{ mat.quantity }}
-              </span>
-            </div>
+            <template v-if="WAREHOUSE_UNLOCK_MATERIALS.length > 0">
+              <p class="text-xs text-muted mb-1">所需材料</p>
+              <div v-for="mat in WAREHOUSE_UNLOCK_MATERIALS" :key="mat.itemId" class="flex items-center justify-between">
+                <span class="text-xs text-muted">{{ getItemName(mat.itemId) }}</span>
+                <span class="text-xs" :class="getCombinedItemCount(mat.itemId) >= mat.quantity ? '' : 'text-danger'">
+                  {{ getCombinedItemCount(mat.itemId) }}/{{ mat.quantity }}
+                </span>
+              </div>
+            </template>
             <div class="flex items-center justify-between">
               <span class="text-xs text-muted">铜钱</span>
               <span class="text-xs" :class="playerStore.money >= warehouseStore.UNLOCK_COST ? '' : 'text-danger'">
@@ -339,7 +360,33 @@
                 {{ currentOpenChest.items.length }}/{{ CHEST_DEFS[currentOpenChest.tier].capacity }}
               </span>
             </div>
+            <button class="text-muted hover:text-accent" title="重命名" @click="startRenameChest(currentOpenChest.id, currentOpenChest.label)">
+              <Pencil :size="12" />
+            </button>
             <Button class="py-0 px-1" :icon="X" :icon-size="12" @click="openChestId = null" />
+          </div>
+
+          <div class="border border-accent/10 rounded-xs p-2 mb-2">
+            <p class="text-[10px] text-muted mb-1">存放分类（每类仅可绑一个箱子）</p>
+            <div class="flex flex-wrap gap-1">
+              <button
+                v-for="cat in CHEST_FILTER_CATEGORIES"
+                :key="cat"
+                type="button"
+                class="text-[10px] px-1.5 py-0.5 rounded-xs border"
+                :class="
+                  currentOpenChest.filterCategories.includes(cat)
+                    ? 'border-accent text-accent bg-accent/10'
+                    : isCategoryTakenByOther(cat)
+                      ? 'border-accent/30 text-muted'
+                      : 'border-accent/20 text-muted'
+                "
+                @click="handleToggleChestCategory(cat)"
+              >
+                {{ CHEST_CATEGORY_LABELS[cat] }}
+              </button>
+            </div>
+            <p v-if="currentOpenChest.filterCategories.length === 0" class="text-[10px] text-muted/50 mt-1">未设置时仅支持手动存入</p>
           </div>
 
           <!-- 箱子物品列表 -->
@@ -370,6 +417,17 @@
             <p class="text-[10px] text-muted/50 mt-0.5">点击下方「存入物品」添加</p>
           </div>
 
+          <Button
+            v-if="nextChestUpgradeTier"
+            class="w-full mb-1"
+            :icon="ArrowUp"
+            :icon-size="12"
+            :class="{ '!bg-accent !text-bg': canUpgradeOpenChest }"
+            :disabled="!canUpgradeOpenChest"
+            @click="handleUpgradeOpenChest"
+          >
+            扩容为{{ CHEST_DEFS[nextChestUpgradeTier].name }}（{{ CHEST_DEFS[nextChestUpgradeTier].capacity }}格）
+          </Button>
           <!-- 一键整理 -->
           <Button
             v-if="currentOpenChest && currentOpenChest.items.length > 1"
@@ -635,7 +693,8 @@
   import { getItemById } from '@/data'
   import { GREENHOUSE_UNLOCK_COST, GREENHOUSE_MATERIAL_COST, WAREHOUSE_UNLOCK_MATERIALS, getCaveUpgrade } from '@/data/buildings'
   import { CHEST_DEFS, CHEST_TIER_ORDER } from '@/data/items'
-  import type { Quality, ChestTier, VoidChestRole } from '@/types'
+  import { CHEST_FILTER_CATEGORIES, CHEST_CATEGORY_LABELS, getNextChestUpgradeTier } from '@/data/warehouse'
+  import type { Quality, ChestTier, VoidChestRole, ItemCategory } from '@/types'
   import { addLog } from '@/composables/useGameLog'
   import Button from '@/components/game/Button.vue'
 
@@ -721,7 +780,7 @@
   const handleUnlockWarehouse = () => {
     if (warehouseStore.unlocked) return
     if (!canUnlockWarehouse.value) {
-      addLog('铜钱或材料不足，无法解锁仓库。')
+      addLog('铜钱不足，无法解锁仓库。')
       return
     }
     for (const mat of WAREHOUSE_UNLOCK_MATERIALS) {
@@ -767,26 +826,79 @@
     return warehouseStore.getChest(openChestId.value) ?? null
   })
 
-  /** 背包中可存入箱子的物品（排除种子和锁定物品） */
-  const depositableItems = computed(() =>
-    inventoryStore.items.filter(i => {
+  /** 背包中可存入当前箱子的物品 */
+  const depositableItems = computed(() => {
+    const chestId = openChestId.value
+    if (!chestId) return []
+    return inventoryStore.items.filter(i => {
       if (i.locked) return false
-      const def = getItemById(i.itemId)
-      return def && def.category !== 'seed'
+      return warehouseStore.canDepositItemToChest(chestId, i.itemId)
     })
-  )
+  })
 
-  /** 背包中可一键存入的重复物品（箱子中已有且未锁定、非种子） */
+  /** 背包中可一键存入的重复物品（箱子中已有且符合分类） */
   const duplicateDepositItems = computed(() => {
-    if (!currentOpenChest.value) return []
+    if (!currentOpenChest.value || !openChestId.value) return []
+    const chestId = openChestId.value
     const chestItemIds = new Set(currentOpenChest.value.items.map(i => i.itemId))
     return inventoryStore.items.filter(i => {
       if (i.locked) return false
-      const def = getItemById(i.itemId)
-      if (!def || def.category === 'seed') return false
-      return chestItemIds.has(i.itemId)
+      if (!chestItemIds.has(i.itemId)) return false
+      return warehouseStore.canDepositItemToChest(chestId, i.itemId)
     })
   })
+
+  const nextChestUpgradeTier = computed((): ChestTier | null => {
+    if (!currentOpenChest.value) return null
+    return getNextChestUpgradeTier(currentOpenChest.value.tier)
+  })
+
+  const canUpgradeOpenChest = computed(() => {
+    const next = nextChestUpgradeTier.value
+    if (!next) return false
+    return processingStore.canCraft(CHEST_DEFS[next].craftCost, CHEST_DEFS[next].craftMoney)
+  })
+
+  const isCategoryTakenByOther = (category: ItemCategory): boolean => {
+    if (!currentOpenChest.value) return false
+    const other = warehouseStore.getChestForCategory(category)
+    return !!other && other.id !== currentOpenChest.value.id
+  }
+
+  const handleToggleChestCategory = (category: ItemCategory) => {
+    if (!openChestId.value) return
+    const other = warehouseStore.getChestForCategory(category)
+    if (other && other.id !== openChestId.value && !currentOpenChest.value?.filterCategories.includes(category)) {
+      addLog(`「${CHEST_CATEGORY_LABELS[category]}」已从「${other.label}」改绑到当前箱子。`)
+    }
+    warehouseStore.toggleChestCategory(openChestId.value, category)
+  }
+
+  const handleAutoDepositAll = () => {
+    const warnings = warehouseStore.autoDepositByCategories()
+    if (warnings.length === 1 && warnings[0] === '请先在箱子上设置存放分类。') {
+      addLog(warnings[0]!)
+      return
+    }
+    if (warnings.length > 0) {
+      for (const w of warnings) addLog(w)
+    } else {
+      addLog('已按分类将背包物品放入对应箱子。')
+    }
+  }
+
+  const handleUpgradeOpenChest = () => {
+    const chestId = openChestId.value
+    const next = nextChestUpgradeTier.value
+    if (!chestId || !next) return
+    if (!canUpgradeOpenChest.value) {
+      addLog('材料或铜钱不足，无法扩容箱子。')
+      return
+    }
+    if (!processingStore.consumeCraftMaterials(CHEST_DEFS[next].craftCost, CHEST_DEFS[next].craftMoney)) return
+    if (!warehouseStore.upgradeChestTier(chestId)) return
+    addLog(`已将箱子扩容为${CHEST_DEFS[next].name}（${CHEST_DEFS[next].capacity}格）！（-${CHEST_DEFS[next].craftMoney}文）`)
+  }
 
   /** 制作箱子 */
   const canCraftChest = (tier: ChestTier): boolean => {

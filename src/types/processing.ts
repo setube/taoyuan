@@ -43,6 +43,8 @@ export interface ProcessingRecipeDef {
   /** 输入物品ID（null = 无需输入，如蜂箱） */
   inputItemId: string | null
   inputQuantity: number
+  /** 单次最多投入数（如熔炉最多5个同类矿石）；未设置时固定为 inputQuantity */
+  maxInputQuantity?: number
   outputItemId: string
   outputQuantity: number
   /** 加工天数 */
@@ -55,6 +57,8 @@ export interface ProcessingSlot {
   machineType: MachineType
   recipeId: string | null
   inputItemId: string | null
+  /** 实际投入数量（可变批量配方，如熔炉） */
+  inputAmount?: number
   inputQuality?: Quality
   daysProcessed: number
   totalDays: number

@@ -235,16 +235,16 @@ export const useFishingStore = defineStore('fishing', () => {
     const rodTimeMap: Record<ToolTier, number> = { basic: 30, iron: 33, steel: 36, iridium: 40 }
     const timeLimit = rodTimeMap[rodTier]
 
-    // 鱼速度（难度为默认，鱼种可覆盖）
-    const difficultySpeedMap: Record<string, number> = { easy: 1.0, normal: 2.0, hard: 3.0, legendary: 4.0 }
-    const difficultyDirMap: Record<string, number> = { easy: 0.02, normal: 0.04, hard: 0.06, legendary: 0.08 }
+    // 鱼速度（难度为默认，鱼种可覆盖；略降整体难度便于跟住鱼）
+    const difficultySpeedMap: Record<string, number> = { easy: 0.9, normal: 1.7, hard: 2.5, legendary: 3.4 }
+    const difficultyDirMap: Record<string, number> = { easy: 0.018, normal: 0.035, hard: 0.052, legendary: 0.07 }
     let fishSpeed = fish.miniGameSpeed ?? difficultySpeedMap[fish.difficulty] ?? 2.0
     let fishChangeDir = fish.miniGameDirChange ?? difficultyDirMap[fish.difficulty] ?? 0.04
 
-    // 物理参数
+    // 物理参数（scoreGain 为每帧重叠时进度增量，约 60fps）
     let gravity = 1.5
-    let scoreGain = 0.15
-    let scoreLoss = 0.1
+    let scoreGain = 0.28
+    let scoreLoss = 0.08
 
     // 鱼饵效果
     if (activeBaitDef.value?.behaviorModifier) {
