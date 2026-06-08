@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed } from 'vue'
-import { X, ArrowUp, Maximize2, Minimize2 } from 'lucide-vue-next'
+import { ref, watch, watchEffect, nextTick, computed } from 'vue'
+import { X, ArrowUp, Maximize2, Minimize2, Wifi, WifiOff, Loader2 } from 'lucide-vue-next'
 import { useSystemStore } from '@/stores/useSystemStore'
 
 const store = useSystemStore()
 const inputEl = ref<HTMLInputElement | null>()
+const chatContainer = ref<HTMLDivElement | null>(null)
 const activeTab = ref<'chat' | 'quests' | 'shop'>('chat')
 
 const isMobile = computed(() => window.innerWidth < 768)
@@ -22,6 +23,21 @@ function handleKeydown(e: KeyboardEvent) {
     sendMessage()
   }
 }
+
+function scrollToBottom() {
+  nextTick(() => {
+    const el = chatContainer.value
+    if (el) el.scrollTop = el.scrollHeight
+  })
+}
+
+// 流式消息到来时自动滚动
+watch(
+  () => store.messages.map(m => m.content).join('|'),
+  () => {
+    if (store.isStreaming) scrollToBottom()
+  }
+)
 
 watch(() => store.panelOpen, async (open) => {
   if (open) {
@@ -91,7 +107,7 @@ const meritShopItems = [
 
         <!-- 对话标签页 -->
         <template v-if="activeTab === 'chat'">
-          <div class="flex-1 overflow-y-auto px-3 py-2 space-y-2 text-xs min-h-0">
+          <div ref="chatContainer" class="flex-1 overflow-y-auto px-3 py-2 space-y-2 text-xs min-h-0">
             <div v-if="store.messages.length === 0" class="text-muted text-center py-8">
               系统伙伴已就绪。输入关键词查询游戏知识，或连接后端解锁完整对话。
             </div>
@@ -101,10 +117,47 @@ const meritShopItems = [
               :class="msg.role === 'system' ? 'text-accent/90' : 'text-gray-300 text-right'"
             >
               <span v-if="msg.role === 'system'" class="font-bold mr-1">{{ store.displayName }}：</span>
-              {{ msg.content }}
+              <span>{{ msg.content }}</span>
+              <span
+                v-if="store.isStreaming && msg.id === store.streamingMessageId"
+                class="streaming-cursor"
+              >▌</span>
             </div>
-            <div v-if="store.mode === 'offline'" class="text-[10px] text-muted text-center pt-2">
-              灵识托管中 — 仅知识库可用
+          </div>
+
+          <div v-if="store.mode === 'offline'" class="flex items-center justify-between px-3 py-1.5 border-t border-accent/10 shrink-0 bg-[#1a1a1a]">
+            <span class="text-[10px] text-muted flex items-center gap-1">
+              <WifiOff :size="10" /> 灵识托管中 — 仅知识库可用
+            </span>
+            <button
+              @click="store.tryConnect()"
+              :disabled="store.isConnecting"
+              class="text-[10px] px-2 py-0.5 border border-accent/30 rounded hover:bg-accent/10 text-accent disabled:opacity-50 flex items-center gap-1"
+            >
+              <Loader2 v-if="store.isConnecting" :size="10" class="animate-spin" />
+              <Wifi v-else :size="10" />
+              {{ store.isConnecting ? '连接中…' : '呼叫系统' }}
+            </button>
+          </div>
+          <div v-if="store.mode === 'online'" class="flex items-center justify-between px-3 py-1.5 border-t border-accent/10 shrink-0 bg-[#1a1a1a]">
+            <span class="text-[10px] text-green-400 flex items-center gap-1">
+              <Wifi :size="10" /> 灵识在线
+            </span>
+            <div class="flex items-center gap-2">
+              <button
+                @click="store.cloudBackupEnabled = !store.cloudBackupEnabled"
+                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors flex items-center gap-1"
+                :class="store.cloudBackupEnabled ? 'border-green-500/40 bg-green-500/10 text-green-400' : 'border-accent/20 text-muted'"
+              >
+                <span class="text-[9px]">☁</span>
+                {{ store.cloudBackupEnabled ? '云备' : '云备' }}
+              </button>
+              <button
+                @click="store.disconnect()"
+                class="text-[10px] px-2 py-0.5 border border-accent/20 rounded hover:bg-accent/10 text-muted hover:text-gray-300"
+              >
+                断开
+              </button>
             </div>
           </div>
 
@@ -113,10 +166,11 @@ const meritShopItems = [
               ref="inputEl"
               v-model="store.inputText"
               @keydown="handleKeydown"
-              placeholder="输入关键词查询游戏知识…"
-              class="flex-1 bg-transparent border border-accent/20 rounded px-2 py-1 text-xs text-gray-200 placeholder:text-muted focus:outline-none focus:border-accent/50"
+              :disabled="store.isStreaming"
+              :placeholder="store.mode === 'online' ? '输入消息…' : '输入关键词查询游戏知识…'"
+              class="flex-1 bg-transparent border border-accent/20 rounded px-2 py-1 text-xs text-gray-200 placeholder:text-muted focus:outline-none focus:border-accent/50 disabled:opacity-40"
             />
-            <button @click="sendMessage" class="p-1 hover:text-accent shrink-0">
+            <button @click="sendMessage" :disabled="store.isStreaming" class="p-1 hover:text-accent shrink-0 disabled:opacity-40">
               <ArrowUp :size="16" />
             </button>
           </div>
@@ -182,3 +236,14 @@ const meritShopItems = [
     </div>
   </Transition>
 </template>
+
+<style scoped>
+.streaming-cursor {
+  animation: blink 1s step-end infinite;
+  color: #c8a96e;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+</style>

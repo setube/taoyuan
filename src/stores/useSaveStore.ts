@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import CryptoJS from 'crypto-js'
 import { saveAs } from 'file-saver'
@@ -33,7 +33,7 @@ import { useTavernStore } from './useTavernStore'
 import { useSystemStore } from './useSystemStore'
 
 const SAVE_KEY_PREFIX = 'taoyuanxiang_save_'
-const MAX_SLOTS = 3
+const MAX_SLOTS = 5
 const ENCRYPTION_KEY = 'taoyuanxiang_2024_secret'
 const SAVE_FILE_EXT = '.tyx'
 
@@ -317,5 +317,91 @@ export const useSaveStore = defineStore('save', () => {
     }
   }
 
-  return { activeSlot, getSlots, assignNewSlot, saveToSlot, autoSave, loadFromSlot, deleteSlot, exportSave, importSave }
+  /** 生成设备 ID 指纹（浏览器特征哈希，无需登录） */
+  const getDeviceId = (): string => {
+    const key = 'taoyuan_device_id'
+    const stored = localStorage.getItem(key)
+    if (stored) return stored
+    // 首次生成：基于 screen + navigator + timezone 等浏览器指纹
+    const fp = [
+      navigator.hardwareConcurrency,
+      navigator.maxTouchPoints,
+      screen.colorDepth,
+      screen.width + 'x' + screen.height,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+      navigator.language
+    ].join('|')
+    const hash = CryptoJS.SHA256(fp).toString().slice(0, 16)
+    localStorage.setItem(key, hash)
+    return hash
+  }
+
+  const systemStore = useSystemStore()
+
+  /** Go 后端地址（开发环境默认 localhost:8080） */
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8080'
+
+  /** 云端备份状态（从系统Store读取，随存档持久化） */
+  const cloudBackupEnabled = computed(() => systemStore.cloudBackupEnabled)
+
+  const toggleCloudBackup = () => {
+    systemStore.cloudBackupEnabled = !systemStore.cloudBackupEnabled
+  }
+
+  /** 后端 API 公共请求 */
+  const apiFetch = async (path: string, options?: RequestInit): Promise<any> => {
+    try {
+      const res = await fetch(`${BACKEND_URL}${path}`, {
+        ...options,
+        headers: { 'Content-Type': 'application/json', ...options?.headers }
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        throw new Error(err.error ?? `请求失败 (${res.status})`)
+      }
+      return res.json()
+    } catch (e: any) {
+      console.warn('[CloudSave]', e.message)
+      return null
+    }
+  }
+
+  /** 上传存档到云端 */
+  const uploadToCloud = async (slot: number): Promise<boolean> => {
+    const raw = localStorage.getItem(`${SAVE_KEY_PREFIX}${slot}`)
+    if (!raw) return false
+    const deviceId = getDeviceId()
+    const result = await apiFetch('/api/v1/saves/upload', {
+      method: 'POST',
+      body: JSON.stringify({ deviceId, slot, data: raw })
+    })
+    return result?.status === 'ok'
+  }
+
+  /** 从云端下载存档到本地 */
+  const downloadFromCloud = async (slot: number): Promise<boolean> => {
+    const deviceId = getDeviceId()
+    const result = await apiFetch(`/api/v1/saves/${slot}/download?deviceId=${encodeURIComponent(deviceId)}`)
+    if (!result?.data) return false
+    localStorage.setItem(`${SAVE_KEY_PREFIX}${slot}`, result.data)
+    return true
+  }
+
+  /** 删除云端存档 */
+  const deleteCloudSave = async (slot: number): Promise<boolean> => {
+    const deviceId = getDeviceId()
+    const result = await apiFetch(`/api/v1/saves/${slot}?deviceId=${encodeURIComponent(deviceId)}`, {
+      method: 'DELETE'
+    })
+    return result?.status === 'ok'
+  }
+
+  /** 列出云端存档 */
+  const listCloudSaves = async (): Promise<{ slot: number; updatedAt: string }[]> => {
+    const deviceId = getDeviceId()
+    const result = await apiFetch(`/api/v1/saves?deviceId=${encodeURIComponent(deviceId)}`)
+    return result ?? []
+  }
+
+  return { activeSlot, getSlots, assignNewSlot, saveToSlot, autoSave, loadFromSlot, deleteSlot, exportSave, importSave, getDeviceId, cloudBackupEnabled, toggleCloudBackup, uploadToCloud, downloadFromCloud, deleteCloudSave, listCloudSaves }
 })

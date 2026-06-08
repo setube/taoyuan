@@ -4,7 +4,17 @@
       <button class="absolute top-2 right-2 text-muted hover:text-text" @click="$emit('close')">
         <X :size="14" />
       </button>
-      <Divider title class="my-4" label="存档管理" />
+      <div class="flex items-center justify-center gap-2 my-4">
+        <Divider title label="存档管理" />
+        <button
+          @click="saveStore.toggleCloudBackup()"
+          class="text-[9px] px-1.5 py-0.5 rounded border transition-colors flex items-center gap-0.5 shrink-0"
+          :class="saveStore.cloudBackupEnabled ? 'border-green-500/40 bg-green-500/10 text-green-400' : 'border-gray-600/40 text-gray-500'"
+        >
+          <span>☁</span>
+          {{ saveStore.cloudBackupEnabled ? '云' : '云' }}
+        </button>
+      </div>
       <div class="flex-1 flex flex-col space-y-2 mb-3" @click="menuOpen = null">
         <div v-for="info in slots" :key="info.slot">
           <div v-if="info.exists" class="flex space-x-1 w-full">
@@ -49,7 +59,7 @@
                   :disabled="uploading"
                   @click="handleUpload(info.slot)"
                 >
-                  {{ uploading ? '上传中...' : '上传云端' }}
+                  {{ uploading ? '上传中...' : 'WebDAV上传' }}
                 </Button>
                 <Button
                   v-if="webdavReady"
@@ -59,7 +69,27 @@
                   :disabled="downloading"
                   @click="handleDownload(info.slot)"
                 >
-                  {{ downloading ? '下载中...' : '云端下载' }}
+                  {{ downloading ? '下载中...' : 'WebDAV下载' }}
+                </Button>
+                <Button
+                  v-if="saveStore.cloudBackupEnabled"
+                  :icon="Database"
+                  :icon-size="12"
+                  class="text-center !rounded-none justify-center text-sm"
+                  :disabled="cloudUploading"
+                  @click="handleCloudUpload(info.slot)"
+                >
+                  {{ cloudUploading ? '上传中...' : '后台上传' }}
+                </Button>
+                <Button
+                  v-if="saveStore.cloudBackupEnabled"
+                  :icon="Database"
+                  :icon-size="12"
+                  class="text-center !rounded-none justify-center text-sm"
+                  :disabled="cloudDownloading"
+                  @click="handleCloudDownload(info.slot)"
+                >
+                  {{ cloudDownloading ? '下载中...' : '后台下载' }}
                 </Button>
                 <Button
                   v-if="!Capacitor.isNativePlatform()"
@@ -91,7 +121,17 @@
               :disabled="downloading"
               @click="handleDownload(info.slot)"
             >
-              <span class="text-xs">{{ downloading ? '下载中...' : '云端' }}</span>
+              <span class="text-xs">{{ downloading ? '下载中...' : 'WebDAV' }}</span>
+            </Button>
+            <Button
+              v-if="saveStore.cloudBackupEnabled"
+              :icon="Database"
+              :icon-size="12"
+              class="px-2"
+              :disabled="cloudDownloading"
+              @click="handleCloudDownload(info.slot)"
+            >
+              <span class="text-xs">{{ cloudDownloading ? '下载中...' : '后台' }}</span>
             </Button>
           </div>
         </div>
@@ -126,7 +166,7 @@
 
 <script setup lang="ts">
   import { ref } from 'vue'
-  import { X, FolderOpen, Settings, Download, Trash2, Upload, CloudUpload, CloudDownload } from 'lucide-vue-next'
+  import { X, FolderOpen, Settings, Download, Trash2, Upload, CloudUpload, CloudDownload, Database } from 'lucide-vue-next'
   import Button from '@/components/game/Button.vue'
   import Divider from '@/components/game/Divider.vue'
   import { SEASON_NAMES } from '@/stores/useGameStore'
@@ -145,6 +185,8 @@
   const menuOpen = ref<number | null>(null)
   const uploading = ref(false)
   const downloading = ref(false)
+  const cloudUploading = ref(false)
+  const cloudDownloading = ref(false)
 
   const refreshSlots = () => {
     slots.value = saveStore.getSlots()
@@ -217,6 +259,28 @@
       emit('change')
     }
     showFloat(result.message, result.success ? 'success' : 'danger')
+    menuOpen.value = null
+  }
+
+  /** Go 后端云存档上传 */
+  const handleCloudUpload = async (slot: number) => {
+    cloudUploading.value = true
+    const ok = await saveStore.uploadToCloud(slot)
+    cloudUploading.value = false
+    showFloat(ok ? '云端备份成功。' : '云端备份失败，请确认后端已启动。', ok ? 'success' : 'danger')
+    menuOpen.value = null
+  }
+
+  /** Go 后端云存档下载 */
+  const handleCloudDownload = async (slot: number) => {
+    cloudDownloading.value = true
+    const ok = await saveStore.downloadFromCloud(slot)
+    cloudDownloading.value = false
+    if (ok) {
+      refreshSlots()
+      emit('change')
+    }
+    showFloat(ok ? '云端存档已恢复到本地。' : '云端下载失败，请确认后端已启动。', ok ? 'success' : 'danger')
     menuOpen.value = null
   }
 </script>

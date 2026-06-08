@@ -16,6 +16,34 @@ export const useSystemStore = defineStore('system', () => {
   // === 连接 ===
   const mode = ref<ConnectionMode>('offline')
   const backendUrl = ref<string | null>(null)
+  const sessionToken = ref<string | null>(null)
+  const cloudBackupEnabled = ref(false)
+  const isConnecting = ref(false)
+
+  /** Go 后端地址（开发默认 localhost:8080，编译时可通过 VITE_BACKEND_URL 覆盖） */
+  const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL ?? 'http://localhost:8080'
+
+  /** 后端 API 公共请求 */
+  const apiFetch = async (path: string, options?: RequestInit): Promise<any> => {
+    try {
+      const res = await fetch(`${BACKEND_URL}${path}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionToken.value ? { Authorization: `Bearer ${sessionToken.value}` } : {}),
+          ...options?.headers
+        }
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        throw new Error(err.error ?? `请求失败 (${res.status})`)
+      }
+      return res.json()
+    } catch (e: any) {
+      console.warn('[SystemStore]', e.message)
+      return null
+    }
+  }
 
   // === 消息 ===
   const messages = ref<SystemMessage[]>([])
@@ -37,6 +65,8 @@ export const useSystemStore = defineStore('system', () => {
   const panelOpen = ref(false)
   const panelFullscreen = ref(false)
   const inputText = ref('')
+  const isStreaming = ref(false)           // 是否正在接收流式回复
+  const streamingMessageId = ref<string | null>(null)  // 当前流式消息 ID
 
   // === Computed ===
   const displayName = computed(() => {
@@ -97,12 +127,171 @@ export const useSystemStore = defineStore('system', () => {
         addSystemMessage(reply, gameDay)
         return reply
       }
-      addSystemMessage('灵识信号微弱……请尝试换个关键词，或连接后端以获得完整对话能力。', gameDay)
+      addSystemMessage('灵识信号微弱……请尝试换个关键词，或点击「呼叫系统」链接系统以获得完整对话能力。', gameDay)
       return null
     }
 
-    // 在线模式由后端处理
+    // 在线模式：异步发送到后端
+    sendToBackend(input, gameDay)
     return null
+  }
+
+  /** 获取或创建聊天会话 ID */
+  const getChatSessionId = (): string => {
+    const key = 'taoyuan_chat_session'
+    let id = localStorage.getItem(key)
+    if (!id) {
+      id = crypto.randomUUID()
+      localStorage.setItem(key, id)
+    }
+    return id
+  }
+
+  /** 在线模式：SSE 流式发送消息到后端 Chat API */
+  async function sendToBackend(input: string, gameDay: number) {
+    isStreaming.value = true
+    const msgId = crypto.randomUUID()
+    streamingMessageId.value = msgId
+
+    // 插入占位消息
+    messages.value.push({
+      id: msgId,
+      role: 'system',
+      content: '',
+      timestamp: Date.now(),
+      gameDay
+    })
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionToken.value ? { Authorization: `Bearer ${sessionToken.value}` } : {})
+        },
+        body: JSON.stringify({
+          message: input,
+          personaId: personaId.value,
+          sessionId: getChatSessionId(),
+          context: {}
+        })
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        throw new Error(err.error ?? `请求失败 (${res.status})`)
+      }
+
+      // 检查是否为 JSON 响应（知识匹配）
+      const contentType = res.headers.get('Content-Type') ?? ''
+      if (contentType.includes('application/json')) {
+        const result = await res.json()
+        if (result.type === 'knowledge' && result.results?.length > 0) {
+          const parts = result.results.map((r: any) => `${r.entry.title}：${r.entry.content}`)
+          updateStreamingMessage(msgId, parts.join('\n\n'))
+        } else {
+          updateStreamingMessage(msgId, result.message ?? '收到。')
+        }
+        isStreaming.value = false
+        streamingMessageId.value = null
+        return
+      }
+
+      // SSE 流式读取
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('不支持流式读取')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? '' // 保留未完成行
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const data = line.slice(6)
+          if (data === '[DONE]') continue
+
+          try {
+            const event = JSON.parse(data)
+            if (event.type === 'chunk') {
+              const msg = messages.value.find(m => m.id === msgId)
+              if (msg) {
+                msg.content += event.content
+              }
+            } else if (event.type === 'error') {
+              throw new Error(event.error)
+            }
+            // meta 类型忽略
+          } catch (e: any) {
+            if (e.message?.includes('event.error')) throw e
+            // JSON 解析失败忽略
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn('[SystemStore] SSE error:', e.message)
+      updateStreamingMessage(msgId, `灵识连接中断……${e.message}`)
+      mode.value = 'offline'
+    }
+
+    isStreaming.value = false
+    streamingMessageId.value = null
+
+    // 清理空消息
+    const msg = messages.value.find(m => m.id === msgId)
+    if (msg && !msg.content.trim()) {
+      msg.content = '（未收到回复）'
+    }
+  }
+
+  function updateStreamingMessage(msgId: string, content: string) {
+    const msg = messages.value.find(m => m.id === msgId)
+    if (msg) {
+      msg.content = content
+    }
+  }
+
+  /** 尝试连接后端 */
+  async function tryConnect(): Promise<boolean> {
+    if (isConnecting.value) return false
+    isConnecting.value = true
+    try {
+      // 设备注册
+      const { getDeviceId } = await import('@/stores/useSaveStore')
+      const deviceId = getDeviceId()
+      const result = await apiFetch('/api/v1/device/register', {
+        method: 'POST',
+        body: JSON.stringify({ deviceId })
+      })
+      if (result?.token) {
+        sessionToken.value = result.token
+        backendUrl.value = BACKEND_URL
+        mode.value = 'online'
+        cloudBackupEnabled.value = true
+        addSystemMessage('灵识已连接。在线对话已就绪。')
+        return true
+      }
+      addSystemMessage('连接失败：后端未响应。请确认服务已启动。')
+      return false
+    } catch {
+      addSystemMessage('连接异常。请稍后重试。')
+      return false
+    } finally {
+      isConnecting.value = false
+    }
+  }
+
+  /** 断开后端连接 */
+  function disconnect() {
+    mode.value = 'offline'
+    sessionToken.value = null
+    addSystemMessage('已断开连接，切回灵识托管模式。')
   }
 
   function openPanel() {
@@ -175,7 +364,9 @@ export const useSystemStore = defineStore('system', () => {
       merit: merit.value,
       quests: quests.value,
       activeBuffs: activeBuffs.value,
-      timeline: timeline.value
+      timeline: timeline.value,
+      cloudBackupEnabled: cloudBackupEnabled.value,
+      sessionToken: sessionToken.value
     }
   }
 
@@ -190,7 +381,13 @@ export const useSystemStore = defineStore('system', () => {
     merit.value = data.merit ?? 0
     quests.value = data.quests ?? []
     activeBuffs.value = data.activeBuffs ?? []
+    cloudBackupEnabled.value = data.cloudBackupEnabled ?? false
     timeline.value = data.timeline ?? []
+    sessionToken.value = data.sessionToken ?? null
+    // 恢复在线模式（有 token 且之前是在线模式）
+    if (data.sessionToken && data.mode === 'online') {
+      mode.value = 'online'
+    }
   }
 
   // === 简单任务系统 ===
@@ -218,14 +415,16 @@ export const useSystemStore = defineStore('system', () => {
 
   return {
     personaId, awakened, firstContactDay, pendingAwakening,
-    mode, backendUrl,
+    mode, backendUrl, sessionToken, cloudBackupEnabled, isConnecting,
     messages, unreadCount,
     affinity, affinityMilestonesReached,
     merit, quests, activeBuffs,
     timeline,
     panelOpen, panelFullscreen, inputText,
     displayName, connectionLabel,
+    isStreaming, streamingMessageId,
     awaken, addSystemMessage, addPlayerMessage, processPlayerInput,
+    tryConnect, disconnect, sendToBackend,
     openPanel, closePanel, toggleFullscreen,
     adjustAffinity, checkQuestAssignment, completeQuest,
     serialize, deserialize

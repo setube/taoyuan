@@ -31,3 +31,7 @@ images/app/*
 *.njsproj
 *.sln
 *.sw?
+
+# backend artifacts
+backend/data/
+backend/server.exe
