@@ -36,6 +36,9 @@
       <History :size="20" />
     </button>
 
+    <SystemButton />
+    <SystemPanel />
+
     <SettingsDialog :open="showSettings" @close="showSettings = false" />
 
     <!-- 移动端地图菜单 -->
@@ -478,6 +481,8 @@
   import TeaContestView from '@/components/game/TeaContestView.vue'
   import KiteFlyingView from '@/components/game/KiteFlyingView.vue'
   import SettingsDialog from '@/components/game/SettingsDialog.vue'
+  import SystemButton from '@/components/game/SystemButton.vue'
+  import SystemPanel from '@/components/game/SystemPanel.vue'
   import DiscoveryScene from '@/components/game/DiscoveryScene.vue'
   import { Capacitor } from '@capacitor/core'
 
