@@ -244,6 +244,33 @@ function getAwakeningGreeting(persona: PersonaId): string {
   return greetings[persona]
 }
 
+export function getMorningGreeting(persona: PersonaId, season: string): string {
+  const templates: Record<PersonaId, string[]> = {
+    qingluan: [
+      '今日天朗气清，宜出行。',
+      '辰时已至。宿主，新一日开始了。',
+      '春分将至，田垄间可播种矣。宿主早安。'
+    ],
+    chaofeng: [
+      '啧，新的一天。别磨蹭，下矿还是种田？',
+      '早啊菜鸟。今天打算干什么？',
+      '醒了？行，今天别又死在矿里。'
+    ],
+    taosu: [
+      '主人早安！今天阳光金灿灿的~(◕ᴗ◕✿)',
+      '早呀主人！今天也要开开心心的哦~',
+      '主人起来啦！桃酥好开心！今天做什么好呢~'
+    ],
+    moyan: [
+      '今日晴。建议：户外作业。',
+      '晨间数据已更新。建议检查作物状态。',
+      '新一天开始。效率评估重置。'
+    ]
+  }
+  const pool = templates[persona] ?? templates.qingluan
+  return pool[Math.floor(Math.random() * pool.length)]
+}
+
 function wrapWithPersona(content: string): string {
   return content
 }

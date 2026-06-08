@@ -16,6 +16,7 @@ import { useQuestStore } from '@/stores/useQuestStore'
 import { useFishingStore } from '@/stores/useFishingStore'
 import { useBreedingStore } from '@/stores/useBreedingStore'
 import { useHanhaiStore } from '@/stores/useHanhaiStore'
+import { useSystemStore, getMorningGreeting } from '@/stores/useSystemStore'
 import { useFishPondStore } from '@/stores/useFishPondStore'
 import { useTutorialStore } from '@/stores/useTutorialStore'
 import { useHiddenNpcStore } from '@/stores/useHiddenNpcStore'
@@ -35,6 +36,8 @@ import { MORNING_NARRATIONS, NARRATIONS_NO_LOSS, MORNING_CHOICE_EVENTS, MORNING_
 import { MORNING_TIPS } from '@/data/tutorials'
 import type { MorningEffect } from '@/data/farmEvents'
 import router from '@/router'
+import { runTavernEndDay } from './tavernSimulate'
+import { useTavernStore } from '@/stores/useTavernStore'
 
 const NPC_NAME_MAP: Record<string, string> = {
   chen_bo: '陈伯',
@@ -369,22 +372,6 @@ export const handleEndDay = () => {
 
   const gameStore = useGameStore()
 
-  // 睡前提醒：农场面板仍有待拾取产出
-  const pickupReminders: string[] = []
-  if (gameStore.creekCatch.length > 0) {
-    pickupReminders.push(`溪流鱼获${gameStore.creekCatch.length}条`)
-  }
-  if (gameStore.pendingCaveLoot.length > 0) {
-    const caveCount = gameStore.pendingCaveLoot.reduce((s, l) => s + l.quantity, 0)
-    pickupReminders.push(`山洞产出${caveCount}份`)
-  }
-  if (gameStore.pendingFruitLoot.length > 0) {
-    pickupReminders.push(`果林果实${gameStore.pendingFruitLoot.length}个`)
-  }
-  if (pickupReminders.length > 0) {
-    addLog(`睡前别忘了去农场面板拾取：${pickupReminders.join('、')}。`)
-  }
-
   const playerStore = usePlayerStore()
   const farmStore = useFarmStore()
   const inventoryStore = useInventoryStore()
@@ -676,6 +663,9 @@ export const handleEndDay = () => {
 
   // === 晚间结算（旧日期） ===
 
+  // 酒肆日结自动营业
+  runTavernEndDay()
+
   // 出货箱结算
   const shopStore = useShopStore()
   const shippingIncome = shopStore.processShippingBox()
@@ -699,6 +689,19 @@ export const handleEndDay = () => {
   // === 日期推进 ===
   const { seasonChanged, oldSeason } = gameStore.nextDay()
 
+  // === 系统觉醒检测（第一天过夜后触发）===
+  const systemStore = useSystemStore()
+  if (gameStore.year === 1 && gameStore.season === 'spring' && gameStore.day === 2 && !systemStore.awakened) {
+    systemStore.pendingAwakening = true
+  }
+
+  // === 每日早安 ===
+  if (systemStore.awakened && systemStore.personaId) {
+    systemStore.addSystemMessage(getMorningGreeting(systemStore.personaId, gameStore.season), gameStore.day)
+  }
+
+  useTavernStore().onNewDay()
+
   // === 晨间结算（新日期） ===
 
   // 瀚海轮换商品刷新（使用新日期，每周首日或首次加载时刷新）
@@ -709,10 +712,7 @@ export const handleEndDay = () => {
   // 动物产出
   const animalResult = animalStore.dailyUpdate()
   if (animalResult.products.length > 0) {
-    for (const p of animalResult.products) {
-      inventoryStore.addItem(p.itemId, 1, p.quality)
-    }
-    addLog(`动物们产出了${animalResult.products.length}件产品。`)
+    addLog(`动物们产出了${animalResult.products.length}件产品，快去拾取吧。`)
   }
   if (animalResult.died.length > 0) {
     addLog(`${animalResult.died.join('、')}因长期饥饿或病重不治而死亡了……`)
@@ -798,11 +798,8 @@ export const handleEndDay = () => {
   const fishPondStore = useFishPondStore()
   if (fishPondStore.pond.built) {
     const pondResult = fishPondStore.dailyUpdate()
-    for (const p of pondResult.products) {
-      inventoryStore.addItem(p.itemId, 1, p.quality)
-    }
     if (pondResult.products.length > 0) {
-      addLog(`鱼塘产出了${pondResult.products.length}件水产品。`)
+      addLog(`鱼塘产出了${pondResult.products.length}件水产品，快去拾取吧。`)
     }
     if (pondResult.died.length > 0) {
       addLog(`${pondResult.died.join('、')}因病重不治而死亡了……`)
@@ -816,6 +813,28 @@ export const handleEndDay = () => {
     if (pondResult.breedingFailed) {
       addLog(`${pondResult.breedingFailed}。`)
     }
+  }
+
+  // 睡前提醒：待拾取产出
+  const pickupReminders: string[] = []
+  if (gameStore.creekCatch.length > 0) {
+    pickupReminders.push(`溪流鱼获${gameStore.creekCatch.length}条`)
+  }
+  if (gameStore.pendingCaveLoot.length > 0) {
+    const caveCount = gameStore.pendingCaveLoot.reduce((s, l) => s + l.quantity, 0)
+    pickupReminders.push(`山洞产出${caveCount}份`)
+  }
+  if (gameStore.pendingFruitLoot.length > 0) {
+    pickupReminders.push(`果林果实${gameStore.pendingFruitLoot.length}个`)
+  }
+  if (fishPondStore.pond.built && fishPondStore.pendingProducts.length > 0) {
+    pickupReminders.push(`鱼塘产出${fishPondStore.pendingProducts.length}份`)
+  }
+  if (animalStore.pendingProducts.length > 0) {
+    pickupReminders.push(`牧场产出${animalStore.pendingProducts.length}份`)
+  }
+  if (pickupReminders.length > 0) {
+    addLog(`睡前别忘了去农场面板拾取：${pickupReminders.join('、')}。`)
   }
 
   // 蟹笼装饵雇工结算（在收获之前）
