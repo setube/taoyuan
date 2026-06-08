@@ -29,6 +29,8 @@ import { useFishPondStore } from './useFishPondStore'
 import { useTutorialStore } from './useTutorialStore'
 import { useHiddenNpcStore } from './useHiddenNpcStore'
 import { useBankStore } from './useBankStore'
+import { useTavernStore } from './useTavernStore'
+import { useSystemStore } from './useSystemStore'
 
 const SAVE_KEY_PREFIX = 'taoyuanxiang_save_'
 const MAX_SLOTS = 3
@@ -149,7 +151,8 @@ export const useSaveStore = defineStore('save', () => {
       const tutorialStore = useTutorialStore()
       const hiddenNpcStore = useHiddenNpcStore()
       const bankStore = useBankStore()
-
+      const tavernStore = useTavernStore()
+      const systemStore = useSystemStore()
       const data = {
         game: gameStore.serialize(),
         player: playerStore.serialize(),
@@ -178,6 +181,8 @@ export const useSaveStore = defineStore('save', () => {
         tutorial: tutorialStore.serialize(),
         hiddenNpc: hiddenNpcStore.serialize(),
         bank: bankStore.serialize(),
+        tavern: tavernStore.serialize(),
+        system: systemStore.serialize(),
         savedAt: new Date().toISOString()
       }
       localStorage.setItem(`${SAVE_KEY_PREFIX}${slot}`, encrypt(JSON.stringify(data)))
@@ -229,7 +234,7 @@ export const useSaveStore = defineStore('save', () => {
       const tutorialStore = useTutorialStore()
       const hiddenNpcStore = useHiddenNpcStore()
       const bankStore = useBankStore()
-
+      const tavernStore = useTavernStore()
       gameStore.deserialize(data.game)
       playerStore.deserialize(data.player)
       inventoryStore.deserialize(data.inventory)
@@ -257,6 +262,15 @@ export const useSaveStore = defineStore('save', () => {
       if (data.tutorial) tutorialStore.deserialize(data.tutorial)
       if (data.hiddenNpc) hiddenNpcStore.deserialize(data.hiddenNpc)
       if (data.bank) bankStore.deserialize(data.bank)
+      if (data.tavern) tavernStore.deserialize(data.tavern)
+      else tavernStore.deserialize({})
+      const systemStore = useSystemStore()
+      if (data.system) systemStore.deserialize(data.system)
+      if (!tutorialStore.getFlag('cooking_exp_migrated')) {
+        if (skillStore.migrateCookingExpFromRecipes(achievementStore.stats.totalRecipesCooked, false)) {
+          tutorialStore.setFlag('cooking_exp_migrated', true)
+        }
+      }
       activeSlot.value = slot
       return true
     } catch {
