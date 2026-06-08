@@ -38,6 +38,7 @@
 
     <SystemButton />
     <SystemPanel />
+    <PersonaSelect v-if="showPersonaSelect" @chosen="onPersonaChosen()" />
 
     <SettingsDialog :open="showSettings" @close="showSettings = false" />
 
@@ -445,6 +446,7 @@
   import { useNpcStore } from '@/stores/useNpcStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
   import { useWarehouseStore } from '@/stores/useWarehouseStore'
+  import { useSystemStore } from '@/stores/useSystemStore'
   import { useFarmStore } from '@/stores/useFarmStore'
   import { useBankStore } from '@/stores/useBankStore'
   import { useDialogs } from '@/composables/useDialogs'
@@ -483,6 +485,7 @@
   import SettingsDialog from '@/components/game/SettingsDialog.vue'
   import SystemButton from '@/components/game/SystemButton.vue'
   import SystemPanel from '@/components/game/SystemPanel.vue'
+  import PersonaSelect from '@/components/game/PersonaSelect.vue'
   import DiscoveryScene from '@/components/game/DiscoveryScene.vue'
   import { Capacitor } from '@capacitor/core'
 
@@ -490,6 +493,7 @@
   const route = useRoute()
   const gameStore = useGameStore()
   const playerStore = usePlayerStore()
+  const systemStore = useSystemStore()
   const farmStore = useFarmStore()
   const { switchToSeasonalBgm } = useAudio()
 
@@ -529,6 +533,19 @@
 
   /** 设置弹窗 */
   const showSettings = ref(false)
+
+  /** 人格选择弹窗 */
+  const showPersonaSelect = ref(false)
+
+  watch(() => systemStore.pendingAwakening, (val) => {
+    if (val) showPersonaSelect.value = true
+  })
+
+  function onPersonaChosen() {
+    showPersonaSelect.value = false
+    systemStore.pendingAwakening = false
+    systemStore.openPanel()
+  }
 
   /** 日志弹窗 */
   const showLogModal = ref(false)
