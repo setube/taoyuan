@@ -117,25 +117,9 @@ func serveSPA() http.HandlerFunc {
 		}
 	}
 
-	// 回退到内嵌目录
-	log.Println("静态文件: 使用内嵌资源")
-	subFS, err := fs.Sub(frontendFS, "docs")
-	if err != nil {
-		log.Println("警告: 前端静态文件不可用（docs 目录不存在且内嵌资源加载失败）")
-		return func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "前端未部署", http.StatusNotFound)
-		}
-	}
-	fileServer := http.FileServer(http.FS(subFS))
+	// 无静态文件目录
+	log.Println("警告: 前端静态文件不可用（docs/dist 目录均不存在）")
 	return func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(filepath.Clean(r.URL.Path), "/")
-		f, err := subFS.Open(path)
-		if err != nil {
-			r.URL.Path = "/"
-			fileServer.ServeHTTP(w, r)
-			return
-		}
-		f.Close()
-		fileServer.ServeHTTP(w, r)
+		http.Error(w, "前端未部署", http.StatusNotFound)
 	}
 }
