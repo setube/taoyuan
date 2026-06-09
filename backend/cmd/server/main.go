@@ -3,6 +3,9 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"taoyuan-backend/internal/config"
 	"taoyuan-backend/internal/handler"
@@ -82,9 +85,57 @@ func main() {
 		r.Post("/device/register", h.RegisterDevice)
 	})
 
+	// 静态文件服务 + SPA fallback
+	r.NotFound(serveSPA())
+
 	addr := ":" + cfg.Port
-	log.Printf("后端服务启动于 %s", addr)
+	log.Printf("后端服务启动于 %s (含前端静态文件)", addr)
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatalf("服务启动失败: %v", err)
+	}
+}
+
+// serveSPA 返回一个 SPA 静态文件处理器：优先从磁盘 docs/ 加载，回退到内嵌的 docs/
+func serveSPA() http.HandlerFunc {
+	// 优先使用磁盘上的 docs 目录（方便热更）
+	for _, dir := range []string{"docs", "dist"} {
+		if _, err := os.Stat(dir); err == nil {
+			fsys := http.Dir(dir)
+			fileServer := http.FileServer(fsys)
+			log.Printf("静态文件: 使用磁盘目录 %s/", dir)
+			return func(w http.ResponseWriter, r *http.Request) {
+				path := strings.TrimPrefix(filepath.Clean(r.URL.Path), "/")
+				f, err := fsys.Open(path)
+				if err != nil {
+					r.URL.Path = "/"
+					fileServer.ServeHTTP(w, r)
+					return
+				}
+				f.Close()
+				fileServer.ServeHTTP(w, r)
+			}
+		}
+	}
+
+	// 回退到内嵌目录
+	log.Println("静态文件: 使用内嵌资源")
+	subFS, err := fs.Sub(frontendFS, "docs")
+	if err != nil {
+		log.Println("警告: 前端静态文件不可用（docs 目录不存在且内嵌资源加载失败）")
+		return func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "前端未部署", http.StatusNotFound)
+		}
+	}
+	fileServer := http.FileServer(http.FS(subFS))
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(filepath.Clean(r.URL.Path), "/")
+		f, err := subFS.Open(path)
+		if err != nil {
+			r.URL.Path = "/"
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+		f.Close()
+		fileServer.ServeHTTP(w, r)
 	}
 }
