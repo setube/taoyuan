@@ -50,6 +50,8 @@ export interface InventoryItem {
   quantity: number
   quality: Quality
   locked?: boolean
+  /** 是否来自温室种植（仅 fruit 类有用） */
+  fromGreenhouse?: boolean
 }
 
 /** 工具等级 */

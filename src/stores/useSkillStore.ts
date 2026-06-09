@@ -17,7 +17,8 @@ export const useSkillStore = defineStore('skill', () => {
     createSkill('foraging'),
     createSkill('fishing'),
     createSkill('mining'),
-    createSkill('combat')
+    createSkill('combat'),
+    createSkill('cooking')
   ])
 
   const getSkill = (type: SkillType): SkillState => {
@@ -29,6 +30,7 @@ export const useSkillStore = defineStore('skill', () => {
   const miningLevel = computed(() => getSkill('mining').level)
   const foragingLevel = computed(() => getSkill('foraging').level)
   const combatLevel = computed(() => getSkill('combat').level)
+  const cookingLevel = computed(() => getSkill('cooking').level)
 
   /** 增加经验并自动升级（含戒指经验加成） */
   const addExp = (type: SkillType, amount: number): { leveledUp: boolean; newLevel: number } => {
@@ -109,6 +111,13 @@ export const useSkillStore = defineStore('skill', () => {
     return 'normal'
   }
 
+  /** 旧档一次性迁移：累计烹饪次数 → cooking 经验 */
+  const migrateCookingExpFromRecipes = (totalRecipesCooked: number, alreadyMigrated: boolean): boolean => {
+    if (alreadyMigrated || totalRecipesCooked <= 0) return false
+    addExp('cooking', totalRecipesCooked * 5)
+    return true
+  }
+
   const serialize = () => {
     return { skills: skills.value }
   }
@@ -116,7 +125,7 @@ export const useSkillStore = defineStore('skill', () => {
   const deserialize = (data: ReturnType<typeof serialize>) => {
     const arr: SkillState[] = data.skills ?? []
     // 确保 5 个技能都存在（旧存档可能没有 combat）
-    const allTypes: SkillType[] = ['farming', 'foraging', 'fishing', 'mining', 'combat']
+    const allTypes: SkillType[] = ['farming', 'foraging', 'fishing', 'mining', 'combat', 'cooking']
     for (const type of allTypes) {
       if (!arr.find(s => s.type === type)) {
         const newSkill = createSkill(type)
@@ -145,7 +154,9 @@ export const useSkillStore = defineStore('skill', () => {
     miningLevel,
     foragingLevel,
     combatLevel,
+    cookingLevel,
     getSkill,
+    migrateCookingExpFromRecipes,
     addExp,
     getExpToNextLevel,
     getStaminaReduction,

@@ -273,6 +273,17 @@
 
           <!-- 操作区 -->
           <div class="flex flex-col space-y-1 mb-3">
+            <!-- 一键探索 -->
+            <div
+              class="flex items-center justify-between border border-accent/30 rounded-xs px-3 py-1.5 cursor-pointer hover:bg-accent/5"
+              @click="handleAutoExplore"
+            >
+              <span class="text-xs text-accent">
+                <Zap :size="12" class="inline" />
+                一键探索
+              </span>
+              <span class="text-[10px] text-muted">从上到下 · 遇怪逃跑</span>
+            </div>
             <div v-for="bombItem in availableBombs" :key="bombItem.id">
               <div
                 class="flex items-center justify-between border rounded-xs px-3 py-1.5 cursor-pointer hover:bg-accent/5"
@@ -767,7 +778,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed } from 'vue'
+  import { ref, computed, watch } from 'vue'
   import {
     Mountain,
     Pickaxe,
@@ -805,6 +816,7 @@
   import { useAudio } from '@/composables/useAudio'
   import { addLog } from '@/composables/useGameLog'
   import { handleEndDay } from '@/composables/useEndDay'
+  import { lockBodyScroll, unlockBodyScroll } from '@/composables/useScrollLock'
 
   const miningStore = useMiningStore()
   const gameStore = useGameStore()
@@ -1313,6 +1325,25 @@
     }
   }
 
+  /** 一键探索 */
+  const handleAutoExplore = () => {
+    if (gameStore.isPastBedtime) {
+      addLog('太晚了，没法继续探索了。')
+      handleEndDay()
+      return
+    }
+
+    const result = miningStore.autoExplore()
+    for (const msg of result.messages) {
+      exploreLog.value.push(msg)
+      addLog(msg)
+    }
+
+    if (result.passedOut) {
+      handleEndDay()
+    }
+  }
+
   const handleNextFloor = () => {
     if (gameStore.isPastBedtime) {
       addLog('太晚了，该回去了。')
@@ -1358,6 +1389,24 @@
   const showPresetDetailModal = ref(false)
   const detailPresetId = ref<string | null>(null)
   const showEquipPropertyModal = ref(false)
+
+  // 弹窗打开时锁定背景滚动，防止 iOS Safari 滚动穿透
+  watch(
+    () =>
+      showMapModal.value ||
+      showElevatorModal.value ||
+      (miningStore.isExploring && !miningStore.inCombat) ||
+      miningStore.inCombat ||
+      showCombatItems.value ||
+      showLeaveConfirm.value ||
+      showPresetListModal.value ||
+      showPresetDetailModal.value ||
+      showEquipPropertyModal.value,
+    hasModal => {
+      if (hasModal) lockBodyScroll()
+      else unlockBodyScroll()
+    }
+  )
 
   interface EquipPropertyInfo {
     category: string

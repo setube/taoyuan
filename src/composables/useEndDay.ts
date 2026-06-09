@@ -689,9 +689,9 @@ export const handleEndDay = () => {
   // === 日期推进 ===
   const { seasonChanged, oldSeason } = gameStore.nextDay()
 
-  // === 系统觉醒检测（第一天过夜后触发）===
+  // === 系统觉醒检测（首次过夜后触发，不限季节/天数） ===
   const systemStore = useSystemStore()
-  if (gameStore.year === 1 && gameStore.season === 'spring' && gameStore.day === 2 && !systemStore.awakened) {
+  if (!systemStore.awakened) {
     systemStore.pendingAwakening = true
   }
 

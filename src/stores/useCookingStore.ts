@@ -10,6 +10,15 @@ import { useWalletStore } from './useWalletStore'
 import { useHomeStore } from './useHomeStore'
 import { useHiddenNpcStore } from './useHiddenNpcStore'
 import { getCombinedItemCount, removeCombinedItem, getLowestCombinedQuality } from '@/composables/useCombinedInventory'
+import {
+  applyBuffChefEffect,
+  pickLargestIngredient,
+  rollDoubleBatch,
+  rollGourmetCraft,
+  rollCookingLevelUpgrade,
+  rollPrepCookSave,
+  upgradeQualityOneTier
+} from '@/composables/cookingPerks'
 
 const QUALITY_ORDER: Quality[] = ['normal', 'fine', 'excellent', 'supreme']
 const QUALITY_MULTIPLIER: Record<Quality, number> = { normal: 1, fine: 1.25, excellent: 1.5, supreme: 2 }
@@ -42,6 +51,8 @@ export const useCookingStore = defineStore('cooking', () => {
 
   /** 当天生效的食物增益 */
   const activeBuff = ref<RecipeDef['effect']['buff'] | null>(null)
+  /** 膳修：buff 额外持续日数（日结后仍保留） */
+  const activeBuffExtraDays = ref(0)
 
   /** 已解锁的食谱定义 */
   const recipes = computed(() => unlockedRecipes.value.map(id => getRecipeById(id)).filter((r): r is RecipeDef => r !== undefined))
@@ -110,20 +121,38 @@ export const useCookingStore = defineStore('cooking', () => {
       const idx = QUALITY_ORDER.indexOf(quality)
       if (idx < minQualityIndex) minQualityIndex = idx
     }
-    const resultQuality = QUALITY_ORDER[minQualityIndex]!
+    let resultQuality = QUALITY_ORDER[minQualityIndex]!
+    const cookingSkill = skillStore.getSkill('cooking')
+    // 每级被动：2% 概率品质 +1 档（上限极品）
+    if (rollCookingLevelUpgrade(cookingSkill.level)) {
+      resultQuality = upgradeQualityOneTier(resultQuality)
+    }
+    // 匠心 Lv10：额外 25% 概率再 +1 档
+    if (cookingSkill.perk10 === 'gourmet_craft' && rollGourmetCraft()) {
+      resultQuality = upgradeQualityOneTier(resultQuality)
+    }
+
+    const prepSave =
+      cookingSkill.perk5 === 'prep_cook' && rollPrepCookSave() ? pickLargestIngredient(recipe.ingredients) : null
 
     // 批量消耗材料
     for (const ing of recipe.ingredients) {
-      removeCombinedItem(ing.itemId, ing.quantity * maxPossible)
+      let need = ing.quantity * maxPossible
+      if (prepSave === ing.itemId) need -= ing.quantity
+      if (need > 0) removeCombinedItem(ing.itemId, need)
     }
 
-    // 添加食物到背包
-    inventoryStore.addItem(`food_${recipe.id}`, maxPossible, resultQuality)
+    let outputQty = maxPossible
+    if (cookingSkill.perk10 === 'double_batch' && rollDoubleBatch()) outputQty += 1
+
+    inventoryStore.addItem(`food_${recipe.id}`, outputQty, resultQuality)
     for (let i = 0; i < maxPossible; i++) {
       useAchievementStore().recordRecipeCooked()
     }
+    skillStore.addExp('cooking', 5 * maxPossible)
+
     const qualityTag = QUALITY_LABEL[resultQuality] ? `【${QUALITY_LABEL[resultQuality]}】` : ''
-    const qtyTag = maxPossible > 1 ? `${maxPossible}份` : ''
+    const qtyTag = outputQty > 1 ? `${outputQty}份` : ''
     return { success: true, message: `烹饪了${qtyTag}${qualityTag}${recipe.name}！` }
   }
 
@@ -164,7 +193,10 @@ export const useCookingStore = defineStore('cooking', () => {
     msg += '。'
 
     if (recipe.effect.buff) {
-      activeBuff.value = { ...recipe.effect.buff }
+      const buffChef = skillStore.getSkill('cooking').perk10 === 'buff_chef'
+      const buffValue = buffChef ? applyBuffChefEffect(recipe.effect.buff.value, 'buff_chef') : recipe.effect.buff.value
+      activeBuff.value = { ...recipe.effect.buff, value: buffValue }
+      if (buffChef) activeBuffExtraDays.value = 1
       msg += ` ${recipe.effect.buff.description}`
       // 「体力全恢复」类buff：立即将体力回满
       if (recipe.effect.buff.type === 'stamina') {
@@ -186,16 +218,25 @@ export const useCookingStore = defineStore('cooking', () => {
 
   /** 每日重置增益 */
   const dailyReset = () => {
+    if (activeBuffExtraDays.value > 0) {
+      activeBuffExtraDays.value--
+      return
+    }
     activeBuff.value = null
   }
 
   const serialize = () => {
-    return { unlockedRecipes: unlockedRecipes.value, activeBuff: activeBuff.value }
+    return {
+      unlockedRecipes: unlockedRecipes.value,
+      activeBuff: activeBuff.value,
+      activeBuffExtraDays: activeBuffExtraDays.value
+    }
   }
 
   const deserialize = (data: ReturnType<typeof serialize>) => {
     unlockedRecipes.value = data.unlockedRecipes
     activeBuff.value = data.activeBuff
+    activeBuffExtraDays.value = data.activeBuffExtraDays ?? 0
   }
 
   return {

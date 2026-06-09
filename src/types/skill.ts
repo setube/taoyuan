@@ -1,5 +1,5 @@
 /** 技能类型 */
-export type SkillType = 'farming' | 'foraging' | 'fishing' | 'mining' | 'combat'
+export type SkillType = 'farming' | 'foraging' | 'fishing' | 'mining' | 'combat' | 'cooking'
 
 /** 技能专精（等级5选择） */
 export type SkillPerk5 =
@@ -13,6 +13,8 @@ export type SkillPerk5 =
   | 'geologist' // 挖矿
   | 'fighter'
   | 'defender' // 战斗
+  | 'prep_cook'
+  | 'vendor_chef' // 烹饪
 
 /** 技能专精（等级10选择，基于等级5分支） */
 export type SkillPerk10 =
@@ -36,6 +38,10 @@ export type SkillPerk10 =
   | 'brute' // 战斗: fighter分支
   | 'acrobat'
   | 'tank' // 战斗: defender分支
+  | 'double_batch'
+  | 'gourmet_craft' // 烹饪: prep_cook分支
+  | 'buff_chef'
+  | 'tavern_master' // 烹饪: vendor_chef分支
 
 /** 技能状态 */
 export interface SkillState {

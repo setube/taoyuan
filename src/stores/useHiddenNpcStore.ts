@@ -99,7 +99,6 @@ export const useHiddenNpcStore = defineStore('hiddenNpc', () => {
     const achievementStore = useAchievementStore()
     const npcStore = useNpcStore()
     const questStore = useQuestStore()
-    const inventoryStore = useInventoryStore()
     const playerStore = usePlayerStore()
 
     switch (cond.type) {

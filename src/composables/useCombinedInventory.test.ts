@@ -7,7 +7,8 @@ import {
   getMaterialStockBreakdown,
   getCombinedItemCount,
   hasEnoughMaterial,
-  materialsAreSufficient
+  materialsAreSufficient,
+  hasGreenhouseFruit
 } from './useCombinedInventory'
 
 describe('useCombinedInventory 材料库存', () => {
@@ -28,5 +29,13 @@ describe('useCombinedInventory 材料库存', () => {
     expect(getCombinedItemCount('wood')).toBe(10)
     expect(hasEnoughMaterial('wood', 10)).toBe(true)
     expect(materialsAreSufficient([{ itemId: 'wood', quantity: 10 }])).toBe(true)
+  })
+
+  it('温室果实检测', () => {
+    const inv = useInventoryStore()
+    inv.addItem('peach', 3, 'normal')
+    expect(hasGreenhouseFruit('peach')).toBe(false)
+    inv.addItem('peach', 2, 'normal', true)
+    expect(hasGreenhouseFruit('peach')).toBe(true)
   })
 })

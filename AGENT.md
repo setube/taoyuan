@@ -152,6 +152,12 @@ ssh -i $KEY $SSH "mkdir -p /tmp/taoyuan-hot && rm -rf /tmp/taoyuan-hot/* && tar 
 
 ---
 
+## 5.1 酒肆 v1（已实现）
+
+规格 [design/superpowers/specs/2026-06-04-tavern-design.md](design/superpowers/specs/2026-06-04-tavern-design.md) · 计划 [design/superpowers/plans/2026-06-04-tavern-implementation.md](design/superpowers/plans/2026-06-04-tavern-implementation.md)
+
+---
+
 ## 6. 定制功能索引（fork 维护）
 
 本仓库相对上游 [setube/taoyuan](https://github.com/setube/taoyuan) 的已知定制：
@@ -168,6 +174,9 @@ ssh -i $KEY $SSH "mkdir -p /tmp/taoyuan-hot && rm -rf /tmp/taoyuan-hot/* && tar 
 | 熔炉 1～5 同类矿石批量冶炼 | `src/data/processing.ts`、`src/stores/useProcessingStore.ts`、`src/views/game/ProcessingView.vue` |
 | 山洞/果林待拾取（同溪流鱼获） | `src/stores/useGameStore.ts`、`src/views/game/FarmView.vue`、`src/composables/useEndDay.ts` |
 | 仓库分类绑定、一键放入、箱子扩容 | `src/stores/useWarehouseStore.ts`、`src/views/game/HomeView.vue`、`src/data/warehouse.ts` |
+| 烹饪技能与专精（备料手/市厨/肆尊等） | `src/types/skill.ts`、`src/stores/useSkillStore.ts`、`src/stores/useCookingStore.ts` |
+| 酒坊 1～3 批批量酿造 | `src/data/processing.ts`、`src/stores/useProcessingStore.ts`、`src/views/game/ProcessingView.vue` |
+| 前厅酒肆经营（菜单/日结/亲自值班/员工/NPC 宴席） | `src/stores/useTavernStore.ts`、`src/composables/tavernSimulate.ts`、`src/views/game/TavernView.vue`、`src/data/tavern.ts` |
 
 新增定制时在本表追加一行，便于后续 Agent 排查兼容性。
 

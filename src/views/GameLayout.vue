@@ -36,8 +36,8 @@
       <History :size="20" />
     </button>
 
-    <SystemButton />
-    <SystemPanel />
+    <SystemButton v-if="systemStore.awakened" />
+    <SystemPanel v-if="systemStore.awakened" />
     <PersonaSelect v-if="showPersonaSelect" @chosen="onPersonaChosen()" />
 
     <SettingsDialog :open="showSettings" @close="showSettings = false" />
@@ -464,6 +464,7 @@
   import { CHEST_DEFS } from '@/data/items'
   import { useGameClock } from '@/composables/useGameClock'
   import { useAudio } from '@/composables/useAudio'
+  import { lockBodyScroll, unlockBodyScroll } from '@/composables/useScrollLock'
   import type { Quality } from '@/types'
   import { Moon, X, Map, Settings as SettingsIcon, Archive, ArrowDown, ArrowDownToLine, History, Trash2 } from 'lucide-vue-next'
   import Button from '@/components/game/Button.vue'
@@ -544,7 +545,7 @@
   function onPersonaChosen() {
     showPersonaSelect.value = false
     systemStore.pendingAwakening = false
-    systemStore.openPanel()
+    systemStore.tryConnect()
   }
 
   /** 日志弹窗 */
@@ -585,7 +586,7 @@
   onMounted(() => startClock())
   onUnmounted(() => stopClock())
 
-  // 弹窗打开时自动暂停时钟，全部关闭后恢复
+  // 弹窗打开时自动暂停时钟 + 锁定背景滚动，全部关闭后恢复
   watch(
     () =>
       !!(
@@ -600,8 +601,13 @@
         showSleepConfirm.value
       ),
     hasModal => {
-      if (hasModal) pauseClock()
-      else resumeClock()
+      if (hasModal) {
+        pauseClock()
+        lockBodyScroll()
+      } else {
+        resumeClock()
+        unlockBodyScroll()
+      }
     }
   )
 

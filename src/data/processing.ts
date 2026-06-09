@@ -234,6 +234,7 @@ export const PROCESSING_RECIPES: ProcessingRecipeDef[] = [
     name: '西瓜酒',
     inputItemId: 'watermelon',
     inputQuantity: 1,
+    maxInputQuantity: 3,
     outputItemId: 'watermelon_wine',
     outputQuantity: 1,
     processingDays: 3,
@@ -245,6 +246,7 @@ export const PROCESSING_RECIPES: ProcessingRecipeDef[] = [
     name: '桂花酿',
     inputItemId: 'osmanthus',
     inputQuantity: 1,
+    maxInputQuantity: 3,
     outputItemId: 'osmanthus_wine',
     outputQuantity: 1,
     processingDays: 3,
@@ -256,6 +258,7 @@ export const PROCESSING_RECIPES: ProcessingRecipeDef[] = [
     name: '米醋',
     inputItemId: 'rice',
     inputQuantity: 2,
+    maxInputQuantity: 3,
     outputItemId: 'rice_vinegar',
     outputQuantity: 1,
     processingDays: 3,
@@ -392,6 +395,7 @@ export const PROCESSING_RECIPES: ProcessingRecipeDef[] = [
     name: '桃花酒',
     inputItemId: 'peach',
     inputQuantity: 1,
+    maxInputQuantity: 3,
     outputItemId: 'peach_wine',
     outputQuantity: 1,
     processingDays: 3,
@@ -403,6 +407,7 @@ export const PROCESSING_RECIPES: ProcessingRecipeDef[] = [
     name: '红枣酒',
     inputItemId: 'jujube',
     inputQuantity: 1,
+    maxInputQuantity: 3,
     outputItemId: 'jujube_wine',
     outputQuantity: 1,
     processingDays: 3,
@@ -414,6 +419,7 @@ export const PROCESSING_RECIPES: ProcessingRecipeDef[] = [
     name: '玉米酒',
     inputItemId: 'corn',
     inputQuantity: 2,
+    maxInputQuantity: 3,
     outputItemId: 'corn_wine',
     outputQuantity: 1,
     processingDays: 3,
@@ -1670,6 +1676,7 @@ export const PROCESSING_RECIPES: ProcessingRecipeDef[] = [
     name: '仙人掌酒',
     inputItemId: 'hanhai_cactus',
     inputQuantity: 3,
+    maxInputQuantity: 3,
     outputItemId: 'cactus_wine',
     outputQuantity: 1,
     processingDays: 3,
@@ -1681,6 +1688,7 @@ export const PROCESSING_RECIPES: ProcessingRecipeDef[] = [
     name: '椰枣酒',
     inputItemId: 'hanhai_date',
     inputQuantity: 3,
+    maxInputQuantity: 3,
     outputItemId: 'date_wine',
     outputQuantity: 1,
     processingDays: 3,
@@ -1984,8 +1992,15 @@ export const getProcessingRecipeById = (id: string): ProcessingRecipeDef | undef
 /** 配方单次最多投入数 */
 export const getRecipeMaxInput = (recipe: ProcessingRecipeDef): number => recipe.maxInputQuantity ?? recipe.inputQuantity
 
-/** 配方单次最少投入数 */
-export const getRecipeMinInput = (recipe: ProcessingRecipeDef): number => recipe.inputQuantity
+/** 配方单次最少投入数（批量配方为最少批次数 1） */
+export const getRecipeMinInput = (recipe: ProcessingRecipeDef): number =>
+  recipe.maxInputQuantity ? 1 : recipe.inputQuantity
+
+/** 批量配方实际消耗原料数 */
+export const getMaterialInputQuantity = (recipe: ProcessingRecipeDef, batchCount: number): number =>
+  recipe.maxInputQuantity && recipe.machineType !== 'furnace'
+    ? batchCount * recipe.inputQuantity
+    : batchCount
 
 /** 根据实际投入数计算产出数量 */
 export const getOutputQuantityForInput = (recipe: ProcessingRecipeDef, inputAmount: number): number => {
@@ -1997,6 +2012,7 @@ export const getOutputQuantityForInput = (recipe: ProcessingRecipeDef, inputAmou
 export const getSlotInputAmount = (recipe: ProcessingRecipeDef, slot: { inputAmount?: number }): number => {
   if (slot.inputAmount !== undefined) return slot.inputAmount
   if (recipe.maxInputQuantity && recipe.machineType === 'furnace') return 5
+  if (recipe.maxInputQuantity && recipe.machineType === 'wine_workshop') return 1
   return recipe.inputQuantity
 }
 

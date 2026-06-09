@@ -43,6 +43,7 @@ import { useWalletStore } from './useWalletStore'
 import { useSecretNoteStore } from './useSecretNoteStore'
 import { useHiddenNpcStore } from './useHiddenNpcStore'
 import type { SkullCavernFloorDef } from '@/data/mine'
+import { ACTION_TIME_COSTS } from '@/data/timeConstants'
 
 const DEFEAT_MONEY_PENALTY_RATE = 0.1
 const DEFEAT_MONEY_PENALTY_CAP = 15000
@@ -1451,6 +1452,122 @@ export const useMiningStore = defineStore('mining', () => {
     return { success: true, message: `使用了怪物诱饵！本层增加了${monstersToAdd}只怪物。` }
   }
 
+  // ==================== 一键探索 ====================
+
+  /** 计算翻开格子体力消耗（不扣除，仅估算） */
+  const calcRevealStaminaCost = (): number => {
+    const pickaxeMultiplier = inventoryStore.getToolStaminaMultiplier('pickaxe')
+    const cookingStore = useCookingStore()
+    const miningBuff = cookingStore.activeBuff?.type === 'mining' ? cookingStore.activeBuff.value / 100 : 0
+    const walletStore = useWalletStore()
+    const walletMiningReduction = walletStore.getMiningStaminaReduction()
+    const ringMiningReduction = inventoryStore.getRingEffectValue('mining_stamina')
+    const ringGlobalReduction = inventoryStore.getRingEffectValue('stamina_reduction')
+    const spiritMiningReduction = useHiddenNpcStore().getAbilityValue('shan_weng_1') / 100
+    return Math.max(
+      1,
+      Math.floor(
+        2 *
+          pickaxeMultiplier *
+          (1 - skillStore.getStaminaReduction('mining')) *
+          (1 - miningBuff) *
+          (1 - walletMiningReduction) *
+          (1 - ringMiningReduction) *
+          (1 - ringGlobalReduction) *
+          (1 - spiritMiningReduction)
+      )
+    )
+  }
+
+  /**
+   * 一键探索：从上到下逐格翻开，遇怪自动逃跑。
+   * 停止条件：HP < 30 / 体力不足 / 找到可用楼梯 / 遭遇BOSS / 被击败 / 过凌晨2点。
+   * 返回所有探索消息。
+   */
+  const autoExplore = (): { messages: string[]; passedOut: boolean } => {
+    const messages: string[] = []
+
+    if (!isExploring.value) {
+      return { messages: ['你不在矿洞中。'], passedOut: false }
+    }
+    if (inCombat.value) {
+      return { messages: ['战斗中无法自动探索。'], passedOut: false }
+    }
+
+    const gs = useGameStore()
+    if (gs.isPastBedtime) {
+      return { messages: ['太晚了，无法继续探索。'], passedOut: false }
+    }
+
+    if (!inventoryStore.isToolAvailable('pickaxe')) {
+      return { messages: ['镐正在升级中，无法探索。'], passedOut: false }
+    }
+
+    const costPerTile = calcRevealStaminaCost()
+    let passedOut = false
+
+    // 从上到下遍历 6×6 格子（index 0-35 即从上到下逐行）
+    for (const tile of floorGrid.value) {
+      // 探索过程中被中断（被击败/手动离开等）
+      if (!isExploring.value || inCombat.value) break
+
+      if (tile.state !== 'hidden') continue
+      if (!canRevealTile(tile.index)) continue
+
+      // HP 保护
+      if (playerStore.hp < 30) {
+        messages.push('HP低于30，自动停止探索。')
+        break
+      }
+
+      // 体力预检
+      if (playerStore.stamina < costPerTile) {
+        messages.push('体力不足，自动停止探索。')
+        break
+      }
+
+      const result = revealTile(tile.index)
+      if (!result.success) {
+        messages.push(result.message)
+        break
+      }
+      messages.push(result.message)
+
+      // 推进时间
+      const timeCost = result.startsCombat ? ACTION_TIME_COSTS.combat : ACTION_TIME_COSTS.revealTile
+      const tr = gs.advanceTime(timeCost)
+      if (tr.message) messages.push(tr.message)
+
+      // 遇怪处理
+      if (result.startsCombat) {
+        if (combatIsBoss.value) {
+          messages.push('遭遇BOSS，自动停止探索。')
+          break
+        }
+        const fleeResult = combatAction('flee')
+        messages.push(fleeResult.message)
+      }
+
+      // 被击败（陷阱致死或战斗中阵亡）
+      if (!isExploring.value) break
+
+      // 筋疲力尽
+      if (tr.passedOut) {
+        messages.push('体力耗尽，无法继续探索。')
+        passedOut = true
+        break
+      }
+
+      // 找到可用楼梯 → 停止
+      if (stairsFound.value && stairsUsable.value) {
+        messages.push('发现可用楼梯，自动停止探索。')
+        break
+      }
+    }
+
+    return { messages, passedOut }
+  }
+
   // ==================== 序列化 ====================
 
   const serialize = () => {
@@ -1547,6 +1664,8 @@ export const useMiningStore = defineStore('mining', () => {
     combatAction,
     useCombatItem,
     useMonsterLure,
+    autoExplore,
+    calcRevealStaminaCost,
     goNextFloor,
     leaveMine,
     serialize,

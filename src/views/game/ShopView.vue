@@ -1009,7 +1009,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed } from 'vue'
+  import { ref, computed, watch } from 'vue'
   import {
     ShoppingCart,
     Coins,
@@ -1050,6 +1050,7 @@
   import { SHOP_SHOES, CRAFTABLE_SHOES } from '@/data/shoes'
   import { HAY_PRICE } from '@/data/animals'
   import { addLog } from '@/composables/useGameLog'
+  import { lockBodyScroll, unlockBodyScroll } from '@/composables/useScrollLock'
   import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
   import { sfxBuy } from '@/composables/useAudio'
   import { showFloat } from '@/composables/useGameLog'
@@ -1928,6 +1929,18 @@
   }
 
   const showSellFilterModal = ref(false)
+
+  // 弹窗打开时锁定背景滚动，防止 iOS Safari 滚动穿透
+  watch(
+    () =>
+      showSellAllConfirm.value ||
+      showSellFilterModal.value ||
+      shopModal.value !== null,
+    hasModal => {
+      if (hasModal) lockBodyScroll()
+      else unlockBodyScroll()
+    }
+  )
   const sellFilter = ref<ItemCategory[]>([])
   const tempSellFilter = ref<Set<ItemCategory>>(new Set())
 

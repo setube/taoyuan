@@ -113,6 +113,24 @@
                   </div>
                   <p v-else class="text-xs text-muted">{{ onlyAvailable ? '没有材料足够的配方' : '无可用配方' }}</p>
                 </template>
+                <!-- 酒坊：1～3 批 -->
+                <template v-else-if="slot.machineType === 'wine_workshop'">
+                  <p class="text-[10px] text-muted mb-1">选择配方，一次最多酿 3 批</p>
+                  <div v-if="getFilteredRecipes('wine_workshop').length > 0" class="grid space-y-1">
+                    <Button
+                      v-for="recipe in getFilteredRecipes('wine_workshop')"
+                      :key="recipe.id"
+                      :disabled="!recipe.inputItemId || !hasBatchMaterials(recipe, 1)"
+                      @click="openBatchModal(originalIndex, recipe.id)"
+                    >
+                      {{ recipe.name }}
+                      <span v-if="recipe.inputItemId" class="text-muted">
+                        ({{ getItemName(recipe.inputItemId) }} {{ getCombinedItemCount(recipe.inputItemId) }})
+                      </span>
+                    </Button>
+                  </div>
+                  <p v-else class="text-xs text-muted">{{ onlyAvailable ? '没有材料足够的配方' : '无可用配方' }}</p>
+                </template>
                 <!-- 熔炉：同类矿石，每次最多5个 -->
                 <template v-else-if="slot.machineType === 'furnace'">
                   <p class="text-[10px] text-muted mb-1">选择同类矿石，一次最多投入5个（1:1产出锭）</p>
@@ -121,7 +139,7 @@
                       v-for="recipe in getFilteredRecipes('furnace')"
                       :key="recipe.id"
                       :disabled="!recipe.inputItemId || !hasCombinedItem(recipe.inputItemId, 1)"
-                      @click="openFurnaceBatchModal(originalIndex, recipe.id)"
+                      @click="openBatchModal(originalIndex, recipe.id)"
                     >
                       {{ getItemName(recipe.inputItemId!) }} → {{ recipe.name }}
                       <span class="text-muted">(库存{{ getCombinedItemCount(recipe.inputItemId!) }})</span>
@@ -295,41 +313,43 @@
       </div>
     </Transition>
 
-    <!-- 熔炉投入数量 -->
+    <!-- 熔炉/酒坊批量投入 -->
     <Transition name="panel-fade">
       <div
-        v-if="furnaceBatchModal"
+        v-if="batchModal"
         class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
-        @click.self="furnaceBatchModal = null"
+        @click.self="batchModal = null"
       >
         <div class="game-panel max-w-xs w-full relative">
-          <button class="absolute top-2 right-2 text-muted hover:text-text" @click="furnaceBatchModal = null">
+          <button class="absolute top-2 right-2 text-muted hover:text-text" @click="batchModal = null">
             <X :size="14" />
           </button>
-          <p class="text-sm text-accent mb-2">投入数量</p>
-          <p v-if="furnaceBatchRecipe" class="text-xs text-muted mb-2">
-            {{ getItemName(furnaceBatchRecipe.inputItemId!) }} → {{ furnaceBatchRecipe.name }}（库存
-            {{ getCombinedItemCount(furnaceBatchRecipe.inputItemId!) }}，最多5个）
+          <p class="text-sm text-accent mb-2">{{ batchModal?.machineType === 'wine_workshop' ? '酿造批数' : '投入数量' }}</p>
+          <p v-if="batchRecipe" class="text-xs text-muted mb-2">
+            {{ getItemName(batchRecipe.inputItemId!) }} → {{ batchRecipe.name }}（库存
+            {{ getCombinedItemCount(batchRecipe.inputItemId!) }}，最多{{ batchMaxQty }}批）
           </p>
           <div class="flex space-x-1 mb-3">
             <Button
-              v-for="n in 5"
+              v-for="n in batchMaxQty"
               :key="n"
               class="flex-1 justify-center"
-              :class="{ '!bg-accent !text-bg': furnaceBatchQty === n }"
-              :disabled="!furnaceBatchRecipe || !hasCombinedItem(furnaceBatchRecipe.inputItemId!, n)"
-              @click="furnaceBatchQty = n"
+              :class="{ '!bg-accent !text-bg': batchQty === n }"
+              :disabled="!batchRecipe || !hasBatchMaterials(batchRecipe, n)"
+              @click="batchQty = n"
             >
               {{ n }}
             </Button>
           </div>
-          <p class="text-xs text-muted mb-2 text-center">将产出 {{ furnaceBatchQty }} 个{{ furnaceBatchRecipe?.name ?? '金属锭' }}</p>
+          <p class="text-xs text-muted mb-2 text-center">
+            将产出 {{ batchRecipe ? getOutputQuantityForInput(batchRecipe, batchQty) : batchQty }} 个{{ batchRecipe?.name ?? '产物' }}
+          </p>
           <Button
             class="w-full justify-center !bg-accent !text-bg"
-            :disabled="!furnaceBatchRecipe || !hasCombinedItem(furnaceBatchRecipe.inputItemId!, furnaceBatchQty)"
-            @click="confirmFurnaceBatch"
+            :disabled="!batchRecipe || !hasBatchMaterials(batchRecipe, batchQty)"
+            @click="confirmBatch"
           >
-            开始冶炼
+            {{ batchModal?.machineType === 'wine_workshop' ? '开始酿造' : '开始冶炼' }}
           </Button>
         </div>
       </div>
@@ -451,8 +471,9 @@
     BOMBS,
     getProcessingRecipeById,
     getRecipeMaxInput,
-    getRecipeMinInput,
+    getMaterialInputQuantity,
     getOutputQuantityForInput,
+    getRecipeMinInput,
     getSlotInputAmount
   } from '@/data/processing'
   import { getItemById, CHEST_DEFS, CHEST_TIER_ORDER } from '@/data/items'
@@ -483,29 +504,48 @@
     })
   }
 
-  const furnaceBatchModal = ref<{ slotIndex: number; recipeId: string } | null>(null)
-  const furnaceBatchQty = ref(1)
+  const batchModal = ref<{ slotIndex: number; recipeId: string; machineType: MachineType } | null>(null)
+  const batchQty = ref(1)
 
-  const furnaceBatchRecipe = computed((): ProcessingRecipeDef | null => {
-    const id = furnaceBatchModal.value?.recipeId
+  const batchRecipe = computed((): ProcessingRecipeDef | null => {
+    const id = batchModal.value?.recipeId
     if (!id) return null
     return getProcessingRecipeById(id) ?? null
   })
 
-  const openFurnaceBatchModal = (slotIndex: number, recipeId: string) => {
-    const recipe = getProcessingRecipeById(recipeId)
-    if (!recipe?.inputItemId) return
-    const stock = getCombinedItemCount(recipe.inputItemId)
-    if (stock < 1) return
-    furnaceBatchQty.value = Math.min(getRecipeMaxInput(recipe), stock)
-    furnaceBatchModal.value = { slotIndex, recipeId }
+  const batchMaxQty = computed(() => {
+    const recipe = batchRecipe.value
+    if (!recipe) return 5
+    return getRecipeMaxInput(recipe)
+  })
+
+  const hasBatchMaterials = (recipe: ProcessingRecipeDef, batches: number): boolean => {
+    if (!recipe.inputItemId) return false
+    if (recipe.machineType === 'furnace') return hasCombinedItem(recipe.inputItemId, batches)
+    return hasCombinedItem(recipe.inputItemId, getMaterialInputQuantity(recipe, batches))
   }
 
-  const confirmFurnaceBatch = () => {
-    const modal = furnaceBatchModal.value
+  const openBatchModal = (slotIndex: number, recipeId: string) => {
+    const recipe = getProcessingRecipeById(recipeId)
+    if (!recipe?.inputItemId) return
+    const maxB = getRecipeMaxInput(recipe)
+    let defaultB = 1
+    for (let n = maxB; n >= 1; n--) {
+      if (hasBatchMaterials(recipe, n)) {
+        defaultB = n
+        break
+      }
+    }
+    if (!hasBatchMaterials(recipe, 1)) return
+    batchQty.value = defaultB
+    batchModal.value = { slotIndex, recipeId, machineType: recipe.machineType }
+  }
+
+  const confirmBatch = () => {
+    const modal = batchModal.value
     if (!modal) return
-    handleStartProcessing(modal.slotIndex, modal.recipeId, undefined, furnaceBatchQty.value)
-    furnaceBatchModal.value = null
+    handleStartProcessing(modal.slotIndex, modal.recipeId, undefined, batchQty.value)
+    batchModal.value = null
   }
 
   const QUALITY_ORDER: Quality[] = ['normal', 'fine', 'excellent', 'supreme']

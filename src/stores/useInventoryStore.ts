@@ -24,7 +24,7 @@ import { useAchievementStore } from './useAchievementStore'
 import { hasCombinedItem, removeCombinedItem } from '@/composables/useCombinedInventory'
 
 const INITIAL_CAPACITY = 24
-const MAX_CAPACITY = 60
+const MAX_CAPACITY = 128
 const MAX_STACK = 999
 const TEMP_CAPACITY = 10
 
@@ -152,17 +152,23 @@ export const useInventoryStore = defineStore('inventory', () => {
   }
 
   /** 添加物品到背包 */
-  const addItem = (itemId: string, quantity: number = 1, quality: Quality = 'normal'): boolean => {
+  const addItem = (itemId: string, quantity: number = 1, quality: Quality = 'normal', fromGreenhouse?: boolean): boolean => {
     // 校验物品是否存在
     if (!getItemById(itemId)) return false
     // 自动注册到图鉴
     useAchievementStore().discoverItem(itemId)
     let remaining = quantity
 
-    // 先填充已有的同类栈
+    // 先填充已有的同类栈（优先同标志的栈）
     for (const slot of items.value) {
       if (remaining <= 0) break
       if (slot.itemId === itemId && slot.quality === quality && slot.quantity < MAX_STACK) {
+        // 优先同 fromGreenhouse 标志的栈；无标志则合并到任意
+        if (fromGreenhouse !== undefined && slot.fromGreenhouse !== fromGreenhouse) {
+          if (slot.fromGreenhouse !== undefined) continue
+          // 无标志的栈接收 greenhouse 标记
+          if (fromGreenhouse) slot.fromGreenhouse = true
+        }
         const canAdd = Math.min(remaining, MAX_STACK - slot.quantity)
         slot.quantity += canAdd
         remaining -= canAdd
@@ -172,7 +178,7 @@ export const useInventoryStore = defineStore('inventory', () => {
     // 剩余部分创建新栈
     while (remaining > 0 && !isFull.value) {
       const batch = Math.min(remaining, MAX_STACK)
-      items.value.push({ itemId, quantity: batch, quality })
+      items.value.push({ itemId, quantity: batch, quality, fromGreenhouse })
       remaining -= batch
     }
 

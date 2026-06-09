@@ -89,6 +89,10 @@ body.no-select {
 }
 
 /* 全局基础样式 */
+html {
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   background-color: rgb(var(--color-bg));
@@ -98,6 +102,7 @@ body {
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: unset;
   image-rendering: pixelated;
+  overscroll-behavior: none;
 }
 
 button {
@@ -162,6 +167,7 @@ button {
   border-radius: 2px;
   padding: var(--spacing-3);
   position: relative;
+  overscroll-behavior: contain;
 }
 
 @media (min-width: 768px) {
@@ -197,12 +203,20 @@ input[type='number'] {
 }
 
 /* 面板切换过渡 */
+/* iOS Safari fixed 元素 + opacity 过渡会触发合成层 bug，导致触摸事件无法命中。
+   通过 translateZ(0) 强制提升到独立合成层 + will-change 预声明来解决。 */
 .panel-fade-enter-active {
   transition: opacity 0.2s ease-in;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: opacity;
 }
 
 .panel-fade-leave-active {
   transition: opacity 0.15s ease-out;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: opacity;
 }
 
 .panel-fade-enter-from,

@@ -59,6 +59,7 @@ export type PanelKey =
   | 'hanhai'
   | 'fishpond'
   | 'cottage'
+  | 'tavern'
   | 'bank'
 
 export const TABS: { key: PanelKey; label: string; icon: Component; getIcon?: () => Component }[] = [

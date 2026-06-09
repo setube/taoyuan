@@ -147,6 +147,7 @@
   import { UtensilsCrossed, Zap, X, Minus, Plus } from 'lucide-vue-next'
   import { useAchievementStore } from '@/stores/useAchievementStore'
   import { useCookingStore } from '@/stores/useCookingStore'
+  import { useSkillStore } from '@/stores/useSkillStore'
   import { useGameStore } from '@/stores/useGameStore'
   import { useTutorialStore } from '@/stores/useTutorialStore'
   import { getCombinedItemCount } from '@/composables/useCombinedInventory'
@@ -163,6 +164,7 @@
   const gameStore = useGameStore()
   const achievementStore = useAchievementStore()
   const tutorialStore = useTutorialStore()
+  const skillStore = useSkillStore()
 
   const showOnlyMakeable = ref(false)
   const modalRecipeId = ref<string | null>(null)
@@ -241,7 +243,9 @@
     const result = cookingStore.cook(modalInfo.value.recipe.id, qty)
     sfxClick()
     addLog(result.message)
-    const tr = gameStore.advanceTime(ACTION_TIME_COSTS.cook * qty)
+    const cookingLevel = skillStore.getSkill('cooking').level
+    const timeMult = Math.max(0.7, 1 - cookingLevel * 0.03)
+    const tr = gameStore.advanceTime(Math.floor(ACTION_TIME_COSTS.cook * qty * timeMult))
     if (tr.message) addLog(tr.message)
     closeModal()
     if (tr.passedOut) handleEndDay()

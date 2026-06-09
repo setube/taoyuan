@@ -537,7 +537,8 @@
     foraging: '采集',
     fishing: '钓鱼',
     mining: '挖矿',
-    combat: '战斗'
+    combat: '战斗',
+    cooking: '烹饪'
   }
 
   const PERK_NAMES: Record<SkillPerk5 | SkillPerk10, string> = {
@@ -570,7 +571,13 @@
     warrior: '武者',
     brute: '蛮力者',
     acrobat: '杂技师',
-    tank: '重甲者'
+    tank: '重甲者',
+    prep_cook: '备料手',
+    vendor_chef: '市厨',
+    double_batch: '双灶',
+    gourmet_craft: '匠心',
+    buff_chef: '膳修',
+    tavern_master: '肆尊'
   }
 
   // === 被动 ===

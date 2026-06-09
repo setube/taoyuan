@@ -106,3 +106,12 @@ export const getLowestCombinedQuality = (itemId: string): Quality => {
   }
   return 'normal'
 }
+
+/** 检查背包中是否有温室来源的指定果实 */
+export const hasGreenhouseFruit = (itemId: string): boolean => {
+  const inv = useInventoryStore()
+  for (const slot of inv.items) {
+    if (slot.itemId === itemId && slot.fromGreenhouse) return true
+  }
+  return false
+}

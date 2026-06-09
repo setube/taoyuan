@@ -99,6 +99,9 @@ export const useFishingStore = defineStore('fishing', () => {
   const activeBaitDef = ref<BaitDef | null>(null)
   const activeTackleDef = ref<TackleDef | null>(null)
 
+  /** 当次上钩鱼的预掷品质（影响小游戏进度，完成时作为基础品质） */
+  const sessionFishQuality = ref<Quality | null>(null)
+
   /** 蟹笼 */
   const crabPots = ref<CrabPotState[]>([])
 
@@ -209,9 +212,10 @@ export const useFishingStore = defineStore('fishing', () => {
       return { success: true, junk: true, message: `钓上了${junkName}……(-${staminaCost}体力)` }
     }
 
-    // 随机选一条鱼
+    // 随机选一条鱼，并预掷品质（影响收线进度与最终基础品质）
     const fish = pickRandomFish(fishPool)
     currentFish.value = fish
+    sessionFishQuality.value = skillStore.rollCropQuality()
     lastTreasure.value = null
     lastPerfect.value = false
 
@@ -241,10 +245,36 @@ export const useFishingStore = defineStore('fishing', () => {
     let fishSpeed = fish.miniGameSpeed ?? difficultySpeedMap[fish.difficulty] ?? 2.0
     let fishChangeDir = fish.miniGameDirChange ?? difficultyDirMap[fish.difficulty] ?? 0.04
 
-    // 物理参数（scoreGain 为每帧重叠时进度增量，约 60fps）
+    // 物理参数（scoreGain/scoreLoss 为每帧进度变化，约 60fps）
     let gravity = 1.5
-    let scoreGain = 0.28
-    let scoreLoss = 0.08
+    const quality = sessionFishQuality.value ?? 'normal'
+    const difficultyProgress: Record<string, { gain: number; loss: number }> = {
+      easy: { gain: 1.12, loss: 0.88 },
+      normal: { gain: 1.0, loss: 1.0 },
+      hard: { gain: 0.86, loss: 1.18 },
+      legendary: { gain: 0.72, loss: 1.42 }
+    }
+    const rodProgress: Record<ToolTier, { gain: number; loss: number }> = {
+      basic: { gain: 1.0, loss: 1.0 },
+      iron: { gain: 1.06, loss: 0.96 },
+      steel: { gain: 1.12, loss: 0.92 },
+      iridium: { gain: 1.2, loss: 0.88 }
+    }
+    const qualityProgress: Record<Quality, { gain: number; loss: number }> = {
+      normal: { gain: 1.0, loss: 1.0 },
+      fine: { gain: 0.92, loss: 1.08 },
+      excellent: { gain: 0.84, loss: 1.16 },
+      supreme: { gain: 0.75, loss: 1.28 }
+    }
+    const diffMod = difficultyProgress[fish.difficulty] ?? { gain: 1, loss: 1 }
+    const rodMod = rodProgress[rodTier]
+    const qualMod = qualityProgress[quality]
+    const levelGainMult = 1 + level * 0.035
+    const levelLossMult = Math.max(0.65, 1 - level * 0.03)
+    let scoreGain = 0.28 * levelGainMult * rodMod.gain * diffMod.gain * qualMod.gain
+    let scoreLoss = 0.08 * levelLossMult * rodMod.loss * diffMod.loss * qualMod.loss
+    scoreGain = Math.max(0.08, Math.min(0.45, scoreGain))
+    scoreLoss = Math.max(0.03, Math.min(0.2, scoreLoss))
 
     // 鱼饵效果
     if (activeBaitDef.value?.behaviorModifier) {
@@ -365,9 +395,9 @@ export const useFishingStore = defineStore('fishing', () => {
       }
     }
 
-    // 品质计算
+    // 品质计算（基础上使用上钩时预掷的品质）
     const qualityOrder: Quality[] = ['normal', 'fine', 'excellent', 'supreme']
-    let quality: Quality = skillStore.rollCropQuality()
+    let quality: Quality = sessionFishQuality.value ?? skillStore.rollCropQuality()
     // 水手专精：鱼品质至少为优良
     if (skillStore.getSkill('fishing').perk10 === 'mariner' && quality === 'normal') {
       quality = 'fine'
@@ -521,6 +551,7 @@ export const useFishingStore = defineStore('fishing', () => {
     currentFish.value = null
     activeBaitDef.value = null
     activeTackleDef.value = null
+    sessionFishQuality.value = null
   }
 
   // =========== 蟹笼系统 ===========

@@ -14,6 +14,7 @@ import {
   getProcessingRecipeById,
   getRecipeMaxInput,
   getRecipeMinInput,
+  getMaterialInputQuantity,
   getOutputQuantityForInput,
   getSlotInputAmount
 } from '@/data/processing'
@@ -183,9 +184,11 @@ export const useProcessingStore = defineStore('processing', () => {
     const minIn = getRecipeMinInput(recipe)
     const maxIn = getRecipeMaxInput(recipe)
     let consumeQty = recipe.inputQuantity
+    let batchCount: number | undefined
     if (recipe.maxInputQuantity) {
-      consumeQty = inputAmount ?? maxIn
-      consumeQty = Math.max(minIn, Math.min(maxIn, consumeQty))
+      batchCount = inputAmount ?? (recipe.machineType === 'furnace' ? maxIn : 1)
+      batchCount = Math.max(minIn, Math.min(maxIn, batchCount))
+      consumeQty = getMaterialInputQuantity(recipe, batchCount)
     }
 
     // 消耗输入材料（蜂箱无需输入），记录投入品质
@@ -202,7 +205,7 @@ export const useProcessingStore = defineStore('processing', () => {
 
     slot.recipeId = recipeId
     slot.inputItemId = recipe.inputItemId
-    slot.inputAmount = recipe.maxInputQuantity ? consumeQty : undefined
+    slot.inputAmount = recipe.maxInputQuantity ? batchCount : undefined
     slot.inputQuality = quality
     slot.daysProcessed = 0
     slot.totalDays = recipe.processingDays
@@ -274,7 +277,12 @@ export const useProcessingStore = defineStore('processing', () => {
     else if (slot.recipeId && !slot.ready && slot.inputItemId) {
       const recipe = getProcessingRecipeById(slot.recipeId)
       if (recipe && recipe.inputItemId) {
-        inventoryStore.addItem(recipe.inputItemId, getSlotInputAmount(recipe, slot), slot.inputQuality ?? 'normal')
+        const batches = getSlotInputAmount(recipe, slot)
+        inventoryStore.addItem(
+          recipe.inputItemId,
+          getMaterialInputQuantity(recipe, batches),
+          slot.inputQuality ?? 'normal'
+        )
       }
     }
 
@@ -299,7 +307,12 @@ export const useProcessingStore = defineStore('processing', () => {
     if (!slot.ready && slot.inputItemId) {
       const recipe = getProcessingRecipeById(slot.recipeId)
       if (recipe && recipe.inputItemId) {
-        inventoryStore.addItem(recipe.inputItemId, getSlotInputAmount(recipe, slot), slot.inputQuality ?? 'normal')
+        const batches = getSlotInputAmount(recipe, slot)
+        inventoryStore.addItem(
+          recipe.inputItemId,
+          getMaterialInputQuantity(recipe, batches),
+          slot.inputQuality ?? 'normal'
+        )
       }
     }
     // 重置为空闲
@@ -385,14 +398,23 @@ export const useProcessingStore = defineStore('processing', () => {
               const desiredBatch = getSlotInputAmount(recipe, slot)
               const minIn = getRecipeMinInput(recipe)
               const maxIn = getRecipeMaxInput(recipe)
-              const nextBatch = recipe.maxInputQuantity
-                ? Math.max(minIn, Math.min(desiredBatch, maxIn, available))
+              let nextBatch = recipe.maxInputQuantity
+                ? Math.max(minIn, Math.min(desiredBatch, maxIn))
                 : desiredBatch
-              if (available >= nextBatch && nextBatch >= minIn) {
+              const needMaterial = recipe.maxInputQuantity
+                ? getMaterialInputQuantity(recipe, nextBatch)
+                : nextBatch
+              while (nextBatch > minIn && available < needMaterial) {
+                nextBatch--
+              }
+              const finalNeed = recipe.maxInputQuantity
+                ? getMaterialInputQuantity(recipe, nextBatch)
+                : nextBatch
+              if (available >= finalNeed && nextBatch >= minIn) {
                 // 查找最低品质
                 const qOrder: Quality[] = ['normal', 'fine', 'excellent', 'supreme']
                 const newQuality = qOrder.find(q => warehouseStore.getChestItemCount(voidInput.id, recipe.inputItemId!, q) > 0) ?? 'normal'
-                warehouseStore.removeItemFromChest(voidInput.id, recipe.inputItemId, nextBatch, newQuality)
+                warehouseStore.removeItemFromChest(voidInput.id, recipe.inputItemId, finalNeed, newQuality)
                 slot.daysProcessed = 0
                 slot.inputAmount = recipe.maxInputQuantity ? nextBatch : undefined
                 slot.inputQuality = newQuality

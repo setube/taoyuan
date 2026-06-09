@@ -252,6 +252,7 @@
   import { useCookingStore } from '@/stores/useCookingStore'
   import { useGameStore, SEASON_NAMES } from '@/stores/useGameStore'
   import { useInventoryStore } from '@/stores/useInventoryStore'
+  import { useWarehouseStore } from '@/stores/useWarehouseStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
   import { useQuestStore } from '@/stores/useQuestStore'
   import { useSkillStore } from '@/stores/useSkillStore'
@@ -277,6 +278,7 @@
 
   const playerStore = usePlayerStore()
   const inventoryStore = useInventoryStore()
+  const warehouseStore = useWarehouseStore()
   const skillStore = useSkillStore()
   const gameStore = useGameStore()
   const achievementStore = useAchievementStore()
@@ -424,10 +426,18 @@
         const qty = forestFarm && Math.random() < 0.2 ? 2 : 1
         // 仙缘能力：药知（yue_tu_1）草药采集双倍
         const finalQty = herbDouble && (item.itemId === 'herb' || item.itemId === 'ginseng') ? qty * 2 : qty
-        inventoryStore.addItem(item.itemId, finalQty, quality)
+        const itemDef = getItemById(item.itemId)
+        // 材料类自动放入仓库
+        if (itemDef?.category === 'material' && warehouseStore.unlocked) {
+          const deposited = warehouseStore.depositToChest(warehouseStore.chests[0]?.id ?? '', item.itemId, finalQty, quality)
+          if (deposited < finalQty) {
+            inventoryStore.addItem(item.itemId, finalQty - deposited, quality)
+          }
+        } else {
+          inventoryStore.addItem(item.itemId, finalQty, quality)
+        }
         achievementStore.discoverItem(item.itemId)
         useQuestStore().onItemObtained(item.itemId, finalQty)
-        const itemDef = getItemById(item.itemId)
         const name = itemDef?.name ?? item.itemId
         gathered.push({ label: `获得了${finalQty > 1 ? `${name}×${finalQty}` : name}`, itemId: item.itemId, quantity: finalQty, quality })
         skillStore.addExp('foraging', Math.floor(item.expReward * forestXpBonus))

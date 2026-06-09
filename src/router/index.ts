@@ -13,6 +13,7 @@ const router = createRouter({
         { path: 'animal', name: 'animal', component: () => import('@/views/game/AnimalView.vue') },
         { path: 'home', name: 'home', component: () => import('@/views/game/HomeView.vue') },
         { path: 'cottage', name: 'cottage', component: () => import('@/views/game/CottageView.vue') },
+        { path: 'tavern', name: 'tavern', component: () => import('@/views/game/TavernView.vue') },
         { path: 'village', name: 'village', component: () => import('@/views/game/NpcView.vue') },
         { path: 'shop', name: 'shop', component: () => import('@/views/game/ShopView.vue') },
         { path: 'bank', name: 'bank', component: () => import('@/views/game/BankView.vue') },

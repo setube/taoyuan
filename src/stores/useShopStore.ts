@@ -343,6 +343,17 @@ export const useShopStore = defineStore('shop', () => {
     if (itemDef.category === 'fish' && skillStore.getSkill('fishing').perk10 === 'aquaculture') bonus *= 1.5
     if (itemDef.category === 'fish' && gameStore.farmMapType === 'riverland') bonus *= 1.1
     if (itemDef.category === 'ore' && skillStore.getSkill('mining').perk10 === 'blacksmith') bonus *= 1.5
+    if (
+      (itemDef.category === 'food' || itemId.startsWith('food_')) &&
+      skillStore.getSkill('cooking').perk5 === 'vendor_chef'
+    ) {
+      bonus *= 1.15
+    }
+    // 烹饪等级加成食物售价（每级+3%）
+    if (itemDef.category === 'food' || itemId.startsWith('food_')) {
+      const cookingLevel = skillStore.getSkill('cooking').level
+      bonus *= (1 + cookingLevel * 0.03)
+    }
     const ringSelBonus = inventoryStore.getRingEffectValue('sell_price_bonus')
     // 仙缘结缘：狐仙出售加成
     const hiddenNpcStore = useHiddenNpcStore()

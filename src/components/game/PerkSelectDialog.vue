@@ -40,7 +40,8 @@
     foraging: '采集',
     fishing: '钓鱼',
     mining: '挖矿',
-    combat: '战斗'
+    combat: '战斗',
+    cooking: '烹饪'
   }
 
   interface PerkOption {
@@ -69,6 +70,10 @@
     combat: [
       { id: 'fighter', name: '斗士', description: '受伤-15%，+25最大生命值' },
       { id: 'defender', name: '守护者', description: '防御时恢复5HP' }
+    ],
+    cooking: [
+      { id: 'prep_cook', name: '备料手', description: '烹饪时20%概率节省一种主料' },
+      { id: 'vendor_chef', name: '市厨', description: '食物售价+15%（当老板的选这个）' }
     ]
   }
 
@@ -122,6 +127,16 @@
       defender: [
         { id: 'acrobat', name: '杂技师', description: '25%概率闪避反击' },
         { id: 'tank', name: '重甲者', description: '防御时伤害减少70%' }
+      ]
+    },
+    cooking: {
+      prep_cook: [
+        { id: 'double_batch', name: '双灶', description: '烹饪成功15%概率额外+1份' },
+        { id: 'gourmet_craft', name: '匠心', description: '25%概率成品品质+1档' }
+      ],
+      vendor_chef: [
+        { id: 'buff_chef', name: '膳修', description: 'buff效果+30%，持续时段+1' },
+        { id: 'tavern_master', name: '肆尊', description: '酒肆经营加成：厨艺+2、失误-3%、食物指导价+10%' }
       ]
     }
   }

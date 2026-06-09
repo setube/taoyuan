@@ -10,6 +10,65 @@ const activeTab = ref<'chat' | 'quests' | 'shop'>('chat')
 
 const isMobile = computed(() => window.innerWidth < 768)
 
+/** 将简单 Markdown 转为安全 HTML，支持：**粗体**、*斜体*、有序列表、无序列表、换行 */
+function renderMarkdown(text: string): string {
+  // 先转义 HTML，防止注入
+  let html = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+
+  // **粗体**
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="text-accent font-bold">$1</strong>')
+
+  // *斜体*（仅在非 ** 上下文中）
+  html = html.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em class="italic">$1</em>')
+
+  // 按行处理列表
+  const lines = html.split('\n')
+  const result: string[] = []
+  let inOl = false
+  let inUl = false
+
+  function closeOl() {
+    if (inOl) { result.push('</ol>'); inOl = false }
+  }
+  function closeUl() {
+    if (inUl) { result.push('</ul>'); inUl = false }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const olMatch = line.match(/^(\d+)\.\s+(.+)/)
+    const ulMatch = line.match(/^[-*]\s+(.+)/)
+
+    if (olMatch) {
+      closeUl()
+      if (!inOl) {
+        result.push('<ol class="game-list game-ol my-1">')
+        inOl = true
+      }
+      result.push(`<li>${olMatch[2]}</li>`)
+    } else if (ulMatch) {
+      closeOl()
+      if (!inUl) {
+        result.push('<ul class="game-list game-ul my-1">')
+        inUl = true
+      }
+      result.push(`<li>${ulMatch[1]}</li>`)
+    } else {
+      closeOl()
+      closeUl()
+      // 空行 → 段落分隔
+      result.push(line || '<br>')
+    }
+  }
+  closeOl()
+  closeUl()
+
+  return result.join('\n')
+}
+
 function sendMessage() {
   const text = store.inputText.trim()
   if (!text) return
@@ -117,7 +176,12 @@ const meritShopItems = [
               :class="msg.role === 'system' ? 'text-accent/90' : 'text-gray-300 text-right'"
             >
               <span v-if="msg.role === 'system'" class="font-bold mr-1">{{ store.displayName }}：</span>
-              <span>{{ msg.content }}</span>
+              <div
+                v-if="msg.role === 'system'"
+                class="game-message whitespace-pre-wrap"
+                v-html="renderMarkdown(msg.content)"
+              />
+              <span v-else>{{ msg.content }}</span>
               <span
                 v-if="store.isStreaming && msg.id === store.streamingMessageId"
                 class="streaming-cursor"
@@ -245,5 +309,62 @@ const meritShopItems = [
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
+}
+
+/* 消息容器 */
+.game-message {
+  display: block;
+  color: inherit;
+}
+
+/* 通用列表样式 */
+.game-list {
+  list-style-type: none !important;
+  padding-left: 0.75rem;
+  margin: 0.25rem 0;
+}
+.game-list li {
+  position: relative;
+  padding-left: 0.75rem;
+  margin: 0.125rem 0;
+  line-height: 1.6;
+}
+
+/* 有序列表前置编号 */
+.game-ol {
+  counter-reset: md-ol;
+}
+.game-ol li {
+  counter-increment: md-ol;
+}
+.game-ol li::before {
+  content: counter(md-ol) ". ";
+  position: absolute;
+  left: 0;
+  color: #c8a96e;
+  font-weight: bold;
+}
+
+/* 无序列表前置圆点 */
+.game-ul li::before {
+  content: "·";
+  position: absolute;
+  left: 0;
+  color: #c8a96e;
+  font-weight: bold;
+  font-size: 1.2em;
+  line-height: 1;
+}
+
+/* 粗体 */
+:deep(strong) {
+  color: #c8a96e;
+  font-weight: bold;
+}
+
+/* 斜体 */
+:deep(em) {
+  font-style: italic;
+  color: #b8a080;
 }
 </style>

@@ -27,6 +27,19 @@
       </div>
     </div>
 
+    <!-- 灶台 -->
+    <div v-if="homeStore.farmhouseLevel >= 1" class="border border-accent/20 rounded-xs p-3 mb-4">
+      <div class="flex items-center justify-between mb-1">
+        <p class="text-sm text-accent">
+          <ChefHat :size="14" class="inline" />
+          灶台
+          <span class="text-[10px] text-muted ml-1">Lv.{{ skillStore.getSkill('cooking').level }}</span>
+        </p>
+        <Button class="py-0 px-1" @click="router.push({ name: 'cooking' })">进入烹饪</Button>
+      </div>
+      <p class="text-xs text-muted">制作品质受烹饪等级加成，等级越高制作越快。</p>
+    </div>
+
     <!-- 家人 -->
     <div v-if="npcStore.getSpouse()" class="border border-accent/20 rounded-xs p-3 mb-4">
       <p class="text-sm text-accent mb-2">
@@ -234,6 +247,27 @@
         <Hammer :size="32" class="mb-2" />
         <p class="text-xs">暂未雇佣</p>
       </div>
+    </div>
+
+    <!-- 前厅酒肆 -->
+    <div v-if="homeStore.farmhouseLevel >= 3" class="border border-accent/20 rounded-xs p-3 mb-4">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-sm text-accent">
+          <Beer :size="14" class="inline" />
+          前厅酒肆
+          <span v-if="tavernStore.isBuilt" class="text-[10px] text-muted ml-1">
+            {{ tavernStore.displayName }} · 口碑 {{ tavernStore.reputation }}
+          </span>
+        </p>
+        <Button v-if="tavernStore.isBuilt" class="py-0 px-1" @click="router.push({ name: 'tavern' })">进入经营</Button>
+      </div>
+      <template v-if="!tavernStore.isBuilt">
+        <p class="text-xs text-muted mb-2">扩建前厅，经营酒肆变现酒坊与烹饪产出。</p>
+        <Button class="w-full justify-center" :disabled="!canBuildTavern" @click="showBuildTavernModal = true">
+          建造前厅酒肆（80000 文）
+        </Button>
+      </template>
+      <p v-else class="text-xs text-muted">菜单 {{ activeMenuCount }} 项上架 · 今日{{ todayModeLabel }}</p>
     </div>
 
     <!-- 酒窖 -->
@@ -654,13 +688,59 @@
         </div>
       </div>
     </Transition>
+
+    <!-- 建造酒肆弹窗 -->
+    <Transition name="panel-fade">
+      <div
+        v-if="showBuildTavernModal"
+        class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+        @click.self="showBuildTavernModal = false"
+      >
+        <div class="game-panel max-w-xs w-full relative">
+          <button class="absolute top-2 right-2 text-muted hover:text-text" @click="showBuildTavernModal = false">
+            <X :size="14" />
+          </button>
+          <p class="text-sm text-accent mb-2">开张前厅酒肆</p>
+          <p class="text-xs text-muted mb-2">为你的酒肆取个店名（1～{{ TAVERN_NAME_MAX_LEN }} 字，可稍后修改）</p>
+          <input
+            v-model="buildTavernNameInput"
+            class="w-full text-xs bg-bg border border-accent/20 rounded-xs px-2 py-1.5 mb-3"
+            :maxlength="TAVERN_NAME_MAX_LEN"
+            placeholder="如：桃源小馆"
+          />
+          <div class="border border-accent/10 rounded-xs p-2 mb-3 space-y-1">
+            <p class="text-xs text-muted mb-1">初建费用</p>
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-muted">铜钱</span>
+              <span class="text-xs text-accent">80000 文</span>
+            </div>
+            <div v-for="mat in buildTavernMaterials" :key="mat.itemId" class="flex items-center justify-between">
+              <span class="text-xs text-muted">{{ getItemName(mat.itemId) }}</span>
+              <CombinedMaterialCount :item-id="mat.itemId" :required="mat.quantity" always-show-breakdown />
+            </div>
+          </div>
+          <Button
+            class="w-full justify-center"
+            :class="{ '!bg-accent !text-bg': canBuildTavern }"
+            :disabled="!canBuildTavern || !buildTavernNameInput.trim()"
+            @click="handleBuildTavern"
+          >
+            开张营业
+          </Button>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
   import { computed, ref } from 'vue'
-  import { ArrowUp, Calendar, Gift, Hammer, Home, Heart, MessageCircle, UserPlus, Users, Wine, X } from 'lucide-vue-next'
+  import { useRouter } from 'vue-router'
+  import { ArrowUp, Beer, Calendar, ChefHat, Gift, Hammer, Home, Heart, MessageCircle, UserPlus, Users, Wine, X } from 'lucide-vue-next'
+  import { useTavernStore } from '@/stores/useTavernStore'
+  import { getTavernUpgrade, TAVERN_NAME_MAX_LEN } from '@/data/tavern'
   import { useCookingStore } from '@/stores/useCookingStore'
+  import { useSkillStore } from '@/stores/useSkillStore'
   import { useGameStore } from '@/stores/useGameStore'
   import { useHomeStore } from '@/stores/useHomeStore'
   import { useInventoryStore } from '@/stores/useInventoryStore'
@@ -679,11 +759,14 @@
   import { handleEndDay } from '@/composables/useEndDay'
   import Button from '@/components/game/Button.vue'
 
+  const router = useRouter()
   const homeStore = useHomeStore()
   const inventoryStore = useInventoryStore()
   const gameStore = useGameStore()
   const npcStore = useNpcStore()
   const playerStore = usePlayerStore()
+  const tavernStore = useTavernStore()
+  const skillStore = useSkillStore()
 
   const releaseConfirmChildId = ref<number | null>(null)
   const showUpgradeModal = ref(false)
@@ -696,6 +779,8 @@
   const dismissConfirmNpcId = ref<string | null>(null)
   const removeAgingConfirmIdx = ref<number | null>(null)
   const showCellarUpgradeModal = ref(false)
+  const showBuildTavernModal = ref(false)
+  const buildTavernNameInput = ref('桃源小馆')
   const removeAgingConfirmSlot = computed(() =>
     removeAgingConfirmIdx.value !== null ? (homeStore.cellarSlots[removeAgingConfirmIdx.value] ?? null) : null
   )
@@ -893,6 +978,34 @@
     if (playerStore.money < upgrade.cost) return false
     return upgrade.materialCost.every(mat => getCombinedItemCount(mat.itemId) >= mat.quantity)
   })
+
+  const canBuildTavern = computed(() => {
+    if (!tavernStore.canBuild) return false
+    const def = tavernStore.nextUpgrade
+    if (!def) return false
+    if (playerStore.money < def.cost) return false
+    return def.materialCost.every(mat => getCombinedItemCount(mat.itemId) >= mat.quantity)
+  })
+
+  const activeMenuCount = computed(() => tavernStore.menuSlots.filter(s => s.itemId).length)
+
+  const todayModeLabel = computed(() => {
+    if (tavernStore.todayMode === 'manual') return '亲自营业'
+    if (tavernStore.todayMode === 'closed') return '打烊'
+    return '日结自动'
+  })
+
+  const buildTavernMaterials = computed(() => getTavernUpgrade(1)?.materialCost ?? [])
+
+  const handleBuildTavern = () => {
+    const name = buildTavernNameInput.value.trim()
+    if (!name) return
+    if (tavernStore.buildTavern(name)) {
+      showBuildTavernModal.value = false
+      addLog(`「${tavernStore.displayName}」开张了！去配置菜单开始经营吧。`)
+      void router.push({ name: 'tavern' })
+    }
+  }
 
   const ageableInInventory = computed(() => {
     return inventoryStore.items.filter(inv => AGEABLE_ITEMS.includes(inv.itemId))

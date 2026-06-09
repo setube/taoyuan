@@ -52,7 +52,7 @@
 
 <script setup lang="ts">
   import { type Component } from 'vue'
-  import { Star, Wheat, TreePine, Fish, Pickaxe, Sword } from 'lucide-vue-next'
+  import { Star, Wheat, TreePine, Fish, Pickaxe, Sword, ChefHat } from 'lucide-vue-next'
   import { useSkillStore } from '@/stores/useSkillStore'
   import type { SkillType, SkillPerk5, SkillPerk10 } from '@/types'
 
@@ -63,7 +63,8 @@
     foraging: TreePine,
     fishing: Fish,
     mining: Pickaxe,
-    combat: Sword
+    combat: Sword,
+    cooking: ChefHat
   }
 
   const SKILL_NAMES: Record<SkillType, string> = {
@@ -71,7 +72,8 @@
     foraging: '采集',
     fishing: '钓鱼',
     mining: '挖矿',
-    combat: '战斗'
+    combat: '战斗',
+    cooking: '烹饪'
   }
 
   const SKILL_DESCS: Record<SkillType, string> = {
@@ -79,7 +81,8 @@
     foraging: '采集野外资源、伐木。等级越高，采集品质越好。',
     fishing: '在各水域钓鱼。等级越高，钓鱼成功率越高。',
     mining: '在矿洞中采矿和战斗。等级越高，矿石产出越多。',
-    combat: '与矿洞中的怪物战斗。等级越高，生命值上限越高。'
+    combat: '与矿洞中的怪物战斗。等级越高，生命值上限越高。',
+    cooking: '烹制料理。等级越高，成品品质越好。'
   }
 
   const SKILL_LEVEL_BONUS: Record<SkillType, string> = {
@@ -87,7 +90,8 @@
     foraging: '采集品质概率提升',
     fishing: '钓鱼成功率提升',
     mining: '矿石产出提升',
-    combat: '生命值上限+5'
+    combat: '生命值上限+5',
+    cooking: '烹饪升档概率提升'
   }
 
   const PERK_DESCS: Record<SkillPerk5 | SkillPerk10, string> = {
@@ -120,7 +124,13 @@
     warrior: '生命上限+40',
     brute: '攻击伤害+25%',
     acrobat: '25%概率闪避并反击',
-    tank: '防御时伤害减免70%'
+    tank: '防御时伤害减免70%',
+    prep_cook: '烹饪时20%概率节省一种主料',
+    vendor_chef: '食物售价+15%（当老板的选这个）',
+    double_batch: '烹饪成功15%概率额外+1份',
+    gourmet_craft: '25%概率成品品质+1档',
+    buff_chef: 'buff效果+30%，持续时段+1',
+    tavern_master: '酒肆经营加成：厨艺+2、失误-3%、食物指导价+10%'
   }
 
   const PERK_NAMES: Record<SkillPerk5 | SkillPerk10, string> = {
@@ -153,7 +163,13 @@
     warrior: '武者',
     brute: '蛮力者',
     acrobat: '杂技师',
-    tank: '重甲者'
+    tank: '重甲者',
+    prep_cook: '备料手',
+    vendor_chef: '市厨',
+    double_batch: '双灶',
+    gourmet_craft: '匠心',
+    buff_chef: '膳修',
+    tavern_master: '肆尊'
   }
 
   const expInfo = (type: SkillType) => {

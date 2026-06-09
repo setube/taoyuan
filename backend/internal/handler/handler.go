@@ -75,6 +75,112 @@ func (h *Handler) GetKnowledgeEntry(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, entry)
 }
 
+// buildPlayerContextText 将前端传来的 context map 格式化为 LLM 可读的文本
+func buildPlayerContextText(ctx map[string]any) string {
+	if ctx == nil || len(ctx) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+
+	// 季节和天数
+	season := stringField(ctx, "season")
+	day := intField(ctx, "day")
+	if season != "" {
+		seasonNames := map[string]string{"spring": "春", "summer": "夏", "autumn": "秋", "winter": "冬"}
+		name := seasonNames[season]
+		if name == "" {
+			name = season
+		}
+		sb.WriteString(fmt.Sprintf("- 季节：%s，第 %d 天\n", name, day))
+	}
+
+	// 玩家信息
+	name := stringField(ctx, "playerName")
+	gender := stringField(ctx, "gender")
+	money := intField(ctx, "money")
+	stamina := intField(ctx, "stamina")
+	maxStamina := intField(ctx, "maxStamina")
+	if name != "" {
+		genderText := "男"
+		if gender == "female" {
+			genderText = "女"
+		}
+		sb.WriteString(fmt.Sprintf("- 玩家：%s（%s），%d 文铜钱，体力 %d/%d\n", name, genderText, money, stamina, maxStamina))
+	}
+
+	// 技能等级
+	if skills, ok := ctx["skills"].(map[string]any); ok {
+		skillNames := map[string]string{
+			"farming": "农耕", "mining": "挖矿", "fishing": "钓鱼",
+			"foraging": "采集", "combat": "战斗", "cooking": "烹饪",
+		}
+		sb.WriteString("- 技能：")
+		first := true
+		for _, key := range []string{"farming", "mining", "fishing", "foraging", "combat", "cooking"} {
+			lv := intField(skills, key)
+			if lv > 0 || key == "farming" {
+				if !first {
+					sb.WriteString("、")
+				}
+				sb.WriteString(fmt.Sprintf("%s Lv%d", skillNames[key], lv))
+				first = false
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	// 建筑等级
+	farmLv := intField(ctx, "farmhouseLevel")
+	tavernLv := intField(ctx, "tavernLevel")
+	farmNames := map[int]string{0: "茅屋", 1: "砖房", 2: "宅院", 3: "酒窖宅院"}
+	farmName := farmNames[farmLv]
+	if farmName == "" {
+		farmName = fmt.Sprintf("Lv%d", farmLv)
+	}
+	sb.WriteString(fmt.Sprintf("- 农舍：%s", farmName))
+	if tavernLv > 0 {
+		sb.WriteString(fmt.Sprintf("，酒肆 Lv%d", tavernLv))
+	}
+	sb.WriteString("\n")
+
+	// 背包摘要
+	if topItems, ok := ctx["topItems"].([]any); ok && len(topItems) > 0 {
+		sb.WriteString("- 背包：")
+		itemStrs := make([]string, 0, len(topItems))
+		for _, item := range topItems {
+			if s, ok := item.(string); ok {
+				itemStrs = append(itemStrs, s)
+			}
+		}
+		sb.WriteString(strings.Join(itemStrs, "、"))
+		sb.WriteString("\n")
+	}
+
+	return sb.String()
+}
+
+func stringField(m map[string]any, key string) string {
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func intField(m map[string]any, key string) int {
+	if v, ok := m[key]; ok {
+		switch n := v.(type) {
+		case float64:
+			return int(n)
+		case int:
+			return n
+		}
+	}
+	return 0
+}
+
 // Chat AI 对话（带 session + 历史）
 func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -98,6 +204,9 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	// 从数据库恢复对话历史
 	h.ensureHistory(req.SessionID, req.PersonaID)
 
+	// 构建玩家状态文本
+	playerCtx := buildPlayerContextText(req.Context)
+
 	results := h.idx.Search(req.Message, "", 5)
 	bestScore := 0
 	if len(results) > 0 {
@@ -114,7 +223,7 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 			kbText.WriteString(fmt.Sprintf("- %s：%s\n", r.Entry.Title, r.Entry.Content))
 		}
 		if h.llmClientFast != nil {
-			reply, err := h.chatWithHistory(req.SessionID, req.PersonaID, req.Message, kbText.String(), h.llmClientFast)
+			reply, err := h.chatWithHistory(req.SessionID, req.PersonaID, req.Message, playerCtx, kbText.String(), h.llmClientFast)
 			if err == nil {
 				jsonOK(w, map[string]any{"type": "llm", "message": reply})
 				return
@@ -137,15 +246,15 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	for _, r := range results {
 		kbText.WriteString(fmt.Sprintf("- %s：%s\n", r.Entry.Title, r.Entry.Content))
 	}
-	h.chatWithHistoryStream(w, req.SessionID, req.PersonaID, req.Message, kbText.String(), h.llmClient)
+	h.chatWithHistoryStream(w, req.SessionID, req.PersonaID, req.Message, playerCtx, kbText.String(), h.llmClient)
 }
 
 // chatWithHistory 带历史的 LLM 调用（非流式）
-func (h *Handler) chatWithHistory(sessionID, personaID, message, knowledgeContext string, client *llm.Client) (string, error) {
+func (h *Handler) chatWithHistory(sessionID, personaID, message, playerContext, knowledgeContext string, client *llm.Client) (string, error) {
 	h.sessions.Get(sessionID, personaID) // 确保会话存在
 
 	var messages []llm.Message
-	messages = append(messages, llm.Message{Role: "system", Content: llm.BuildSystemPrompt(personaID, knowledgeContext)})
+	messages = append(messages, llm.Message{Role: "system", Content: llm.BuildSystemPrompt(personaID, playerContext, knowledgeContext)})
 
 	history := h.sessions.GetHistory(sessionID)
 	for _, msg := range history {
@@ -173,11 +282,11 @@ func (h *Handler) chatWithHistory(sessionID, personaID, message, knowledgeContex
 }
 
 // chatWithHistoryStream 带历史的 LLM 流式调用，直接写 SSE 到 ResponseWriter
-func (h *Handler) chatWithHistoryStream(w http.ResponseWriter, sessionID, personaID, message, knowledgeContext string, client *llm.Client) {
+func (h *Handler) chatWithHistoryStream(w http.ResponseWriter, sessionID, personaID, message, playerContext, knowledgeContext string, client *llm.Client) {
 	h.sessions.Get(sessionID, personaID)
 
 	var messages []llm.Message
-	messages = append(messages, llm.Message{Role: "system", Content: llm.BuildSystemPrompt(personaID, knowledgeContext)})
+	messages = append(messages, llm.Message{Role: "system", Content: llm.BuildSystemPrompt(personaID, playerContext, knowledgeContext)})
 
 	history := h.sessions.GetHistory(sessionID)
 	for _, msg := range history {

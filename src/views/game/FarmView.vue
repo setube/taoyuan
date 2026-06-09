@@ -86,6 +86,28 @@
           </div>
           <span class="text-xs text-success">拾取</span>
         </div>
+        <div
+          v-if="fishPondStore.pond.built && fishPondStore.pendingProducts.length > 0"
+          class="flex items-center justify-between border border-accent/20 rounded-xs px-3 py-2 cursor-pointer hover:bg-accent/5"
+          @click="handleCollectPondProducts"
+        >
+          <div>
+            <p class="text-xs text-accent">鱼塘产出</p>
+            <p class="text-[10px] text-muted">鱼塘中有{{ fishPondStore.pendingProducts.length }}份水产品待拾取</p>
+          </div>
+          <span class="text-xs text-success">拾取</span>
+        </div>
+        <div
+          v-if="animalStore.pendingProducts.length > 0"
+          class="flex items-center justify-between border border-accent/20 rounded-xs px-3 py-2 cursor-pointer hover:bg-accent/5"
+          @click="handleCollectAnimalProducts"
+        >
+          <div>
+            <p class="text-xs text-accent">牧场产出</p>
+            <p class="text-[10px] text-muted">牧场中有{{ animalStore.pendingProducts.length }}份产品待拾取</p>
+          </div>
+          <span class="text-xs text-success">拾取</span>
+        </div>
       </div>
 
       <div v-if="gameStore.farmMapType === 'hilltop' && gameStore.surfaceOrePatch" class="mb-3">
@@ -371,6 +393,13 @@
                 <p class="text-xs text-muted mt-2">背包中没有当季可种植的种子</p>
                 <Button v-if="isWanwupuOpen" class="mt-2" :icon-size="12" :icon="Store" @click="goToShop">前往商店购买</Button>
                 <p v-else class="text-[10px] text-muted/60 mt-1">{{ wanwupuClosedReason }}</p>
+              </div>
+              <!-- 购买种子（始终可点击） -->
+              <div
+                v-if="activePlot.state === 'tilled' && isWanwupuOpen"
+                class="mt-2 pt-2 border-t border-accent/10"
+              >
+                <Button class="w-full justify-center" :icon="Store" :icon-size="12" @click="showBuySeeds = true">购买种子</Button>
               </div>
               <template v-if="canFertilize && fertilizerItems.length > 0">
                 <Divider label="施肥" />
@@ -1065,6 +1094,38 @@
         </div>
       </div>
     </Transition>
+
+    <!-- 购买种子弹窗 -->
+    <Transition name="panel-fade">
+      <div
+        v-if="showBuySeeds"
+        class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+        @click.self="showBuySeeds = false"
+      >
+        <div class="game-panel max-w-xs w-full relative">
+          <button class="absolute top-2 right-2 text-muted hover:text-text" @click="showBuySeeds = false">
+            <X :size="14" />
+          </button>
+          <p class="text-sm text-accent mb-2">
+            <Store :size="14" class="inline" />
+            购买种子
+          </p>
+          <p class="text-[10px] text-muted mb-2">当季 {{ SEASON_NAMES[gameStore.season] }}</p>
+          <div class="flex flex-col space-y-1 max-h-48 overflow-y-auto">
+            <div
+              v-for="crop in buyableSeeds"
+              :key="crop.id"
+              class="flex items-center justify-between border border-accent/10 rounded-xs px-3 py-1.5 cursor-pointer hover:bg-accent/5"
+              @click="handleBuySeed(crop.id)"
+            >
+              <span class="text-xs">{{ crop.name }}</span>
+              <span class="text-xs text-accent">{{ crop.seedBuyPrice }}文</span>
+            </div>
+          </div>
+          <p v-if="buyableSeeds.length === 0" class="text-xs text-muted text-center py-4">暂无可购买的种子</p>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -1106,6 +1167,8 @@
   import { useInventoryStore } from '@/stores/useInventoryStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
   import { useShopStore } from '@/stores/useShopStore'
+  import { useFishPondStore } from '@/stores/useFishPondStore'
+  import { useAnimalStore } from '@/stores/useAnimalStore'
   import { useSkillStore } from '@/stores/useSkillStore'
   import { useTutorialStore } from '@/stores/useTutorialStore'
   import { useWalletStore } from '@/stores/useWalletStore'
@@ -1153,6 +1216,8 @@
   const homeStore = useHomeStore()
   const playerStore = usePlayerStore()
   const shopStore = useShopStore()
+  const fishPondStore = useFishPondStore()
+  const animalStore = useAnimalStore()
   const breedingStore = useBreedingStore()
 
   // === 田庄特殊功能 ===
@@ -1180,7 +1245,9 @@
     () =>
       (gameStore.farmMapType === 'riverland' && gameStore.creekCatch.length > 0) ||
       gameStore.pendingCaveLoot.length > 0 ||
-      gameStore.pendingFruitLoot.length > 0
+      gameStore.pendingFruitLoot.length > 0 ||
+      (fishPondStore.pond.built && fishPondStore.pendingProducts.length > 0) ||
+      animalStore.pendingProducts.length > 0
   )
 
   const pendingCaveLootSummary = computed(() => {
@@ -1246,6 +1313,38 @@
     gameStore.pendingFruitLoot = collectPendingLoot(gameStore.pendingFruitLoot, '果林果实')
   }
 
+  const handleCollectPondProducts = () => {
+    const products = fishPondStore.collectProducts()
+    if (products.length === 0) return
+    const names: string[] = []
+    for (const p of products) {
+      const added = inventoryStore.addItem(p.itemId, 1, p.quality)
+      if (added) {
+        const def = getItemById(p.itemId)
+        names.push(def?.name ?? p.itemId)
+      }
+    }
+    if (names.length > 0) {
+      addLog(`拾取了鱼塘产出：${names.join('、')}。`)
+    }
+  }
+
+  const handleCollectAnimalProducts = () => {
+    const products = animalStore.collectProducts()
+    if (products.length === 0) return
+    const names: string[] = []
+    for (const p of products) {
+      const added = inventoryStore.addItem(p.itemId, 1, p.quality)
+      if (added) {
+        const def = getItemById(p.itemId)
+        names.push(def?.name ?? p.itemId)
+      }
+    }
+    if (names.length > 0) {
+      addLog(`拾取了牧场产出：${names.join('、')}。`)
+    }
+  }
+
   const handleMineSurfaceOre = () => {
     const patch = gameStore.surfaceOrePatch
     if (!patch) return
@@ -1277,6 +1376,7 @@
   const showBatchActions = ref(false)
   const showGreenhouseModal = ref(false)
   const showGhUpgradeModal = ref(false)
+  const showBuySeeds = ref(false)
   const showGhBatchPlant = ref(false)
   const chopFruitTreeTarget = ref<{ id: number; type: string } | null>(null)
   const chopWildTreeTarget = ref<{ id: number; type: string; chopCount: number } | null>(null)
@@ -1293,6 +1393,28 @@
     showBatchActions.value = false
     showGreenhouseModal.value = false
     navigateToPanel('shop')
+  }
+
+  const buyableSeeds = computed(() => {
+    return getCropsBySeason(gameStore.season)
+      .filter(c => c.seedBuyPrice != null && c.seedBuyPrice > 0)
+      .map(c => ({ id: c.id, name: `${c.name}种子`, seedBuyPrice: c.seedBuyPrice! }))
+  })
+
+  const handleBuySeed = (cropId: string) => {
+    const crop = getCropById(cropId)
+    if (!crop?.seedBuyPrice) return
+    if (!playerStore.spendMoney(crop.seedBuyPrice)) {
+      showFloat('钱不够', 'danger')
+      return
+    }
+    if (!inventoryStore.addItem(crop.seedId)) {
+      playerStore.earnMoney(crop.seedBuyPrice)
+      showFloat('背包已满', 'danger')
+      return
+    }
+    showFloat(`购买了${crop.name}种子`, 'success')
+    addLog(`购买了${crop.name}种子，花费${crop.seedBuyPrice}文。`)
   }
 
   const wanwupu = getShopById('wanwupu')!
@@ -2030,7 +2152,7 @@
       // 育种产量加成
       const yieldDouble = genetics && Math.random() < (genetics.yield / 100) * 0.3
       const harvestQty = yieldDouble ? 2 : 1
-      inventoryStore.addItem(cropId, harvestQty, quality)
+      inventoryStore.addItem(cropId, harvestQty, quality, getItemById(cropId)?.category === 'fruit' ? true : undefined)
       const qualityLabel = quality !== 'normal' ? `(${QUALITY_NAMES[quality]})` : ''
       const qtyLabel = yieldDouble ? '×2' : ''
       sfxHarvest()
@@ -2077,7 +2199,7 @@
       quality = applyCropBlessing(quality)
       const yieldDouble = genetics && Math.random() < (genetics.yield / 100) * 0.3
       const harvestQty = yieldDouble ? 2 : 1
-      inventoryStore.addItem(cropId, harvestQty, quality)
+      inventoryStore.addItem(cropId, harvestQty, quality, getItemById(cropId)?.category === 'fruit' ? true : undefined)
       // 育种甜度加成
       if (genetics && genetics.sweetness > 0) {
         const cropDef = getCropById(cropId)

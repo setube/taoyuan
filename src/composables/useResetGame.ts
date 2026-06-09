@@ -1,3 +1,4 @@
+import { useSystemStore } from '@/stores/useSystemStore'
 import { useAchievementStore } from '@/stores/useAchievementStore'
 import { useAnimalStore } from '@/stores/useAnimalStore'
 import { useBreedingStore } from '@/stores/useBreedingStore'
@@ -29,6 +30,7 @@ import { useWarehouseStore } from '@/stores/useWarehouseStore'
  * 不重置: useSettingsStore（跨存档设置）、useSaveStore（存档管理）。
  */
 export const resetAllStoresForNewGame = () => {
+  useSystemStore().$reset()
   useGameStore().$reset()
   usePlayerStore().$reset()
   useInventoryStore().$reset()

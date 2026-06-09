@@ -38,6 +38,9 @@ export const useAnimalStore = defineStore('animal', () => {
   /** 今天是否已放牧 */
   const grazedToday = ref(false)
 
+  /** 待拾取的动物产品（鱼塘同款模式：睡觉时不自动进背包，需手动拾取） */
+  const pendingProducts = ref<{ itemId: string; quality: Quality }[]>([])
+
   /** 已安装自动抚摸机的建筑类型 */
   const autoPetterBuildings = ref<AnimalBuildingType[]>([])
 
@@ -645,7 +648,19 @@ export const useAnimalStore = defineStore('animal', () => {
       }
     }
 
+    // 产品存入待拾取列表（不再自动进背包，需手动拾取）
+    if (products.length > 0) {
+      pendingProducts.value.push(...products)
+    }
+
     return { products, died, gotSick, healed }
+  }
+
+  /** 拾取动物产品 */
+  const collectProducts = (): { itemId: string; quality: Quality }[] => {
+    const collected = [...pendingProducts.value]
+    pendingProducts.value = []
+    return collected
   }
 
   /** 出售动物，返还购买价的一半 */
@@ -809,6 +824,8 @@ export const useAnimalStore = defineStore('animal', () => {
     dailyUpdate,
     getAnimalProductQuality,
     renameAnimal,
+    pendingProducts,
+    collectProducts,
     autoPetterBuildings,
     hasAutoPetter,
     installAutoPetter,

@@ -3,6 +3,61 @@ import { ref, computed } from 'vue'
 import type { PersonaId, SystemMessage, ConnectionMode, SystemQuest, MeritBuff, MemoryTimelineEntry } from '@/types/system'
 import { AFFINITY_MILESTONES } from '@/types/system'
 import { matchKnowledge } from '@/data/systemKnowledge'
+import { getItemById } from '@/data/items'
+import { useGameStore } from '@/stores/useGameStore'
+import { usePlayerStore } from '@/stores/usePlayerStore'
+import { useSkillStore } from '@/stores/useSkillStore'
+import { useHomeStore } from '@/stores/useHomeStore'
+import { useTavernStore } from '@/stores/useTavernStore'
+import { useInventoryStore } from '@/stores/useInventoryStore'
+
+/** 构建玩家游戏状态上下文，随 chat 请求发送给后端 */
+function buildGameContext(): Record<string, unknown> {
+  try {
+    const game = useGameStore()
+    const player = usePlayerStore()
+    const skill = useSkillStore()
+    const home = useHomeStore()
+    const tavern = useTavernStore()
+    const inv = useInventoryStore()
+
+    // 背包摘要：取数量最多的前 15 项，过滤掉干草等消耗品
+    const topItems = [...inv.items]
+      .filter(i => {
+        const def = getItemById(i.itemId)
+        return def && def.sellPrice > 0
+      })
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 15)
+      .map(i => {
+        const def = getItemById(i.itemId)
+        return `${def?.name ?? i.itemId}×${i.quantity}`
+      })
+
+    return {
+      season: game.season,
+      day: game.day,
+      playerName: player.playerName,
+      gender: player.gender,
+      money: player.money,
+      stamina: player.stamina,
+      maxStamina: player.maxStamina,
+      skills: {
+        farming: skill.farmingLevel,
+        mining: skill.miningLevel,
+        fishing: skill.fishingLevel,
+        foraging: skill.foragingLevel,
+        combat: skill.combatLevel,
+        cooking: skill.cookingLevel,
+      },
+      farmhouseLevel: home.farmhouseLevel,
+      tavernLevel: tavern.tavernLevel,
+      topItems,
+    }
+  } catch {
+    return {}
+  }
+}
 
 export const useSystemStore = defineStore('system', () => {
   // === 人格 ===
@@ -173,7 +228,7 @@ export const useSystemStore = defineStore('system', () => {
           message: input,
           personaId: personaId.value,
           sessionId: getChatSessionId(),
-          context: {}
+          context: buildGameContext()
         })
       })
 
@@ -262,9 +317,10 @@ export const useSystemStore = defineStore('system', () => {
     if (isConnecting.value) return false
     isConnecting.value = true
     try {
-      // 设备注册
-      const { getDeviceId } = await import('@/stores/useSaveStore')
-      const deviceId = getDeviceId()
+      // 设备注册（getDeviceId 是 store 实例方法，非模块顶层导出）
+      const mod = await import('@/stores/useSaveStore')
+      const saveStore = mod.useSaveStore()
+      const deviceId = saveStore.getDeviceId()
       const result = await apiFetch('/api/v1/device/register', {
         method: 'POST',
         body: JSON.stringify({ deviceId })
@@ -279,8 +335,8 @@ export const useSystemStore = defineStore('system', () => {
       }
       addSystemMessage('连接失败：后端未响应。请确认服务已启动。')
       return false
-    } catch {
-      addSystemMessage('连接异常。请稍后重试。')
+    } catch (e) {
+      addSystemMessage(`连接异常：${e instanceof Error ? e.message : String(e)}`)
       return false
     } finally {
       isConnecting.value = false

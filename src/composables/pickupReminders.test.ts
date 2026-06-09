@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 /** 与 useEndDay handleEndDay 睡前拾取提醒逻辑一致 */
 function buildPickupReminderParts(state: {
   creekCatch: unknown[]
-  pendingCaveLoot: { quantity: number }[]
+  pendingCaveLoot: { quantity: number; itemId?: string }[]
   pendingFruitLoot: unknown[]
 }): string[] {
   const parts: string[] = []
