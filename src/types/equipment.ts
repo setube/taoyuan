@@ -21,6 +21,13 @@ export interface HatDef {
 /** 拥有的帽子实例 */
 export interface OwnedHat {
   defId: string
+  recipeId?: string
+  quality?: import('./item').Quality
+  affixes?: { id: string; rolledValue: number }[]
+  setId?: string | null
+  forgedDay?: number
+  forgeScore?: number
+  forgedWeather?: import('./game').Weather
 }
 
 /** 鞋子定义 */
@@ -44,4 +51,11 @@ export interface ShoeDef {
 /** 拥有的鞋子实例 */
 export interface OwnedShoe {
   defId: string
+  recipeId?: string
+  quality?: import('./item').Quality
+  affixes?: { id: string; rolledValue: number }[]
+  setId?: string | null
+  forgedDay?: number
+  forgeScore?: number
+  forgedWeather?: import('./game').Weather
 }

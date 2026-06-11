@@ -110,6 +110,34 @@
       </div>
     </div>
 
+    <!-- 家造锻造工坊 -->
+    <div class="border border-accent/20 rounded-xs p-3 mb-4">
+      <p class="text-sm text-accent mb-2">
+        <Hammer :size="14" class="inline" />
+        锻造工坊
+      </p>
+      <div v-if="!homeStore.forgeWorkshopBuilt">
+        <p class="text-xs text-muted mb-2">
+          锻造 Lv{{ FORGE_WORKSHOP_MIN_LEVEL }} 后可建造，功能与铁匠铺「锻造工坊」相同（周日店休仍可在家开炉）。
+        </p>
+        <div
+          class="flex items-center justify-between border border-accent/20 rounded-xs px-3 py-1.5 cursor-pointer hover:bg-accent/5"
+          :class="{ 'opacity-50 pointer-events-none': forgingLevel < FORGE_WORKSHOP_MIN_LEVEL }"
+          @click="showForgeWorkshopModal = true"
+        >
+          <span class="text-xs">建造锻造工坊</span>
+          <span class="text-xs text-accent whitespace-nowrap">{{ FORGE_WORKSHOP_UNLOCK_COST }}文</span>
+        </div>
+        <p v-if="forgingLevel < FORGE_WORKSHOP_MIN_LEVEL" class="text-[10px] text-muted mt-1">
+          当前锻造 Lv{{ forgingLevel }}，需 Lv{{ FORGE_WORKSHOP_MIN_LEVEL }}
+        </p>
+      </div>
+      <div v-else>
+        <p class="text-xs text-success mb-2">家造工坊已就绪，不受铁匠铺周日店休影响。</p>
+        <Button class="w-full text-xs" @click="showForgePanel = true">进入锻造工坊</Button>
+      </div>
+    </div>
+
     <!-- 仓库 -->
     <div class="border border-accent/20 rounded-xs p-3">
       <div class="flex items-center justify-between mb-2">
@@ -250,7 +278,22 @@
           添加箱子
         </Button>
       </template>
+
+      <div
+        class="mt-2 flex items-center justify-between border border-accent/20 rounded-xs px-3 py-2 cursor-pointer hover:bg-accent/5"
+        @click="showCollectRouteConfig = true"
+      >
+        <div class="flex items-center space-x-1.5">
+          <ScrollText :size="14" class="text-accent" />
+          <span class="text-sm text-accent">收贮归置</span>
+        </div>
+        <span class="text-xs text-muted">
+          {{ collectRouteConfiguredCount > 0 ? `已设 ${collectRouteConfiguredCount} 种` : '收成入账之道' }}
+        </span>
+      </div>
     </div>
+
+    <ItemCollectRouteModal :open="showCollectRouteConfig" @close="showCollectRouteConfig = false" />
 
     <!-- 解锁温室弹窗 -->
     <Transition name="panel-fade">
@@ -294,6 +337,62 @@
           >
             解锁
           </Button>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 建造锻造工坊弹窗 -->
+    <Transition name="panel-fade">
+      <div
+        v-if="showForgeWorkshopModal"
+        class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+        @click.self="showForgeWorkshopModal = false"
+      >
+        <div class="game-panel max-w-xs w-full relative">
+          <button class="absolute top-2 right-2 text-muted hover:text-text" @click="showForgeWorkshopModal = false">
+            <X :size="14" />
+          </button>
+          <p class="text-sm text-accent mb-2">建造锻造工坊</p>
+          <div class="border border-accent/10 rounded-xs p-2 mb-2">
+            <p class="text-xs text-muted">需锻造 Lv{{ FORGE_WORKSHOP_MIN_LEVEL }}。建造后可在家锻造、练习、请教。</p>
+          </div>
+          <div class="border border-accent/10 rounded-xs p-2 mb-2 space-y-1">
+            <p class="text-xs text-muted mb-1">所需材料</p>
+            <div v-for="mat in FORGE_WORKSHOP_MATERIAL_COST" :key="mat.itemId" class="flex items-center justify-between">
+              <span class="text-xs text-muted">{{ getItemName(mat.itemId) }}</span>
+              <CombinedMaterialCount :item-id="mat.itemId" :required="mat.quantity" always-show-breakdown />
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-muted">铜钱</span>
+              <span class="text-xs" :class="playerStore.money >= FORGE_WORKSHOP_UNLOCK_COST ? '' : 'text-danger'">
+                {{ FORGE_WORKSHOP_UNLOCK_COST }}文
+              </span>
+            </div>
+          </div>
+          <Button
+            class="w-full justify-center"
+            :disabled="!canBuildForgeWorkshop"
+            @click="handleBuildForgeWorkshop"
+          >
+            建造
+          </Button>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 家造锻造工坊面板 -->
+    <Transition name="panel-fade">
+      <div
+        v-if="showForgePanel"
+        class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto"
+        @click.self="showForgePanel = false"
+      >
+        <div class="game-panel max-w-md w-full relative my-4">
+          <button class="absolute top-2 right-2 text-muted hover:text-text z-10" @click="showForgePanel = false">
+            <X :size="14" />
+          </button>
+          <p class="text-sm text-accent mb-3">家造锻造工坊</p>
+          <ForgeView />
         </div>
       </div>
     </Transition>
@@ -774,24 +873,38 @@
     ChevronUp,
     Mountain,
     Leaf,
+    Hammer,
     Pencil,
     Plus,
     Trash2,
     Unlock,
     LayoutGrid,
     Warehouse,
-    X
+    X,
+    ScrollText
   } from 'lucide-vue-next'
+  import ItemCollectRouteModal from '@/components/game/ItemCollectRouteModal.vue'
+  import ForgeView from '@/components/game/ForgeView.vue'
   import { useHomeStore } from '@/stores/useHomeStore'
+  import { useSkillStore } from '@/stores/useSkillStore'
   import { useInventoryStore } from '@/stores/useInventoryStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
   import { useProcessingStore } from '@/stores/useProcessingStore'
   import { useWarehouseStore } from '@/stores/useWarehouseStore'
+  import { useSettingsStore } from '@/stores/useSettingsStore'
   import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
   import CombinedMaterialCount from '@/components/game/CombinedMaterialCount.vue'
   import type { WarehouseAggregatedEntry } from '@/stores/useWarehouseStore'
   import { getItemById } from '@/data'
-  import { GREENHOUSE_UNLOCK_COST, GREENHOUSE_MATERIAL_COST, WAREHOUSE_UNLOCK_MATERIALS, getCaveUpgrade } from '@/data/buildings'
+  import {
+    GREENHOUSE_UNLOCK_COST,
+    GREENHOUSE_MATERIAL_COST,
+    FORGE_WORKSHOP_UNLOCK_COST,
+    FORGE_WORKSHOP_MATERIAL_COST,
+    FORGE_WORKSHOP_MIN_LEVEL,
+    WAREHOUSE_UNLOCK_MATERIALS,
+    getCaveUpgrade
+  } from '@/data/buildings'
   import { CHEST_DEFS, CHEST_TIER_ORDER } from '@/data/items'
   import { CHEST_FILTER_CATEGORIES, CHEST_CATEGORY_LABELS, getNextChestUpgradeTier } from '@/data/warehouse'
   import type { Quality, ChestTier, VoidChestRole, ItemCategory } from '@/types'
@@ -799,12 +912,20 @@
   import Button from '@/components/game/Button.vue'
 
   const homeStore = useHomeStore()
+  const skillStore = useSkillStore()
   const inventoryStore = useInventoryStore()
   const playerStore = usePlayerStore()
   const warehouseStore = useWarehouseStore()
   const processingStore = useProcessingStore()
+  const settingsStore = useSettingsStore()
+
+  const collectRouteConfiguredCount = computed(() => Object.keys(settingsStore.itemCollectRoutes).length)
 
   const showGreenhouseModal = ref(false)
+  const showForgeWorkshopModal = ref(false)
+  const showForgePanel = ref(false)
+  const forgingLevel = computed(() => skillStore.getSkill('forging').level)
+  const showCollectRouteConfig = ref(false)
   const showWarehouseUnlockModal = ref(false)
   const showAddChestModal = ref(false)
   const showChestDepositModal = ref(false)
@@ -871,6 +992,23 @@
       showGreenhouseModal.value = false
     } else {
       addLog('铜钱或材料不足，无法解锁温室。')
+    }
+  }
+
+  const canBuildForgeWorkshop = computed(() => {
+    if (forgingLevel.value < FORGE_WORKSHOP_MIN_LEVEL) return false
+    if (playerStore.money < FORGE_WORKSHOP_UNLOCK_COST) return false
+    return FORGE_WORKSHOP_MATERIAL_COST.every(mat => getCombinedItemCount(mat.itemId) >= mat.quantity)
+  })
+
+  const handleBuildForgeWorkshop = () => {
+    if (homeStore.buildForgeWorkshop()) {
+      addLog('家造锻造工坊建造完成！可在设施页进入。')
+      showForgeWorkshopModal.value = false
+    } else if (forgingLevel.value < FORGE_WORKSHOP_MIN_LEVEL) {
+      addLog(`需要锻造 Lv${FORGE_WORKSHOP_MIN_LEVEL} 才能建造。`)
+    } else {
+      addLog('铜钱或材料不足，无法建造锻造工坊。')
     }
   }
 

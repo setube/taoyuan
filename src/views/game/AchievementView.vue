@@ -129,6 +129,22 @@
                 <span class="text-xs text-success">{{ formatEffectValue(eff) }}</span>
               </div>
             </template>
+            <template v-if="activeFishDef">
+              <div class="flex items-center justify-between mt-0.5">
+                <span class="text-xs text-muted">重量区间</span>
+                <span class="text-xs">{{ activeFishDef.minWeight }} – {{ activeFishDef.maxWeight }} 斤</span>
+              </div>
+              <div class="flex items-center justify-between mt-0.5">
+                <span class="text-xs text-muted">最大记录</span>
+                <span class="text-xs text-accent">
+                  {{
+                    achievementStore.getFishMaxWeight(activeCollectionItem.id) != null
+                      ? achievementStore.getFishMaxWeight(activeCollectionItem.id) + ' 斤'
+                      : '—'
+                  }}
+                </span>
+              </div>
+            </template>
             <div v-if="achievementStore.getDiscoveryTime(activeCollectionItem.id)" class="flex items-center justify-between mt-0.5">
               <span class="text-xs text-muted">发现于</span>
               <span class="text-xs text-muted">{{ achievementStore.getDiscoveryTime(activeCollectionItem.id) }}</span>
@@ -501,6 +517,7 @@
   import { useSkillStore } from '@/stores/useSkillStore'
   import { ACHIEVEMENTS, COMMUNITY_BUNDLES } from '@/data/achievements'
   import { ITEMS, getItemById } from '@/data/items'
+  import { getFishById } from '@/data/fish'
   import { HYBRID_DEFS } from '@/data/breeding'
   import { SECRET_NOTES } from '@/data/secretNotes'
   import { WEAPONS, ENCHANTMENTS, WEAPON_TYPE_NAMES } from '@/data/weapons'
@@ -662,6 +679,12 @@
   const activeWeaponDef = computed(() => {
     if (!activeCollectionItem.value || activeCollectionItem.value.category !== 'weapon') return null
     return WEAPONS[activeCollectionItem.value.id] ?? null
+  })
+
+  /** 当前详情的鱼类定义（若为鱼类） */
+  const activeFishDef = computed(() => {
+    if (!activeCollectionItem.value || activeCollectionItem.value.category !== 'fish') return null
+    return getFishById(activeCollectionItem.value.id) ?? null
   })
 
   /** 当前详情的装备效果列表（戒指/帽子/鞋子） */

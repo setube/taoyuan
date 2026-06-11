@@ -49,6 +49,8 @@ export interface InventoryItem {
   itemId: string
   quantity: number
   quality: Quality
+  /** 鱼竿钓获的鱼类重量（斤）；无此字段则按旧逻辑堆叠与定价 */
+  weight?: number
   locked?: boolean
   /** 是否来自温室种植（仅 fruit 类有用） */
   fromGreenhouse?: boolean
@@ -95,11 +97,37 @@ export interface EnchantmentDef {
   special: 'vampiric' | 'sturdy' | 'lucky' | null
 }
 
+/** 打造实例公共字段 */
+export interface CraftedItemFields {
+  recipeId: string
+  quality: Quality
+  affixes: { id: string; rolledValue: number }[]
+  setId: string | null
+  forgedDay: number
+  forgeScore: number
+  forgedWeather?: import('./game').Weather
+}
+
 /** 拥有的武器实例 */
 export interface OwnedWeapon {
   defId: string
   enchantmentId: string | null
+  /** 打造扩展（有 recipeId 视为打造武器） */
+  recipeId?: string
+  quality?: Quality
+  affixes?: { id: string; rolledValue: number }[]
+  setId?: string | null
+  forgedDay?: number
+  forgeScore?: number
+  forgedWeather?: import('./game').Weather
+  rolledAttack?: number
+  rolledCritRate?: number
 }
+
+export const isCraftedWeapon = (
+  w: OwnedWeapon
+): w is OwnedWeapon & CraftedItemFields & { rolledAttack: number; rolledCritRate: number } =>
+  w.recipeId != null && w.quality != null && w.rolledAttack != null
 
 /** 箱子阶梯 */
 export type ChestTier = 'wood' | 'copper' | 'iron' | 'gold' | 'void'

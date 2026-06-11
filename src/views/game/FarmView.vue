@@ -546,6 +546,20 @@
         <span v-else class="text-xs text-muted">空</span>
       </div>
 
+      <!-- 收贮归置 -->
+      <div
+        class="mt-2 flex items-center justify-between border border-accent/20 rounded-xs px-3 py-2 cursor-pointer hover:bg-accent/5"
+        @click="showCollectRouteConfig = true"
+      >
+        <div class="flex items-center space-x-1.5">
+          <ScrollText :size="14" class="text-accent" />
+          <span class="text-sm text-accent">收贮归置</span>
+        </div>
+        <span class="text-xs text-muted">
+          {{ collectRouteConfiguredCount > 0 ? `已设 ${collectRouteConfiguredCount} 种` : '收成入账之道' }}
+        </span>
+      </div>
+
       <!-- 出货箱弹窗 -->
       <Transition name="panel-fade">
         <div
@@ -624,7 +638,7 @@
                     <span class="text-muted text-xs">×{{ item.quantity }}</span>
                     <span v-if="shopStore.shippedItems.includes(item.itemId)" class="text-[10px] text-success/60">[已出货]</span>
                   </div>
-                  <div class="flex space-x-1">
+                  <div class="flex space-x-1 shrink-0">
                     <Button @click="handleAddToBox(item.itemId, 1, item.quality)">放入1</Button>
                     <Button v-if="item.quantity > 1" @click="handleAddToBox(item.itemId, item.quantity, item.quality)">全部</Button>
                   </div>
@@ -638,6 +652,8 @@
           </div>
         </div>
       </Transition>
+
+      <ItemCollectRouteModal :open="showCollectRouteConfig" @close="showCollectRouteConfig = false" />
 
       <!-- 温室入口 -->
       <div
@@ -1155,9 +1171,11 @@
     Bird,
     Zap,
     Square,
-    Flower2
+    Flower2,
+    ScrollText
   } from 'lucide-vue-next'
   import Button from '@/components/game/Button.vue'
+  import ItemCollectRouteModal from '@/components/game/ItemCollectRouteModal.vue'
   import Divider from '@/components/game/Divider.vue'
   import { useBreedingStore } from '@/stores/useBreedingStore'
   import { useCookingStore } from '@/stores/useCookingStore'
@@ -1167,6 +1185,7 @@
   import { useInventoryStore } from '@/stores/useInventoryStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
   import { useShopStore } from '@/stores/useShopStore'
+  import { useSettingsStore } from '@/stores/useSettingsStore'
   import { useFishPondStore } from '@/stores/useFishPondStore'
   import { useAnimalStore } from '@/stores/useAnimalStore'
   import { useSkillStore } from '@/stores/useSkillStore'
@@ -1216,6 +1235,9 @@
   const homeStore = useHomeStore()
   const playerStore = usePlayerStore()
   const shopStore = useShopStore()
+  const settingsStore = useSettingsStore()
+
+  const collectRouteConfiguredCount = computed(() => Object.keys(settingsStore.itemCollectRoutes).length)
   const fishPondStore = useFishPondStore()
   const animalStore = useAnimalStore()
   const breedingStore = useBreedingStore()
@@ -1348,7 +1370,7 @@
   const handleMineSurfaceOre = () => {
     const patch = gameStore.surfaceOrePatch
     if (!patch) return
-    if (!playerStore.consumeStamina(5)) {
+    if (!playerStore.consumeStamina(5, 'farming')) {
       addLog('体力不足，无法开采。')
       return
     }
@@ -1371,6 +1393,7 @@
   // === 出货箱 ===
 
   const showShippingBox = ref(false)
+  const showCollectRouteConfig = ref(false)
   const showBatchPlant = ref(false)
   const showBatchFertilize = ref(false)
   const showBatchActions = ref(false)
@@ -1716,7 +1739,7 @@
             (1 - plantRingGlobalReduction)
         )
       )
-      if (!playerStore.consumeStamina(cost)) break
+      if (!playerStore.consumeStamina(cost, 'farming')) break
       if (farmStore.plantGeneticSeed(plot.id, seed.genetics)) {
         breedingStore.removeFromBox(seed.genetics.id)
         planted++
@@ -1991,7 +2014,7 @@
       1,
       Math.floor(5 * inventoryStore.getToolStaminaMultiplier('axe') * (1 - skillStore.getStaminaReduction('foraging')))
     )
-    if (!playerStore.consumeStamina(cost)) {
+    if (!playerStore.consumeStamina(cost, 'farming')) {
       addLog('体力不足，无法砍伐。')
       return
     }
@@ -2073,7 +2096,7 @@
       1,
       Math.floor(5 * inventoryStore.getToolStaminaMultiplier('axe') * (1 - skillStore.getStaminaReduction('foraging')))
     )
-    if (!playerStore.consumeStamina(cost)) {
+    if (!playerStore.consumeStamina(cost, 'farming')) {
       addLog('体力不足，无法伐木。')
       return
     }
@@ -2137,7 +2160,7 @@
 
   const doGhHarvest = () => {
     if (activeGhPlotId.value === null) return
-    if (!playerStore.consumeStamina(1)) {
+    if (!playerStore.consumeStamina(1, 'farming')) {
       addLog('体力不足，无法收获。')
       return
     }
@@ -2193,7 +2216,7 @@
     let seedsReturned = 0
     let totalBonusMoney = 0
     for (const { cropId, genetics } of results) {
-      if (!playerStore.consumeStamina(1)) break
+      if (!playerStore.consumeStamina(1, 'farming')) break
       harvested++
       let quality = skillStore.rollCropQualityWithBonus(0)
       quality = applyCropBlessing(quality)
@@ -2260,7 +2283,7 @@
     let planted = 0
     for (const plot of targets) {
       if (!inventoryStore.hasItem(crop.seedId)) break
-      if (!playerStore.consumeStamina(1)) break
+      if (!playerStore.consumeStamina(1, 'farming')) break
       inventoryStore.removeItem(crop.seedId)
       farmStore.greenhousePlantCrop(plot.id, cropId)
       planted++

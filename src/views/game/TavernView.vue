@@ -8,7 +8,7 @@
           {{ tavern.customName ? tavern.tierName : '' }}{{ tavern.customName ? ' · ' : '' }}Lv.{{ tavern.tavernLevel }}
         </span>
       </h3>
-      <button class="text-xs text-muted hover:text-accent" @click="router.push({ name: 'cottage' })">返回小屋</button>
+      <button class="text-xs text-muted hover:text-accent" @click="navigateToPanel('cottage')">返回小屋</button>
     </div>
 
     <div v-if="!tavern.isBuilt" class="border border-accent/20 rounded-xs p-4 text-center text-muted">
@@ -182,7 +182,6 @@
 
 <script setup lang="ts">
   import { computed, ref } from 'vue'
-  import { useRouter } from 'vue-router'
   import { Beer } from 'lucide-vue-next'
   import { useTavernStore, type TavernTodayMode } from '@/stores/useTavernStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
@@ -192,10 +191,10 @@
   import { isFruitInSeason } from '@/data/fruitSeason'
   import { getCombinedItemCount, hasGreenhouseFruit } from '@/composables/useCombinedInventory'
   import { addLog, showFloat } from '@/composables/useGameLog'
+  import { navigateToPanel } from '@/composables/useNavigation'
   import { TAVERN_NAME_MAX_LEN, type TavernMenuSlotType } from '@/data/tavern'
   import Button from '@/components/game/Button.vue'
 
-  const router = useRouter()
   const tavern = useTavernStore()
   const playerStore = usePlayerStore()
   const gameStore = useGameStore()

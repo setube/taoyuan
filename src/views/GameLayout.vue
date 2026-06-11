@@ -37,8 +37,10 @@
     </button>
 
     <SystemButton v-if="systemStore.awakened" />
+    <SystemBubble v-if="systemStore.awakened" />
     <SystemPanel v-if="systemStore.awakened" />
-    <PersonaSelect v-if="showPersonaSelect" @chosen="onPersonaChosen()" />
+    <SystemQuestAlert v-if="systemStore.awakened" />
+    <PersonaSelect v-if="showPersonaSelect" @chosen="onPersonaChosen" />
 
     <SettingsDialog :open="showSettings" @close="showSettings = false" />
 
@@ -485,7 +487,9 @@
   import KiteFlyingView from '@/components/game/KiteFlyingView.vue'
   import SettingsDialog from '@/components/game/SettingsDialog.vue'
   import SystemButton from '@/components/game/SystemButton.vue'
+  import SystemBubble from '@/components/game/SystemBubble.vue'
   import SystemPanel from '@/components/game/SystemPanel.vue'
+  import SystemQuestAlert from '@/components/game/SystemQuestAlert.vue'
   import PersonaSelect from '@/components/game/PersonaSelect.vue'
   import DiscoveryScene from '@/components/game/DiscoveryScene.vue'
   import { Capacitor } from '@capacitor/core'
@@ -538,14 +542,27 @@
   /** 人格选择弹窗 */
   const showPersonaSelect = ref(false)
 
-  watch(() => systemStore.pendingAwakening, (val) => {
-    if (val) showPersonaSelect.value = true
+  watch(
+    () => systemStore.pendingAwakening,
+    val => {
+      if (val) showPersonaSelect.value = true
+    },
+    { immediate: true }
+  )
+
+  // 已过夜但未选人格（如 HTTP 下确认失败、刷新后 pending 丢失）时补弹
+  onMounted(() => {
+    if (!systemStore.awakened && gameStore.day > 1) {
+      showPersonaSelect.value = true
+    }
   })
 
   function onPersonaChosen() {
     showPersonaSelect.value = false
     systemStore.pendingAwakening = false
-    systemStore.tryConnect()
+    void systemStore.tryConnect().catch(err => {
+      console.warn('[PersonaSelect] tryConnect failed:', err)
+    })
   }
 
   /** 日志弹窗 */

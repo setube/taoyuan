@@ -25,6 +25,7 @@ import { useBreedingStore } from './useBreedingStore'
 import { useWarehouseStore } from './useWarehouseStore'
 import { useHiddenNpcStore } from './useHiddenNpcStore'
 import { addLog } from '@/composables/useGameLog'
+import { useSystemStore } from './useSystemStore'
 import { hasCombinedItem, removeCombinedItem, getLowestCombinedQuality } from '@/composables/useCombinedInventory'
 
 /** 工坊升级定义 */
@@ -251,6 +252,12 @@ export const useProcessingStore = defineStore('processing', () => {
     slot.daysProcessed = 0
     slot.totalDays = 0
     slot.ready = false
+
+    try {
+      useSystemStore().onProcessingDone(recipe.outputItemId)
+    } catch {
+      /* pinia 未就绪 */
+    }
 
     return recipe.outputItemId
   }

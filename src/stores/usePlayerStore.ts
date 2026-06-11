@@ -15,6 +15,8 @@ import { useAchievementStore } from './useAchievementStore'
 import { useHiddenNpcStore } from './useHiddenNpcStore'
 import { useMiningStore } from './useMiningStore'
 import { useGuildStore } from './useGuildStore'
+import { adjustMineDamageForMerit, adjustStaminaCostForMerit, type MeritStaminaActivity } from '@/composables/useMeritEffects'
+import { useSystemStore } from './useSystemStore'
 
 /** 最大体力阶梯 (5档, 270 起 508 顶) */
 const STAMINA_CAPS = [120, 160, 200, 250, 300]
@@ -72,25 +74,37 @@ export const usePlayerStore = defineStore('player', () => {
     return hp.value <= getMaxHp() * 0.25
   }
 
-  /** 消耗体力（含仙缘灵护减免），返回是否成功 */
-  const consumeStamina = (amount: number): boolean => {
-    // 仙缘结缘：灵护（spirit_shield）体力消耗减免
+  /** 消耗体力（含仙缘灵护、功勋巧手减免），返回是否成功 */
+  const consumeStamina = (amount: number, activity: MeritStaminaActivity = 'general'): boolean => {
     const spiritShield2 = useHiddenNpcStore().getBondBonusByType('spirit_shield')
     const spiritSave = spiritShield2?.type === 'spirit_shield' ? spiritShield2.staminaSave / 100 : 0
-    const effectiveAmount = Math.max(1, Math.floor(amount * (1 - spiritSave)))
+    let effectiveAmount = Math.max(1, Math.floor(amount * (1 - spiritSave)))
+    effectiveAmount = adjustStaminaCostForMerit(effectiveAmount, activity)
     if (stamina.value < effectiveAmount) return false
     stamina.value -= effectiveAmount
+    try {
+      useSystemStore().onStaminaThreshold()
+    } catch {
+      /* pinia 未就绪 */
+    }
     return true
   }
 
   /** 恢复体力 */
   const restoreStamina = (amount: number) => {
     stamina.value = Math.min(stamina.value + amount, maxStamina.value)
+    try {
+      useSystemStore().onStaminaThreshold()
+    } catch {
+      /* pinia 未就绪 */
+    }
   }
 
-  /** 受到伤害（扣 HP），返回实际伤害值 */
-  const takeDamage = (amount: number): number => {
-    const actual = Math.min(amount, hp.value)
+  /** 受到伤害（扣 HP），source=mine 时应用功勋铁骨减免 */
+  const takeDamage = (amount: number, source: 'mine' | 'combat' | 'general' = 'general'): number => {
+    let dmg = amount
+    if (source === 'mine') dmg = adjustMineDamageForMerit(dmg)
+    const actual = Math.min(dmg, hp.value)
     hp.value -= actual
     return actual
   }
@@ -134,6 +148,11 @@ export const usePlayerStore = defineStore('player', () => {
     }
     // HP 每天都回满
     hp.value = getMaxHp()
+    try {
+      useSystemStore().onStaminaThreshold()
+    } catch {
+      /* pinia 未就绪 */
+    }
     return { moneyLost, recoveryPct }
   }
 
@@ -149,6 +168,12 @@ export const usePlayerStore = defineStore('player', () => {
   const addBonusMaxStamina = (amount: number) => {
     bonusMaxStamina.value += amount
     maxStamina.value = STAMINA_CAPS[staminaCapLevel.value]! + bonusMaxStamina.value
+  }
+
+  /** 永久增加生命上限（功勋商店等） */
+  const addBonusMaxHp = (amount: number) => {
+    baseMaxHp.value += amount
+    hp.value = Math.min(hp.value + amount, getMaxHp())
   }
 
   /** 花费铜钱，返回是否成功 */
@@ -234,6 +259,7 @@ export const usePlayerStore = defineStore('player', () => {
     dailyReset,
     upgradeMaxStamina,
     addBonusMaxStamina,
+    addBonusMaxHp,
     spendMoney,
     earnMoney,
     setIdentity,

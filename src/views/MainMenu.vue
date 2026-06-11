@@ -365,6 +365,7 @@
   import { useFarmStore } from '@/stores/useFarmStore'
   import { useAnimalStore } from '@/stores/useAnimalStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
+  import { useSystemStore } from '@/stores/useSystemStore'
   import { useQuestStore } from '@/stores/useQuestStore'
   import { useInventoryStore } from '@/stores/useInventoryStore'
   import { FARM_MAP_DEFS } from '@/data/farmMaps'
@@ -450,6 +451,7 @@
     }
     // 重置所有游戏 store 到初始状态，防止上一个存档数据残留
     resetAllStoresForNewGame()
+    useSystemStore().resetChatSessionForSlot(slot)
     playerStore.setIdentity((charName.value.trim() || '未命名').slice(0, 4), charGender.value)
     gameStore.startNewGame(selectedMap.value)
     // 标准农场初始6×6，其余4×4

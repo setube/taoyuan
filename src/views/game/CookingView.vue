@@ -192,8 +192,13 @@
   })
 
   const displayedRecipeInfos = computed(() => {
-    if (!showOnlyMakeable.value) return recipeInfos.value
-    return recipeInfos.value.filter(info => info.canCook)
+    const list = showOnlyMakeable.value
+      ? recipeInfos.value.filter(info => info.canCook)
+      : [...recipeInfos.value]
+    return list.sort((a, b) => {
+      if (a.canCook !== b.canCook) return a.canCook ? -1 : 1
+      return a.recipe.name.localeCompare(b.recipe.name, 'zh-CN')
+    })
   })
 
   /** 当前弹窗对应的食谱信息（响应式，材料变化时自动更新） */

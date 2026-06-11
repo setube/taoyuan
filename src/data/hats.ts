@@ -1,4 +1,5 @@
 import type { HatDef } from '@/types'
+import { FORGE_ONLY_HAT_DEFS } from '@/data/forgeSets'
 
 /** 所有帽子定义 */
 export const HATS: HatDef[] = [
@@ -465,7 +466,8 @@ export const HATS: HatDef[] = [
     recipeMoney: 2000,
     obtainSource: '铁匠铺合成',
     sellPrice: 900
-  }
+  },
+  ...FORGE_ONLY_HAT_DEFS
 ]
 
 /** 根据ID获取帽子定义 */

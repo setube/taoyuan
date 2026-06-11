@@ -38,12 +38,16 @@ import { useAchievementStore } from './useAchievementStore'
 import { useGuildStore } from './useGuildStore'
 import { useQuestStore } from './useQuestStore'
 import { useCookingStore } from './useCookingStore'
+import { useForgeStore } from './useForgeStore'
+import { rollForgeBlueprintDrop } from '@/data/forgeBlueprintDrops'
 import { useGameStore } from './useGameStore'
 import { useWalletStore } from './useWalletStore'
 import { useSecretNoteStore } from './useSecretNoteStore'
 import { useHiddenNpcStore } from './useHiddenNpcStore'
+import { useSystemStore } from './useSystemStore'
 import type { SkullCavernFloorDef } from '@/data/mine'
 import { ACTION_TIME_COSTS } from '@/data/timeConstants'
+import { applyMeritOreDropBonus } from '@/composables/useMeritEffects'
 
 const DEFEAT_MONEY_PENALTY_RATE = 0.1
 const DEFEAT_MONEY_PENALTY_CAP = 15000
@@ -70,6 +74,11 @@ export const useMiningStore = defineStore('mining', () => {
 
   const _notifySafePointUnlocked = (safeFloor: number) => {
     pendingSafePointEntryFloor.value = safeFloor + 1
+    try {
+      useSystemStore().onSafePointUnlocked(safeFloor)
+    } catch {
+      /* pinia 未就绪 */
+    }
   }
 
   const clearSafePointNotice = () => {
@@ -336,6 +345,7 @@ export const useMiningStore = defineStore('mining', () => {
     // 戒指矿石加成
     const ringOreBonus = inventoryStore.getRingEffectValue('ore_bonus')
     if (ringOreBonus > 0) quantity += Math.floor(ringOreBonus)
+    quantity = applyMeritOreDropBonus(quantity)
     // 仙缘能力：灵狐眼（hu_xian_2）15%概率额外掉落矿石
     if (useHiddenNpcStore().isAbilityActive('hu_xian_2') && Math.random() < 0.15) quantity += 1
 
@@ -427,7 +437,7 @@ export const useMiningStore = defineStore('mining', () => {
   /** 处理陷阱格子 */
   const _handleTrapTile = (tile: MineTile, staminaCost: number): { success: boolean; message: string; startsCombat: boolean } => {
     const damage = tile.data?.trapDamage ?? 5
-    playerStore.takeDamage(damage)
+    playerStore.takeDamage(damage, 'mine')
     tile.state = 'triggered'
 
     if (playerStore.hp <= 0) {
@@ -436,6 +446,19 @@ export const useMiningStore = defineStore('mining', () => {
     }
 
     return { success: true, message: `踩中了陷阱！受到${damage}点伤害。(-${staminaCost}体力)`, startsCombat: false }
+  }
+
+  /** 矿洞图纸掉落 */
+  const _tryMineBlueprintDrop = (floor: number, source: 'monster' | 'treasure'): string | null => {
+    const treasureFind = inventoryStore.getRingEffectValue('treasure_find')
+    const bpId = rollForgeBlueprintDrop(floor, source, treasureFind)
+    if (!bpId) return null
+    try {
+      const res = useForgeStore().tryLearnMineBlueprint(bpId)
+      return res.ok ? (res.blueprintName ?? bpId) : null
+    } catch {
+      return null
+    }
   }
 
   /** 处理宝箱格子 */
@@ -447,6 +470,11 @@ export const useMiningStore = defineStore('mining', () => {
       inventoryStore.addItem(r.itemId, r.quantity)
       sessionLoot.value.push(r)
       useAchievementStore().discoverItem(r.itemId)
+      try {
+        useSystemStore().onRareItemObtained(r.itemId)
+      } catch {
+        /* pinia 未就绪 */
+      }
     }
     if (money > 0) playerStore.earnMoney(money)
 
@@ -525,11 +553,16 @@ export const useMiningStore = defineStore('mining', () => {
       }
     }
 
+    const blueprintName = _tryMineBlueprintDrop(currentFloor.value, 'treasure')
+
     tile.state = 'collected'
 
     let msg = '发现宝箱！'
     if (items.length > 0) msg += `获得了${getRewardNames(items)}`
     if (money > 0) msg += `${items.length > 0 ? '和' : '获得了'}${money}文`
+    if (blueprintName) {
+      msg += `${items.length > 0 || money > 0 ? '，' : ''}获得了图纸：${blueprintName}`
+    }
     if (autoSoldMoney > 0) msg += `（重复装备自动售出+${autoSoldMoney}文）`
     msg += `！(-${staminaCost}体力)`
     return { success: true, message: msg, startsCombat: false }
@@ -1023,6 +1056,9 @@ export const useMiningStore = defineStore('mining', () => {
         }
       }
       if (monsterAutoSold > 0) msg += `（重复装备自动售出+${monsterAutoSold}文）`
+
+      const blueprintName = _tryMineBlueprintDrop(currentFloor.value, 'monster')
+      if (blueprintName) msg += ` 获得了图纸：${blueprintName}！`
     }
 
     // BOSS 击败处理
@@ -1048,6 +1084,14 @@ export const useMiningStore = defineStore('mining', () => {
 
         if (isFirstKill) {
           defeatedBosses.value.push(bossId)
+          try {
+            const blueprintRecipes = useForgeStore().markBossDefeated(currentFloor.value)
+            if (blueprintRecipes.length > 0) {
+              msg += ` 首次击败BOSS！获得了套装锻造图纸！`
+            }
+          } catch {
+            /* pinia 未就绪 */
+          }
           // 首杀掉落武器
           const weaponId = BOSS_DROP_WEAPONS[currentFloor.value]
           if (weaponId) {
@@ -1188,6 +1232,12 @@ export const useMiningStore = defineStore('mining', () => {
     parts.push('，被送回入口。')
     const msg = parts.join('')
     combatLog.value.push(msg)
+    const defeatFloor = wasInSkullCavern ? skullCavernFloor.value : currentFloor.value
+    try {
+      useSystemStore().onMineDefeat(defeatFloor)
+    } catch {
+      /* pinia 未就绪 */
+    }
     return { message: msg, combatOver: true, won: false }
   }
 
@@ -1241,9 +1291,14 @@ export const useMiningStore = defineStore('mining', () => {
 
       currentFloor.value++
       useAchievementStore().recordMineFloor(currentFloor.value)
+      const newFloorData = getFloor(currentFloor.value)
+      try {
+        useSystemStore().onMineFloorReached(currentFloor.value, newFloorData?.specialType === 'boss')
+      } catch {
+        /* pinia 未就绪 */
+      }
 
       // 到达新的安全点时保存（只在到达更高层时更新，避免电梯返回低层后覆盖进度）
-      const newFloorData = getFloor(currentFloor.value)
       if (newFloorData?.isSafePoint && currentFloor.value > safePointFloor.value) {
         safePointFloor.value = currentFloor.value
         _notifySafePointUnlocked(currentFloor.value)
@@ -1292,6 +1347,11 @@ export const useMiningStore = defineStore('mining', () => {
     floorGrid.value = []
     _combatTileIndex.value = -1
     slayerCharmActive.value = false
+    try {
+      useSystemStore().onMineLeaveEarly()
+    } catch {
+      /* pinia 未就绪 */
+    }
     if (isInSkullCavern.value) {
       isInSkullCavern.value = false
       cachedSkullFloorData.value = null
@@ -1367,17 +1427,31 @@ export const useMiningStore = defineStore('mining', () => {
     // 烹饪品走 cookingStore.eat()，以正确应用buff、厨房加成等
     if (itemId.startsWith('food_')) {
       const cookingStore = useCookingStore()
-      const hpFull = playerStore.hp >= playerStore.getMaxHp()
-      const staminaFull = playerStore.stamina >= playerStore.maxStamina
-      if (hpFull && staminaFull) {
-        return { success: false, message: '体力和生命值都已满。' }
+      const recipeId = itemId.slice(5)
+      let used = 0
+      const maxUse = Math.min(quantity, inventoryStore.getItemCount(itemId))
+      for (let i = 0; i < maxUse; i++) {
+        const hpFull = playerStore.hp >= playerStore.getMaxHp()
+        const staminaFull = playerStore.stamina >= playerStore.maxStamina
+        if (hpFull && staminaFull) break
+        const qualityOrder: Quality[] = ['normal', 'fine', 'excellent', 'supreme']
+        const foodQuality = qualityOrder.find(q => inventoryStore.getItemCount(itemId, q) > 0) ?? 'normal'
+        const result = cookingStore.eat(recipeId, foodQuality)
+        if (!result.success) break
+        used++
+        if (inCombat.value) combatLog.value.push(result.message)
       }
-      // 查找背包中该食物的最低品质
-      const qualityOrder: Quality[] = ['normal', 'fine', 'excellent', 'supreme']
-      const foodQuality = qualityOrder.find(q => inventoryStore.getItemCount(itemId, q) > 0) ?? 'normal'
-      const result = cookingStore.eat(itemId.slice(5), foodQuality)
-      if (result.success && inCombat.value) combatLog.value.push(result.message)
-      return result
+      if (used === 0) {
+        const hpFull = playerStore.hp >= playerStore.getMaxHp()
+        const staminaFull = playerStore.stamina >= playerStore.maxStamina
+        if (hpFull && staminaFull) return { success: false, message: '体力和生命值都已满。' }
+        return { success: false, message: '无法使用该食物。' }
+      }
+      const foodDef = getItemById(itemId)
+      if (used === 1 && inCombat.value && combatLog.value.length > 0) {
+        return { success: true, message: combatLog.value[combatLog.value.length - 1]! }
+      }
+      return { success: true, message: `使用了${foodDef?.name ?? '食物'}${used > 1 ? `×${used}` : ''}。` }
     }
 
     const hpFull = playerStore.hp >= playerStore.getMaxHp()
@@ -1385,35 +1459,46 @@ export const useMiningStore = defineStore('mining', () => {
     const hasHpRestore = def.healthRestore && def.healthRestore > 0
     const hasStaminaRestore = def.staminaRestore && def.staminaRestore > 0
 
-    if (hasHpRestore && !hasStaminaRestore && hpFull) {
-      return { success: false, message: '生命值已满。' }
-    }
-    if (hasStaminaRestore && !hasHpRestore && staminaFull) {
-      return { success: false, message: '体力已满。' }
-    }
-    if (hpFull && staminaFull && (hasHpRestore || hasStaminaRestore)) {
-      return { success: false, message: '体力和生命值都已满。' }
+    if (hasHpRestore || hasStaminaRestore) {
+      const alchemistBonus = skillStore.getSkill('foraging').perk10 === 'alchemist' ? 1.5 : 1.0
+      let used = 0
+      let lastMsg = ''
+      const maxUse = Math.min(quantity, inventoryStore.getItemCount(itemId))
+      for (let i = 0; i < maxUse; i++) {
+        const hpNowFull = playerStore.hp >= playerStore.getMaxHp()
+        const staNowFull = playerStore.stamina >= playerStore.maxStamina
+        if (hasHpRestore && !hasStaminaRestore && hpNowFull) break
+        if (hasStaminaRestore && !hasHpRestore && staNowFull) break
+        if (hpNowFull && staNowFull && (hasHpRestore || hasStaminaRestore)) break
+        if (!inventoryStore.removeItem(itemId)) break
+        const parts: string[] = []
+        if (hasHpRestore) {
+          const restore = def.healthRestore! >= 999 ? playerStore.getMaxHp() : Math.floor(def.healthRestore! * alchemistBonus)
+          playerStore.restoreHealth(restore)
+          parts.push(`恢复${def.healthRestore! >= 999 ? '全部' : restore}HP`)
+        }
+        if (hasStaminaRestore) {
+          const restore = Math.floor(def.staminaRestore! * alchemistBonus)
+          playerStore.restoreStamina(restore)
+          parts.push(`恢复${restore}体力`)
+        }
+        used++
+        lastMsg = `使用了${def.name}，${parts.join('和')}！`
+        if (inCombat.value) combatLog.value.push(lastMsg)
+      }
+      if (used === 0) {
+        if (hasHpRestore && !hasStaminaRestore && hpFull) return { success: false, message: '生命值已满。' }
+        if (hasStaminaRestore && !hasHpRestore && staminaFull) return { success: false, message: '体力已满。' }
+        if (hpFull && staminaFull) return { success: false, message: '体力和生命值都已满。' }
+        return { success: false, message: `没有${def.name}。` }
+      }
+      return {
+        success: true,
+        message: used > 1 ? `使用了${def.name}×${used}。` : lastMsg
+      }
     }
 
-    if (!inventoryStore.removeItem(itemId)) return { success: false, message: `没有${def.name}。` }
-
-    // 炼金师专精：食物恢复+50%
-    const alchemistBonus = skillStore.getSkill('foraging').perk10 === 'alchemist' ? 1.5 : 1.0
-    const parts: string[] = []
-    if (hasHpRestore) {
-      const restore = def.healthRestore! >= 999 ? playerStore.getMaxHp() : Math.floor(def.healthRestore! * alchemistBonus)
-      playerStore.restoreHealth(restore)
-      parts.push(`恢复${def.healthRestore! >= 999 ? '全部' : restore}HP`)
-    }
-    if (hasStaminaRestore) {
-      const restore = Math.floor(def.staminaRestore! * alchemistBonus)
-      playerStore.restoreStamina(restore)
-      parts.push(`恢复${restore}体力`)
-    }
-
-    const msg = `使用了${def.name}，${parts.join('和')}！`
-    if (inCombat.value) combatLog.value.push(msg)
-    return { success: true, message: msg }
+    return { success: false, message: '该物品无法在矿洞中使用。' }
   }
 
   /** 在探索中使用怪物诱饵（本层怪物数量翻倍） */

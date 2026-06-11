@@ -64,8 +64,10 @@ func (s *SQLiteStore) migrate() error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_chat_history_session ON chat_history(session_id, id);
 	`
-	_, err := s.db.Exec(schema)
-	return err
+	if _, err := s.db.Exec(schema); err != nil {
+		return err
+	}
+	return migrateAnalyticsSQLite(s.db)
 }
 
 func (s *SQLiteStore) Close() error {
@@ -150,7 +152,15 @@ func (s *SQLiteStore) ValidateToken(deviceID, token string) bool {
 
 // ── 聊天历史 ──────────────────────────────────────
 
-func (s *SQLiteStore) SaveChatMessage(sessionID, role, content string) error {
+func (s *SQLiteStore) SaveChatMessage(sessionID, role, content string, meta *ChatMeta) error {
+	if meta != nil {
+		_, err := s.db.Exec(
+			`INSERT INTO chat_history (session_id, role, content, visitor_id, persona_id, ip, region, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+			sessionID, role, content, meta.VisitorID, meta.PersonaID, meta.IP, meta.Region,
+		)
+		return err
+	}
 	_, err := s.db.Exec(
 		`INSERT INTO chat_history (session_id, role, content, created_at)
 		 VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,

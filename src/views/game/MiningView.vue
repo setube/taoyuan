@@ -68,6 +68,28 @@
           <span class="text-xs text-muted">{{ playerStore.stamina }}/{{ playerStore.maxStamina }}</span>
         </div>
       </div>
+
+      <div v-if="inventoryStore.setsWithOwnedPieces.length > 0" class="mt-2 pt-2 border-t border-accent/10">
+        <p class="text-[10px] text-muted mb-1">套装快捷穿戴</p>
+        <div class="flex flex-wrap gap-1">
+          <Button
+            v-for="set in inventoryStore.setsWithOwnedPieces.slice(0, 4)"
+            :key="set.id"
+            class="text-[10px] py-0 px-1.5"
+            @click="handleEquipSet(set.id)"
+          >
+            {{ set.name }}
+          </Button>
+          <Button
+            v-for="set in inventoryStore.setsWithOwnedPieces.slice(0, 4)"
+            :key="set.id + '-preset'"
+            class="text-[10px] py-0 px-1.5 opacity-80"
+            @click="handleEquipSetWithPreset(set.id)"
+          >
+            {{ set.name }}·存方案
+          </Button>
+        </div>
+      </div>
     </div>
 
     <!-- 进入矿洞 -->
@@ -311,7 +333,7 @@
             <div
               v-if="availableCombatItems.length > 0"
               class="flex items-center justify-between border border-success/20 rounded-xs px-3 py-1.5 cursor-pointer hover:bg-success/5"
-              @click="showCombatItems = true"
+              @click="openCombatItems"
             >
               <span class="text-xs text-success">
                 <Backpack :size="12" class="inline" />
@@ -457,7 +479,7 @@
             <div
               v-if="availableCombatItems.length > 0"
               class="flex items-center justify-between border border-success/20 rounded-xs px-3 py-1.5 cursor-pointer hover:bg-success/5"
-              @click="showCombatItems = true"
+              @click="openCombatItems"
             >
               <span class="text-xs text-success">
                 <Backpack :size="12" class="inline" />
@@ -495,12 +517,12 @@
       </div>
     </Transition>
 
-    <!-- 道具使用弹窗（战斗/探索共用） -->
+    <!-- 道具使用弹窗（战斗/探索共用，支持多选+数量） -->
     <Transition name="panel-fade">
       <div
         v-if="showCombatItems"
         class="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4"
-        @click.self="showCombatItems = false"
+        @click.self="closeCombatItems"
       >
         <div class="game-panel max-w-xs w-full">
           <div class="flex items-center justify-between mb-2">
@@ -508,91 +530,76 @@
               <Backpack :size="14" class="inline" />
               使用道具
             </p>
-            <Button class="py-0 px-1" :icon="X" :icon-size="12" @click="showCombatItems = false" />
+            <Button class="py-0 px-1" :icon="X" :icon-size="12" @click="closeCombatItems" />
           </div>
-          <div class="flex flex-col space-y-1 max-h-48 overflow-y-auto">
+          <p class="text-[10px] text-muted mb-2">勾选多种道具并设置数量，确认后一次性使用。</p>
+          <div class="flex flex-col space-y-1 max-h-56 overflow-y-auto">
             <div
               v-for="item in availableCombatItems"
               :key="item.itemId"
-              class="flex items-center justify-between border border-success/20 rounded-xs px-3 py-1.5 cursor-pointer hover:bg-success/5"
-              @click="handlePendingItem(item.itemId)"
+              class="border rounded-xs px-2 py-1.5 transition-colors"
+              :class="isCombatItemSelected(item.itemId) ? 'border-accent/40 bg-accent/5' : 'border-accent/10'"
             >
-              <div class="flex flex-col">
-                <span class="text-xs">{{ item.name }}</span>
-                <span class="text-[10px] text-muted">{{ item.desc }}</span>
+              <div class="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  class="mt-0.5 accent-accent shrink-0"
+                  :checked="isCombatItemSelected(item.itemId)"
+                  @change="toggleCombatItemSelect(item.itemId, item.count)"
+                />
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-xs truncate">{{ item.name }}</span>
+                    <span class="text-xs text-muted shrink-0">&times;{{ item.count }}</span>
+                  </div>
+                  <span class="text-[10px] text-muted">{{ item.desc }}</span>
+                  <div
+                    v-if="isCombatItemSelected(item.itemId) && canSetCombatQty(item.itemId) && item.count > 1"
+                    class="flex items-center justify-end space-x-1 mt-1"
+                    @click.stop
+                  >
+                    <Button
+                      class="h-6 px-1.5 py-0.5 text-xs justify-center"
+                      :disabled="getCombatItemQty(item.itemId) <= 1"
+                      @click="adjustCombatItemQty(item.itemId, -1, item.count)"
+                    >
+                      -
+                    </Button>
+                    <input
+                      type="number"
+                      :value="getCombatItemQty(item.itemId)"
+                      min="1"
+                      :max="item.count"
+                      class="w-12 h-6 px-1 py-0.5 bg-bg border border-accent/30 rounded-xs text-xs text-center text-accent outline-none"
+                      @input="onCombatItemQtyInput(item.itemId, $event, item.count)"
+                    />
+                    <Button
+                      class="h-6 px-1.5 py-0.5 text-xs justify-center"
+                      :disabled="getCombatItemQty(item.itemId) >= item.count"
+                      @click="adjustCombatItemQty(item.itemId, 1, item.count)"
+                    >
+                      +
+                    </Button>
+                    <Button
+                      class="h-6 px-1.5 py-0.5 text-[10px] justify-center"
+                      @click="setCombatItemQty(item.itemId, item.count, item.count)"
+                    >
+                      最多
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <span class="text-xs text-muted">&times;{{ item.count }}</span>
             </div>
           </div>
           <p v-if="availableCombatItems.length === 0" class="text-xs text-muted text-center py-2">没有可用道具</p>
-        </div>
-      </div>
-    </Transition>
-
-    <!-- 道具使用确认弹窗 -->
-    <Transition name="panel-fade">
-      <div
-        v-if="pendingItem"
-        class="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4"
-        @click.self="pendingItemId = null"
-      >
-        <div class="game-panel max-w-xs w-full relative">
-          <button class="absolute top-2 right-2 text-muted hover:text-text" @click="pendingItemId = null">
-            <X :size="14" />
-          </button>
-          <p class="text-sm text-accent mb-2">使用道具</p>
-          <div class="border border-accent/10 rounded-xs p-2 mb-2">
-            <div class="flex items-center justify-between">
-              <span class="text-xs text-muted">道具</span>
-              <span class="text-xs">{{ pendingItem.name }}</span>
-            </div>
-            <div class="flex items-center justify-between mt-0.5">
-              <span class="text-xs text-muted">效果</span>
-              <span class="text-xs text-success">{{ pendingItem.desc }}</span>
-            </div>
-            <div class="flex items-center justify-between mt-0.5">
-              <span class="text-xs text-muted">剩余</span>
-              <span class="text-xs">×{{ pendingItem.count }}</span>
-            </div>
-          </div>
-          <!-- 批量数量选择（仅永久增益类道具） -->
-          <div v-if="pendingCanBatch && pendingItem.count > 1" class="border border-accent/10 rounded-xs p-2 mb-2">
-            <div class="flex items-center justify-between mb-1.5">
-              <span class="text-xs text-muted">使用数量</span>
-              <div class="flex items-center space-x-1">
-                <Button class="h-6 px-1.5 py-0.5 text-xs justify-center" :disabled="pendingUseQty <= 1" @click="addUseQty(-1)">-</Button>
-                <input
-                  type="number"
-                  :value="pendingUseQty"
-                  min="1"
-                  :max="pendingItem.count"
-                  class="w-24 h-6 px-2 py-0.5 bg-bg border border-accent/30 rounded-xs text-xs text-center text-accent outline-none focus:border-accent transition-colors"
-                  @input="onUseQtyInput"
-                />
-                <Button
-                  class="h-6 px-1.5 py-0.5 text-xs justify-center"
-                  :disabled="pendingUseQty >= pendingItem.count"
-                  @click="addUseQty(1)"
-                >
-                  +
-                </Button>
-              </div>
-            </div>
-            <div class="flex space-x-1">
-              <Button class="flex-1 justify-center" :disabled="pendingUseQty <= 1" @click="pendingUseQty = 1">最少</Button>
-              <Button
-                class="flex-1 justify-center"
-                :disabled="pendingUseQty >= pendingItem.count"
-                @click="pendingUseQty = pendingItem.count"
-              >
-                最多
-              </Button>
-            </div>
-          </div>
-          <div class="flex space-x-1.5">
-            <Button class="flex-1 justify-center" @click="pendingItemId = null">取消</Button>
-            <Button class="flex-1 justify-center !bg-accent !text-bg" @click="handleConfirmUseItem">
-              确认使用{{ pendingCanBatch && pendingUseQty > 1 ? ` ×${pendingUseQty}` : '' }}
+          <div class="flex space-x-1.5 mt-2">
+            <Button class="flex-1 justify-center" @click="closeCombatItems">取消</Button>
+            <Button
+              class="flex-1 justify-center !bg-accent !text-bg"
+              :disabled="selectedCombatItemCount === 0"
+              @click="handleConfirmMultiUse"
+            >
+              确认使用{{ selectedCombatItemCount > 0 ? `(${selectedCombatItemCount}种)` : '' }}
             </Button>
           </div>
         </div>
@@ -815,6 +822,8 @@
   import { sfxMine, sfxAttack, sfxHurt, sfxClick, sfxEncounter, sfxDefend, sfxFlee, sfxVictory } from '@/composables/useAudio'
   import { useAudio } from '@/composables/useAudio'
   import { addLog } from '@/composables/useGameLog'
+  import { getSetSourceHint } from '@/data/forgeSetSources'
+  import { getEquipmentSetById } from '@/data/equipmentSets'
   import { handleEndDay } from '@/composables/useEndDay'
   import { lockBodyScroll, unlockBodyScroll } from '@/composables/useScrollLock'
 
@@ -822,6 +831,25 @@
   const gameStore = useGameStore()
   const playerStore = usePlayerStore()
   const inventoryStore = useInventoryStore()
+
+  const handleEquipSet = (setId: string) => {
+    const res = inventoryStore.equipSet(setId)
+    const setName = getEquipmentSetById(setId)?.name ?? setId
+    if (res.ok) addLog(`已穿戴整套：${setName}`)
+    else if (res.missing.length > 0) {
+      addLog(`缺少 ${res.missing.map(m => m.name).join('、')}。${getSetSourceHint(setId)}`)
+    }
+  }
+
+  const handleEquipSetWithPreset = (setId: string) => {
+    const res = inventoryStore.equipSetWithPreset(setId)
+    const setName = getEquipmentSetById(setId)?.name ?? setId
+    if (res.ok) addLog(`已穿戴整套：${setName}${res.presetSaved ? '，并保存为装备方案' : ''}`)
+    else if (res.missing.length > 0) {
+      addLog(`缺少 ${res.missing.map(m => m.name).join('、')}。${getSetSourceHint(setId)}`)
+    }
+  }
+
   const skillStore = useSkillStore()
   const achievementStore = useAchievementStore()
   const tutorialStore = useTutorialStore()
@@ -842,27 +870,52 @@
   /** 炸弹模式 */
   const bombModeId = ref<string | null>(null)
 
-  /** 战斗道具面板 */
+  /** 战斗道具面板（多选） */
   const showCombatItems = ref(false)
+  const SINGLE_USE_COMBAT_ITEMS = new Set(['slayer_charm'])
+  const combatItemSelections = ref<Record<string, number>>({})
 
-  /** 道具使用确认 */
-  const BATCH_USABLE_ITEMS = new Set(['guild_badge', 'life_talisman', 'lucky_coin', 'defense_charm'])
-  const pendingItemId = ref<string | null>(null)
-  const pendingUseQty = ref(1)
-  const pendingItem = computed(() => {
-    if (!pendingItemId.value) return null
-    return availableCombatItems.value.find(i => i.itemId === pendingItemId.value) ?? null
-  })
-  const pendingCanBatch = computed(() => pendingItemId.value !== null && BATCH_USABLE_ITEMS.has(pendingItemId.value))
+  const isCombatItemSelected = (itemId: string) => itemId in combatItemSelections.value
+  const getCombatItemQty = (itemId: string) => combatItemSelections.value[itemId] ?? 1
+  const canSetCombatQty = (itemId: string) => !SINGLE_USE_COMBAT_ITEMS.has(itemId)
+  const selectedCombatItemCount = computed(() => Object.keys(combatItemSelections.value).length)
 
-  const addUseQty = (delta: number) => {
-    const max = pendingItem.value?.count ?? 1
-    pendingUseQty.value = Math.max(1, Math.min(max, pendingUseQty.value + delta))
+  const toggleCombatItemSelect = (itemId: string, maxCount: number) => {
+    if (combatItemSelections.value[itemId]) {
+      const next = { ...combatItemSelections.value }
+      delete next[itemId]
+      combatItemSelections.value = next
+    } else {
+      combatItemSelections.value = { ...combatItemSelections.value, [itemId]: 1 }
+    }
+    void maxCount
   }
-  const onUseQtyInput = (e: Event) => {
-    const val = parseInt((e.target as HTMLInputElement).value) || 1
-    const max = pendingItem.value?.count ?? 1
-    pendingUseQty.value = Math.max(1, Math.min(max, val))
+
+  const setCombatItemQty = (itemId: string, qty: number, max: number) => {
+    if (!isCombatItemSelected(itemId)) return
+    combatItemSelections.value = {
+      ...combatItemSelections.value,
+      [itemId]: Math.max(1, Math.min(max, qty))
+    }
+  }
+
+  const adjustCombatItemQty = (itemId: string, delta: number, max: number) => {
+    setCombatItemQty(itemId, getCombatItemQty(itemId) + delta, max)
+  }
+
+  const onCombatItemQtyInput = (itemId: string, event: Event, max: number) => {
+    const val = parseInt((event.target as HTMLInputElement).value) || 1
+    setCombatItemQty(itemId, val, max)
+  }
+
+  const closeCombatItems = () => {
+    showCombatItems.value = false
+    combatItemSelections.value = {}
+  }
+
+  const openCombatItems = () => {
+    combatItemSelections.value = {}
+    showCombatItems.value = true
   }
 
   /** 离开矿洞确认 */
@@ -1298,21 +1351,18 @@
     }, 400)
   }
 
-  const handleConfirmUseItem = () => {
-    if (!pendingItemId.value) return
-    const result = miningStore.useCombatItem(pendingItemId.value, pendingCanBatch.value ? pendingUseQty.value : 1)
-    sfxClick()
-    addLog(result.message)
-    if (result.success) {
-      exploreLog.value.push(result.message)
+  const handleConfirmMultiUse = () => {
+    const entries = Object.entries(combatItemSelections.value)
+    if (entries.length === 0) return
+    for (const [itemId, qty] of entries) {
+      const result = miningStore.useCombatItem(itemId, qty)
+      sfxClick()
+      addLog(result.message)
+      if (result.success) {
+        exploreLog.value.push(result.message)
+      }
     }
-    pendingItemId.value = null
-  }
-
-  const handlePendingItem = (itemId: string) => {
-    pendingItemId.value = itemId
-    pendingUseQty.value = 1
-    showCombatItems.value = false
+    closeCombatItems()
   }
 
   /** 使用怪物诱饵 */
@@ -1439,7 +1489,9 @@
     treasure_find: '宝箱概率',
     ore_bonus: '矿石加成',
     luck: '幸运',
-    travel_speed: '旅行加速'
+    travel_speed: '旅行加速',
+    foraging_stamina: '采集体力减免',
+    forging_exp_bonus: '锻造经验加成'
   }
 
   const PCTG_EFFECTS: Set<EquipmentEffectType> = new Set([

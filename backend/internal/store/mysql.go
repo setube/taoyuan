@@ -57,8 +57,10 @@ func migrateMySQL(db *sql.DB) error {
 		INDEX idx_chat_history_session (session_id, id)
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 	`
-	_, err := db.Exec(schema)
-	return err
+	if _, err := db.Exec(schema); err != nil {
+		return err
+	}
+	return migrateAnalyticsMySQL(db)
 }
 
 func (m *MySQL) Close() error {
@@ -133,7 +135,15 @@ func (m *MySQL) ValidateToken(deviceID, token string) bool {
 
 // ── 聊天历史 ──────────────────────────────────────
 
-func (m *MySQL) SaveChatMessage(sessionID, role, content string) error {
+func (m *MySQL) SaveChatMessage(sessionID, role, content string, meta *ChatMeta) error {
+	if meta != nil {
+		_, err := m.db.Exec(
+			`INSERT INTO chat_history (session_id, role, content, visitor_id, persona_id, ip, region, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+			sessionID, role, content, meta.VisitorID, meta.PersonaID, meta.IP, meta.Region,
+		)
+		return err
+	}
 	_, err := m.db.Exec(
 		`INSERT INTO chat_history (session_id, role, content, created_at)
 		 VALUES (?, ?, ?, NOW())`,

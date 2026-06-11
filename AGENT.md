@@ -81,7 +81,26 @@ const merged = [...saved, ...defaults.filter(d => !savedIds.has(d.id))]
 tutorialStore.getFlag('wishWell_newFeature') // 未领取
 ```
 
-### 2.4 改完必测（Agent 自检）
+### 2.4 禁止直接使用 `crypto.randomUUID()`（前端）
+
+生产环境以 **HTTP** 访问（如 `http://47.108.84.163:8005`），非 HTTPS **安全上下文** 下 `crypto.randomUUID()` 在多数浏览器中不可用或调用即抛错，会导致依赖它的逻辑（如会话统计 `startAnalytics`）整段中断且请求发不出去。
+
+| 规则 | 说明 |
+|------|------|
+| **禁止** | 业务代码中直接写 `crypto.randomUUID()` |
+| **必须** | 使用 `src/utils/id.ts` 导出的 `createId()` |
+| **原因** | `createId()` 在 HTTPS 下优先用 `randomUUID`，HTTP 下自动降级为时间戳 + 随机串 |
+
+```typescript
+import { createId } from '@/utils/id'
+
+const sessionId = createId() // ✅
+// const sessionId = crypto.randomUUID() // ❌ 禁止
+```
+
+新增需要唯一 ID 的场景（会话、消息、临时键等）一律走 `createId()`；仅 `id.ts` 与 `id.test.ts` 内部可触及 `crypto.randomUUID`。
+
+### 2.5 改完必测（Agent 自检）
 
 - [ ] 使用 **改代码前** 导出的 `.tyx` 或浏览器已有槽位 **读档成功**
 - [ ] 金钱、季节/天数、背包、NPC 好感与改前一致
@@ -94,6 +113,24 @@ tutorialStore.getFlag('wishWell_newFeature') // 未领取
 ## 3. 告示栏 vs Agent 记录（强制分工）
 
 用户要求的功能改动，**写完代码后必须同步文档**，按类型分流：
+
+### 3.0 知识库同步（游戏机制改动 — 强制）
+
+凡改动**玩家可感知的游戏规则、数值、建造条件、社交流程、商店/节日/任务机制**等，除按 §3.1 更新告示栏外，**必须同步更新 AI 知识库**，否则系统助手会按旧条目胡编。
+
+| 项 | 说明 |
+|----|------|
+| 知识库位置 | `backend/internal/knowledge/kb_part*.json`（纯 JSON 数组，按 `id` 唯一） |
+| 加载方式 | 后端 `knowledge.LoadDir` 自动合并所有 `kb_part*.json` |
+| 权威来源 | 以 `src/data/*.ts`、`src/stores/*.ts` 实装为准，**禁止**写入其他游戏（如星露谷）机制 |
+| 更新方式 | **优先改已有条目**（按 `id` 或 `keywords` 检索）；无条目则追加到新文件 `kb_part{N}_*.json` |
+| 必写内容 | 费用/材料/门槛/流程/限制条件等**可核对数值**；机制说明条目末尾保留 `【品质】` 段（若同类条目已有） |
+| 禁止写入 | 许愿井有效口令、未实装节日、社区中心献祭等已废弃/外来内容 |
+| 自检 | 改完后用 Python 校验 JSON 合法、**`id` 无重复**；条目数应与改动预期一致 |
+
+**典型必须同步 KB 的改动**：农舍/畜舍/酒肆/山洞/仓库/背包扩格价格；好感约会求婚流程；祠堂任务包物品清单；工具升级费用；钱庄借款规则；新增加工机器建造成本；节日日期与玩法变更。
+
+**不必写 KB 的改动**：纯 UI 样式、部署脚本、serialize 兜底、性能优化（记 §7/§8 即可）。
 
 | 类型 | 写到哪里 | 玩家是否可见 |
 |------|----------|--------------|
@@ -120,6 +157,7 @@ tutorialStore.getFlag('wishWell_newFeature') // 未领取
 
 | 场景 | 兼容做法 |
 |------|----------|
+| 游戏机制 / 数值 / 建造需求变更 | 改代码 + **同步 `kb_part*.json` 对应条目**（§3.0）+ 玩家可见则告示栏 `lines` 追加 |
 | 新增口令 / 彩蛋 | 新 `flag` 键 + 新奖励；旧 flag 名保留判断 |
 | 新增物品 / 作物 | 仅在新玩法逻辑中出现；旧档无该 ID 时不处理 |
 | 平衡数值调整 | 只影响 **之后** 的行为；不 retroactive 改存档内数量 |
@@ -156,6 +194,14 @@ ssh -i $KEY $SSH "mkdir -p /tmp/taoyuan-hot && rm -rf /tmp/taoyuan-hot/* && tar 
 
 规格 [design/superpowers/specs/2026-06-04-tavern-design.md](design/superpowers/specs/2026-06-04-tavern-design.md) · 计划 [design/superpowers/plans/2026-06-04-tavern-implementation.md](design/superpowers/plans/2026-06-04-tavern-implementation.md)
 
+## 5.2 锻造系统 v1（已实现）
+
+规格 [design/superpowers/specs/2026-06-10-forging-design.md](design/superpowers/specs/2026-06-10-forging-design.md) · 计划 [design/superpowers/plans/2026-06-10-forging-implementation.md](design/superpowers/plans/2026-06-10-forging-implementation.md)
+
+- 知识库：`backend/internal/knowledge/kb_part11_forging.json` + 更新 `kb_part3`/`kb_part4` 铁匠/套装/工具条目
+- 存档：`useSaveStore` → `forge` 字段；旧档 `pendingUpgrade` 读档当场结算；`defeatedBosses` 迁移 Boss 图纸
+- 入口：商圈铁匠铺「锻造工坊」；工坊导航仍可用 `ToolForgePanel`
+
 ---
 
 ## 6. 定制功能索引（fork 维护）
@@ -177,6 +223,8 @@ ssh -i $KEY $SSH "mkdir -p /tmp/taoyuan-hot && rm -rf /tmp/taoyuan-hot/* && tar 
 | 烹饪技能与专精（备料手/市厨/肆尊等） | `src/types/skill.ts`、`src/stores/useSkillStore.ts`、`src/stores/useCookingStore.ts` |
 | 酒坊 1～3 批批量酿造 | `src/data/processing.ts`、`src/stores/useProcessingStore.ts`、`src/views/game/ProcessingView.vue` |
 | 前厅酒肆经营（菜单/日结/亲自值班/员工/NPC 宴席） | `src/stores/useTavernStore.ts`、`src/composables/tavernSimulate.ts`、`src/views/game/TavernView.vue`、`src/data/tavern.ts` |
+| 收贮归置（收获自动入出货箱/仓库） | `src/stores/useSettingsStore.ts`（`itemCollectRoutes`）、`src/stores/useInventoryStore.ts`、`src/components/game/ItemCollectRouteModal.vue`、`src/views/game/FarmView.vue`、`src/views/game/HomeView.vue`；KB `mechanic_collect_route` |
+| 锻造系统（当场打造/图纸/套装/工具升级） | `src/stores/useForgeStore.ts`、`src/components/game/ForgeView.vue`、`src/data/forge*.ts`、`src/composables/forgeRoll.ts`；KB `kb_part11_forging.json` |
 
 新增定制时在本表追加一行，便于后续 Agent 排查兼容性。
 
@@ -198,5 +246,8 @@ ssh -i $KEY $SSH "mkdir -p /tmp/taoyuan-hot && rm -rf /tmp/taoyuan-hot/* && tar 
 
 | 日期 | 说明 |
 |------|------|
+| 2026-06-09 | 系统任务按进程过滤+新任务弹窗；AI 上下文扩展仓库/小屋/牧场；灵识在线/云备移至状态栏左上角 |
+| 2026-06-09 | 知识库全面核实：修正好感/结婚/知己/钱庄/仓库/工具升级等错项；删除 part7 无实装节日；新增 `kb_part10_buildings_social.json`（建造总表+祠堂26包+社交流程）；AGENT §3.0 强制机制改动同步 KB |
+| 2026-06-10 | AGENT §2.4：禁止前端直接使用 `crypto.randomUUID()`，统一 `createId()`（HTTP 生产环境兼容） |
 | 2026-06-03 | 告示栏分工：玩法进 `gameAnnouncements.ts`，UI/技术仅记 AGENT |
 | 2026-06 | 初版：旧存档兼容强制规则、热更流程、许愿井定制索引 |

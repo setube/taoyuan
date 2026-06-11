@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { MUSEUM_ITEMS, MUSEUM_MILESTONES } from '@/data/museum'
 import { useInventoryStore } from './useInventoryStore'
 import { usePlayerStore } from './usePlayerStore'
+import { useSystemStore } from './useSystemStore'
 
 export const useMuseumStore = defineStore('museum', () => {
   /** 已捐赠物品ID集合 */
@@ -48,6 +49,11 @@ export const useMuseumStore = defineStore('museum', () => {
     const removed = inventoryStore.removeItem(itemId, 1)
     if (!removed) return false
     donatedItems.value.push(itemId)
+    try {
+      useSystemStore().onMuseumGemDonate(itemId)
+    } catch {
+      /* pinia 未就绪 */
+    }
     return true
   }
 

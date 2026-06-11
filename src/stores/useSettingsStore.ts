@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { useAudio } from '@/composables/useAudio'
 import { getThemeByKey, hexToRgb, type ThemeKey } from '@/data/themes'
 import { applyQmsgConfig } from '@/composables/useGameLog'
+import type { SystemChatDisplayMode, SystemChatKindFilter } from '@/composables/useSystemChatGroups'
 import type { ItemCategory } from '@/types'
 
 export type QmsgPosition = 'topleft' | 'top' | 'topright' | 'left' | 'center' | 'right' | 'bottomleft' | 'bottom' | 'bottomright'
@@ -11,6 +12,11 @@ export type QmsgLimitWidthWrap = 'no-wrap' | 'wrap' | 'ellipsis'
 const DEFAULT_FONT_SIZE = 16
 const DEFAULT_THEME: ThemeKey = 'dark'
 const DEFAULT_QMSG_POSITION: QmsgPosition = 'top'
+const DEFAULT_SYSTEM_CHAT_DISPLAY_MODE: SystemChatDisplayMode = 'sectioned'
+const DEFAULT_SYSTEM_CHAT_KIND_FILTER: SystemChatKindFilter = 'all'
+const DEFAULT_SYSTEM_BUBBLE_ENABLED = true
+const DEFAULT_SYSTEM_BUBBLE_AUTO_CLOSE = true
+const DEFAULT_SYSTEM_BUBBLE_AUTO_CLOSE_MS = 1000
 
 export const useSettingsStore = defineStore('settings', () => {
   const fontSize = ref(DEFAULT_FONT_SIZE)
@@ -26,9 +32,46 @@ export const useSettingsStore = defineStore('settings', () => {
   const qmsgShowClose = ref(false)
   const qmsgShowIcon = ref(false)
   const qmsgShowReverse = ref(false)
+  const qmsgListenEventToPauseAutoClose = ref(true)
+
+  /** 系统聊天展示：分类（碎碎念/提示/对话分区）或时间线（混合排序） */
+  const systemChatDisplayMode = ref<SystemChatDisplayMode>(DEFAULT_SYSTEM_CHAT_DISPLAY_MODE)
+
+  /** 系统聊天类型筛选 */
+  const systemChatKindFilter = ref<SystemChatKindFilter>(DEFAULT_SYSTEM_CHAT_KIND_FILTER)
+
+  /** 系统碎碎念气泡：总开关 */
+  const systemBubbleEnabled = ref(DEFAULT_SYSTEM_BUBBLE_ENABLED)
+
+  /** 系统碎碎念气泡：自动关闭 */
+  const systemBubbleAutoClose = ref(DEFAULT_SYSTEM_BUBBLE_AUTO_CLOSE)
+
+  /** 系统碎碎念气泡：自动关闭时长（毫秒） */
+  const systemBubbleAutoCloseMs = ref(DEFAULT_SYSTEM_BUBBLE_AUTO_CLOSE_MS)
 
   /** 背包物品筛选：选中的分类（空数组 = 显示全部） */
   const inventoryFilter = ref<ItemCategory[]>([])
+
+  /** 物品收集路由：itemId → shipping | warehouse（未配置 = 进背包） */
+  const itemCollectRoutes = ref<Record<string, 'shipping' | 'warehouse'>>({})
+
+  const getItemCollectRoute = (itemId: string): 'none' | 'shipping' | 'warehouse' => {
+    return itemCollectRoutes.value[itemId] ?? 'none'
+  }
+
+  const setItemCollectRoute = (itemId: string, route: 'none' | 'shipping' | 'warehouse') => {
+    if (route === 'none') {
+      delete itemCollectRoutes.value[itemId]
+    } else {
+      itemCollectRoutes.value[itemId] = route
+    }
+  }
+
+  const cycleItemCollectRoute = (itemId: string) => {
+    const current = getItemCollectRoute(itemId)
+    const next = current === 'none' ? 'shipping' : current === 'shipping' ? 'warehouse' : 'none'
+    setItemCollectRoute(itemId, next)
+  }
 
   const applyFontSize = () => {
     document.documentElement.style.fontSize = fontSize.value + 'px'
@@ -51,6 +94,26 @@ export const useSettingsStore = defineStore('settings', () => {
     applyTheme()
   }
 
+  const changeSystemChatDisplayMode = (mode: SystemChatDisplayMode) => {
+    systemChatDisplayMode.value = mode
+  }
+
+  const changeSystemChatKindFilter = (filter: SystemChatKindFilter) => {
+    systemChatKindFilter.value = filter
+  }
+
+  const changeSystemBubbleEnabled = (enabled: boolean) => {
+    systemBubbleEnabled.value = enabled
+  }
+
+  const changeSystemBubbleAutoClose = (enabled: boolean) => {
+    systemBubbleAutoClose.value = enabled
+  }
+
+  const changeSystemBubbleAutoCloseMs = (delta: number) => {
+    systemBubbleAutoCloseMs.value = Math.min(10000, Math.max(500, systemBubbleAutoCloseMs.value + delta))
+  }
+
   const changeQmsgPosition = (pos: QmsgPosition) => {
     qmsgPosition.value = pos
     syncQmsgConfig()
@@ -69,7 +132,8 @@ export const useSettingsStore = defineStore('settings', () => {
       autoClose: qmsgAutoClose.value,
       showClose: qmsgShowClose.value,
       showIcon: qmsgShowIcon.value,
-      showReverse: qmsgShowReverse.value
+      showReverse: qmsgShowReverse.value,
+      listenEventToPauseAutoClose: qmsgListenEventToPauseAutoClose.value
     })
   }
 
@@ -91,7 +155,13 @@ export const useSettingsStore = defineStore('settings', () => {
       qmsgShowClose: qmsgShowClose.value,
       qmsgShowIcon: qmsgShowIcon.value,
       qmsgShowReverse: qmsgShowReverse.value,
-      inventoryFilter: inventoryFilter.value
+      inventoryFilter: inventoryFilter.value,
+      itemCollectRoutes: itemCollectRoutes.value,
+      systemChatDisplayMode: systemChatDisplayMode.value,
+      systemChatKindFilter: systemChatKindFilter.value,
+      systemBubbleEnabled: systemBubbleEnabled.value,
+      systemBubbleAutoClose: systemBubbleAutoClose.value,
+      systemBubbleAutoCloseMs: systemBubbleAutoCloseMs.value
     }
   }
 
@@ -112,6 +182,12 @@ export const useSettingsStore = defineStore('settings', () => {
     qmsgShowIcon.value = data?.qmsgShowIcon ?? false
     qmsgShowReverse.value = data?.qmsgShowReverse ?? false
     inventoryFilter.value = data?.inventoryFilter ?? []
+    itemCollectRoutes.value = data?.itemCollectRoutes ?? {}
+    systemChatDisplayMode.value = data?.systemChatDisplayMode ?? DEFAULT_SYSTEM_CHAT_DISPLAY_MODE
+    systemChatKindFilter.value = data?.systemChatKindFilter ?? DEFAULT_SYSTEM_CHAT_KIND_FILTER
+    systemBubbleEnabled.value = data?.systemBubbleEnabled ?? DEFAULT_SYSTEM_BUBBLE_ENABLED
+    systemBubbleAutoClose.value = data?.systemBubbleAutoClose ?? DEFAULT_SYSTEM_BUBBLE_AUTO_CLOSE
+    systemBubbleAutoCloseMs.value = data?.systemBubbleAutoCloseMs ?? DEFAULT_SYSTEM_BUBBLE_AUTO_CLOSE_MS
     syncQmsgConfig()
     const { sfxEnabled, bgmEnabled } = useAudio()
     sfxEnabled.value = data?.sfxEnabled ?? true
@@ -137,9 +213,23 @@ export const useSettingsStore = defineStore('settings', () => {
     qmsgShowClose,
     qmsgShowIcon,
     qmsgShowReverse,
+    systemChatDisplayMode,
+    systemChatKindFilter,
+    systemBubbleEnabled,
+    systemBubbleAutoClose,
+    systemBubbleAutoCloseMs,
     inventoryFilter,
+    itemCollectRoutes,
+    getItemCollectRoute,
+    setItemCollectRoute,
+    cycleItemCollectRoute,
     changeFontSize,
     changeTheme,
+    changeSystemChatDisplayMode,
+    changeSystemChatKindFilter,
+    changeSystemBubbleEnabled,
+    changeSystemBubbleAutoClose,
+    changeSystemBubbleAutoCloseMs,
     changeQmsgPosition,
     syncQmsgConfig,
     applyFontSize,

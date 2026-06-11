@@ -1,5 +1,5 @@
 /** 技能类型 */
-export type SkillType = 'farming' | 'foraging' | 'fishing' | 'mining' | 'combat' | 'cooking'
+export type SkillType = 'farming' | 'foraging' | 'fishing' | 'mining' | 'combat' | 'cooking' | 'forging'
 
 /** 技能专精（等级5选择） */
 export type SkillPerk5 =
@@ -15,6 +15,8 @@ export type SkillPerk5 =
   | 'defender' // 战斗
   | 'prep_cook'
   | 'vendor_chef' // 烹饪
+  | 'apprentice'
+  | 'merchant' // 锻造
 
 /** 技能专精（等级10选择，基于等级5分支） */
 export type SkillPerk10 =
@@ -42,6 +44,38 @@ export type SkillPerk10 =
   | 'gourmet_craft' // 烹饪: prep_cook分支
   | 'buff_chef'
   | 'tavern_master' // 烹饪: vendor_chef分支
+  | 'smith_sword'
+  | 'smith_stamina'
+  | 'smith_tool' // 旧档兼容
+  | 'enchanter'
+  | 'smith_time'
+  | 'smith_armor' // 旧档兼容
+
+/** 技能专精（等级15，基于等级10分支）— 锻造先实装，其余技能后续扩展 */
+export type SkillPerk15 =
+  | 'keen_eye'
+  | 'flame_keeper'
+  | 'steady_arm'
+  | 'tireless' // 旧档兼容
+  | 'efficient_smith'
+  | 'quick_quench'
+  | 'rune_touch'
+  | 'lucky_reroll'
+  | 'set_mason'
+  | 'frugal_fit'
+
+/** 技能专精（等级20，基于等级15分支） */
+export type SkillPerk20 =
+  | 'master_blade'
+  | 'supreme_forge'
+  | 'tool_legend'
+  | 'grand_temper'
+  | 'arch_enchanter'
+  | 'twin_runes'
+  | 'royal_armorer'
+  | 'golden_anvil'
+  | 'forge_master'
+  | 'practice_sage'
 
 /** 技能状态 */
 export interface SkillState {
@@ -50,6 +84,8 @@ export interface SkillState {
   level: number
   perk5: SkillPerk5 | null
   perk10: SkillPerk10 | null
+  perk15: SkillPerk15 | null
+  perk20: SkillPerk20 | null
 }
 
 /** 钓鱼小游戏评级 */
@@ -88,6 +124,10 @@ export interface FishDef {
   difficulty: 'easy' | 'normal' | 'hard' | 'legendary'
   sellPrice: number
   description: string
+  /** 最小重量（斤） */
+  minWeight: number
+  /** 最大重量（斤） */
+  maxWeight: number
   /** 钓鱼地点（默认creek） */
   location?: FishingLocation
   /** 小游戏鱼移动速度（覆盖难度默认值） */

@@ -24,6 +24,7 @@
   import { ref, onMounted } from 'vue'
   import { Capacitor } from '@capacitor/core'
   import { App as CapApp } from '@capacitor/app'
+  import { startAnalytics } from '@/composables/useAnalytics'
 
   const showExitConfirm = ref(false)
 
@@ -32,6 +33,8 @@
   }
 
   onMounted(() => {
+    startAnalytics()
+
     if (!import.meta.env.DEV) {
       document.body.classList.add('no-select')
     }

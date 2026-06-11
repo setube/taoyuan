@@ -31,6 +31,8 @@ import { useHiddenNpcStore } from './useHiddenNpcStore'
 import { useBankStore } from './useBankStore'
 import { useTavernStore } from './useTavernStore'
 import { useSystemStore } from './useSystemStore'
+import { useForgeStore } from './useForgeStore'
+import { getBackendUrl } from '@/utils/backendUrl'
 
 const SAVE_KEY_PREFIX = 'taoyuanxiang_save_'
 const MAX_SLOTS = 5
@@ -74,6 +76,8 @@ export interface SaveSlotInfo {
   playerName?: string
   savedAt?: string
 }
+
+export type CloudConflictStatus = 'no_local' | 'no_cloud' | 'synced' | 'local_newer' | 'cloud_newer'
 
 export const useSaveStore = defineStore('save', () => {
   /** 当前活跃存档槽位（-1 表示未分配） */
@@ -153,6 +157,7 @@ export const useSaveStore = defineStore('save', () => {
       const bankStore = useBankStore()
       const tavernStore = useTavernStore()
       const systemStore = useSystemStore()
+      const forgeStore = useForgeStore()
       const data = {
         game: gameStore.serialize(),
         player: playerStore.serialize(),
@@ -183,20 +188,28 @@ export const useSaveStore = defineStore('save', () => {
         bank: bankStore.serialize(),
         tavern: tavernStore.serialize(),
         system: systemStore.serialize(),
+        forge: forgeStore.serialize(),
         savedAt: new Date().toISOString()
       }
       localStorage.setItem(`${SAVE_KEY_PREFIX}${slot}`, encrypt(JSON.stringify(data)))
       activeSlot.value = slot
+      if (systemStore.cloudBackupEnabled) {
+        void uploadToCloud(slot)
+      }
       return true
     } catch {
       return false
     }
   }
 
-  /** 自动存档到当前活跃槽位 */
+  /** 自动存档到当前活跃槽位（开启云备时后台上传） */
   const autoSave = (): boolean => {
     if (activeSlot.value < 0) return false
-    return saveToSlot(activeSlot.value)
+    const ok = saveToSlot(activeSlot.value)
+    if (ok && systemStore.cloudBackupEnabled) {
+      void uploadToCloud(activeSlot.value)
+    }
+    return ok
   }
 
   /** 从指定槽位加载 */
@@ -264,14 +277,22 @@ export const useSaveStore = defineStore('save', () => {
       if (data.bank) bankStore.deserialize(data.bank)
       if (data.tavern) tavernStore.deserialize(data.tavern)
       else tavernStore.deserialize({})
+      const forgeStore = useForgeStore()
+      if (data.forge) forgeStore.deserialize(data.forge)
+      else forgeStore.deserialize(undefined)
+      forgeStore.migrateFromDefeatedBosses(miningStore.defeatedBosses)
       const systemStore = useSystemStore()
-      if (data.system) systemStore.deserialize(data.system)
+      activeSlot.value = slot
+      if (data.system) systemStore.deserialize(data.system, slot)
+      if (systemStore.awakened) {
+        systemStore.reconcileQuestsOnLoad(gameStore.day)
+        systemStore.onSaveLoaded()
+      }
       if (!tutorialStore.getFlag('cooking_exp_migrated')) {
         if (skillStore.migrateCookingExpFromRecipes(achievementStore.stats.totalRecipesCooked, false)) {
           tutorialStore.setFlag('cooking_exp_migrated', true)
         }
       }
-      activeSlot.value = slot
       return true
     } catch {
       return false
@@ -338,8 +359,7 @@ export const useSaveStore = defineStore('save', () => {
 
   const systemStore = useSystemStore()
 
-  /** Go 后端地址（开发环境默认 localhost:8080） */
-  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8080'
+  const BACKEND_URL = getBackendUrl()
 
   /** 云端备份状态（从系统Store读取，随存档持久化） */
   const cloudBackupEnabled = computed(() => systemStore.cloudBackupEnabled)
@@ -403,5 +423,48 @@ export const useSaveStore = defineStore('save', () => {
     return result ?? []
   }
 
-  return { activeSlot, getSlots, assignNewSlot, saveToSlot, autoSave, loadFromSlot, deleteSlot, exportSave, importSave, getDeviceId, cloudBackupEnabled, toggleCloudBackup, uploadToCloud, downloadFromCloud, deleteCloudSave, listCloudSaves }
+  /** 比较本地与云端存档时间 */
+  const compareCloudWithLocal = async (slot: number): Promise<CloudConflictStatus> => {
+    const raw = localStorage.getItem(`${SAVE_KEY_PREFIX}${slot}`)
+    if (!raw) return 'no_local'
+    const localData = parseSaveData(raw)
+    if (!localData?.savedAt) return 'no_local'
+
+    const deviceId = getDeviceId()
+    const cloudList = await listCloudSaves()
+    const cloud = cloudList.find(s => s.slot === slot)
+    if (!cloud?.updatedAt) return 'no_cloud'
+
+    const localMs = new Date(localData.savedAt as string).getTime()
+    const cloudMs = new Date(cloud.updatedAt).getTime()
+    if (Math.abs(localMs - cloudMs) < 2000) return 'synced'
+    return cloudMs > localMs ? 'cloud_newer' : 'local_newer'
+  }
+
+  /** 冲突解决：上传本地覆盖云端，或下载云端覆盖本地 */
+  const resolveCloudConflict = async (slot: number, choice: 'local' | 'cloud'): Promise<boolean> => {
+    if (choice === 'cloud') return downloadFromCloud(slot)
+    return uploadToCloud(slot)
+  }
+
+  return {
+    activeSlot,
+    getSlots,
+    assignNewSlot,
+    saveToSlot,
+    autoSave,
+    loadFromSlot,
+    deleteSlot,
+    exportSave,
+    importSave,
+    getDeviceId,
+    cloudBackupEnabled,
+    toggleCloudBackup,
+    uploadToCloud,
+    downloadFromCloud,
+    deleteCloudSave,
+    listCloudSaves,
+    compareCloudWithLocal,
+    resolveCloudConflict
+  }
 })

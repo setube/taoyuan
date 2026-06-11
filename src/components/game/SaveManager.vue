@@ -23,10 +23,20 @@
                 <FolderOpen :size="12" />
                 <span>存档 {{ info.slot + 1 }}</span>
               </span>
-              <span class="text-muted text-xs">
-                {{ info.playerName ?? '未命名' }} · 第{{ info.year }}年 {{ SEASON_NAMES[info.season as keyof typeof SEASON_NAMES] }} 第{{
-                  info.day
-                }}天
+              <span class="text-muted text-xs inline-flex items-center gap-1">
+                <span>
+                  {{ info.playerName ?? '未命名' }} · 第{{ info.year }}年 {{ SEASON_NAMES[info.season as keyof typeof SEASON_NAMES] }} 第{{
+                    info.day
+                  }}天
+                </span>
+                <span
+                  v-if="saveStore.cloudBackupEnabled && cloudStatus[info.slot] === 'cloud_newer'"
+                  class="text-[9px] text-amber-400 border border-amber-500/30 px-1 rounded"
+                >云端较新</span>
+                <span
+                  v-else-if="saveStore.cloudBackupEnabled && cloudStatus[info.slot] === 'local_newer'"
+                  class="text-[9px] text-sky-400 border border-sky-500/30 px-1 rounded"
+                >本地较新</span>
               </span>
             </button>
             <div v-else class="btn flex-1 !justify-between text-xs cursor-default">
@@ -90,6 +100,26 @@
                   @click="handleCloudDownload(info.slot)"
                 >
                   {{ cloudDownloading ? '下载中...' : '后台下载' }}
+                </Button>
+                <Button
+                  v-if="saveStore.cloudBackupEnabled && cloudStatus[info.slot] === 'cloud_newer'"
+                  :icon="Database"
+                  :icon-size="12"
+                  class="text-center !rounded-none justify-center text-sm text-amber-400"
+                  :disabled="cloudDownloading"
+                  @click="handleCloudResolve(info.slot, 'cloud')"
+                >
+                  用云端覆盖本地
+                </Button>
+                <Button
+                  v-if="saveStore.cloudBackupEnabled && cloudStatus[info.slot] === 'local_newer'"
+                  :icon="Database"
+                  :icon-size="12"
+                  class="text-center !rounded-none justify-center text-sm text-sky-400"
+                  :disabled="cloudUploading"
+                  @click="handleCloudResolve(info.slot, 'local')"
+                >
+                  用本地上传云端
                 </Button>
                 <Button
                   v-if="!Capacitor.isNativePlatform()"
@@ -165,12 +195,12 @@
 </template>
 
 <script setup lang="ts">
-  import { ref } from 'vue'
+  import { ref, onMounted, watch } from 'vue'
   import { X, FolderOpen, Settings, Download, Trash2, Upload, CloudUpload, CloudDownload, Database } from 'lucide-vue-next'
   import Button from '@/components/game/Button.vue'
   import Divider from '@/components/game/Divider.vue'
   import { SEASON_NAMES } from '@/stores/useGameStore'
-  import { useSaveStore } from '@/stores/useSaveStore'
+  import { useSaveStore, type CloudConflictStatus } from '@/stores/useSaveStore'
   import { showFloat } from '@/composables/useGameLog'
   import { useWebdav } from '@/composables/useWebdav'
   import { Capacitor } from '@capacitor/core'
@@ -187,10 +217,36 @@
   const downloading = ref(false)
   const cloudUploading = ref(false)
   const cloudDownloading = ref(false)
+  const cloudStatus = ref<Record<number, CloudConflictStatus>>({})
 
   const refreshSlots = () => {
     slots.value = saveStore.getSlots()
   }
+
+  const refreshCloudStatus = async () => {
+    if (!saveStore.cloudBackupEnabled) {
+      cloudStatus.value = {}
+      return
+    }
+    const map: Record<number, CloudConflictStatus> = {}
+    for (const s of slots.value) {
+      if (s.exists) {
+        map[s.slot] = await saveStore.compareCloudWithLocal(s.slot)
+      }
+    }
+    cloudStatus.value = map
+  }
+
+  onMounted(() => {
+    void refreshCloudStatus()
+  })
+
+  watch(
+    () => saveStore.cloudBackupEnabled,
+    () => {
+      void refreshCloudStatus()
+    }
+  )
 
   const handleExport = (slot: number) => {
     if (!saveStore.exportSave(slot)) {
@@ -268,6 +324,7 @@
     const ok = await saveStore.uploadToCloud(slot)
     cloudUploading.value = false
     showFloat(ok ? '云端备份成功。' : '云端备份失败，请确认后端已启动。', ok ? 'success' : 'danger')
+    if (ok) await refreshCloudStatus()
     menuOpen.value = null
   }
 
@@ -279,8 +336,24 @@
     if (ok) {
       refreshSlots()
       emit('change')
+      await refreshCloudStatus()
     }
     showFloat(ok ? '云端存档已恢复到本地。' : '云端下载失败，请确认后端已启动。', ok ? 'success' : 'danger')
+    menuOpen.value = null
+  }
+
+  const handleCloudResolve = async (slot: number, choice: 'local' | 'cloud') => {
+    if (choice === 'cloud') cloudDownloading.value = true
+    else cloudUploading.value = true
+    const ok = await saveStore.resolveCloudConflict(slot, choice)
+    if (choice === 'cloud') cloudDownloading.value = false
+    else cloudUploading.value = false
+    if (ok) {
+      refreshSlots()
+      emit('change')
+      await refreshCloudStatus()
+    }
+    showFloat(ok ? '冲突已解决。' : '操作失败，请确认后端已启动。', ok ? 'success' : 'danger')
     menuOpen.value = null
   }
 </script>

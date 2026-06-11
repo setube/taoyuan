@@ -35,12 +35,12 @@
           :key="i"
           class="text-xs px-2 py-0.5 border"
           :class="{
-            'border-accent bg-accent/15 text-accent': brewStep === i,
-            'border-success/50 bg-success/5 text-success': i < brewStep,
-            'border-accent/15 text-muted': i > brewStep
+            'border-accent bg-accent/15 text-accent': stepIndex === i,
+            'border-success/50 bg-success/5 text-success': i < stepIndex,
+            'border-accent/15 text-muted': i > stepIndex
           }"
         >
-          <Check v-if="i < brewStep" :size="10" class="inline -mt-0.5 mr-0.5" />
+          <Check v-if="i < stepIndex" :size="10" class="inline -mt-0.5 mr-0.5" />
           {{ s.shortLabel }}
         </div>
       </div>
@@ -50,30 +50,28 @@
 
       <!-- 填充条 -->
       <div class="relative h-10 bg-bg border border-accent/20 mb-3">
-        <!-- 目标标记 -->
         <div
-          class="absolute top-0 bottom-0 w-6 border-x border-success/50 bg-success/15"
-          :style="{ left: `calc(${targetPosition}% - 12px)` }"
+          class="absolute top-0 bottom-0 border-x border-success/50 bg-success/15"
+          :style="{
+            width: `${targetZoneHalfWidth * 2}px`,
+            left: `calc(${targetPosition}% - ${targetZoneHalfWidth}px)`
+          }"
         />
         <div class="absolute top-0 bottom-0 w-1 bg-accent/40" :style="{ left: `${targetPosition}%` }" />
-        <!-- 目标标签 -->
         <span class="absolute -top-3.5 text-success" style="font-size: 8px" :style="{ left: `calc(${targetPosition}% - 6px)` }">目标</span>
-        <!-- 填充 -->
         <div
           class="absolute top-0 bottom-0 left-0 transition-none"
           :class="fillPct > 95 ? 'bg-danger/40' : 'bg-accent/30'"
           :style="{ width: `${fillPct}%` }"
         />
-        <!-- 当前位置指针 -->
         <div class="absolute top-0 bottom-0 w-0.5 bg-text" :style="{ left: `${fillPct}%`, transition: 'none' }" />
-        <!-- 区域标签 -->
         <div class="absolute bottom-0 left-1 right-1 flex justify-between" style="font-size: 8px">
           <span class="text-muted">{{ currentStepDef.lowLabel }}</span>
           <span class="text-muted">{{ currentStepDef.highLabel }}</span>
         </div>
       </div>
 
-      <Button class="w-full py-2" :icon="Droplets" @click="lockStep">{{ currentStepDef.action }}</Button>
+      <Button class="w-full py-2" :icon="Droplets" @click="onLockStep">{{ currentStepDef.action }}</Button>
     </div>
 
     <!-- 单步结果反馈 -->
@@ -176,53 +174,43 @@
     sfxRankFirst,
     sfxRankSecond
   } from '@/composables/useAudio'
+  import { useRhythmMinigame, type RhythmGrade, type RhythmStepDef } from '@/composables/useRhythmMinigame'
   import Button from '@/components/game/Button.vue'
 
   const emit = defineEmits<{ complete: [prize: number] }>()
 
   type Phase = 'ready' | 'brewing' | 'step_result' | 'round_result' | 'finished'
-  type Grade = 'perfect' | 'good' | 'poor'
 
-  const BREW_STEPS = [
+  const BREW_STEPS: RhythmStepDef[] = [
     { label: '控制水温', shortLabel: '温', hint: '将水烧到合适温度', action: '定温！', lowLabel: '凉', highLabel: '烫' },
     { label: '投茶', shortLabel: '茶', hint: '放入适量茶叶', action: '放茶！', lowLabel: '少', highLabel: '多' },
     { label: '出汤时机', shortLabel: '汤', hint: '在最佳时机出汤', action: '出汤！', lowLabel: '淡', highLabel: '苦' }
   ]
 
-  const phase = ref<Phase>('ready')
-  const roundIndex = ref(0)
-  const brewStep = ref(0)
-  const fillPct = ref(0)
-  const targetPosition = ref(50)
-  const totalScore = ref(0)
-  const roundScore = ref(0)
-  const lastStepScore = ref(0)
-  const lastStepGrade = ref<Grade>('poor')
-  const lastRoundGrade = ref<Grade>('poor')
-  const roundResults = ref<{ grade: Grade; score: number }[]>([])
+  const rhythm = useRhythmMinigame({ steps: BREW_STEPS })
+  const { stepIndex, fillPct, targetPosition, targetZoneHalfWidth, totalScore, roundIndex, roundScore } =
+    rhythm
 
-  let fillTimer: ReturnType<typeof setInterval> | null = null
+  const phase = ref<Phase>('ready')
+  const lastStepScore = ref(0)
+  const lastStepGrade = ref<RhythmGrade>('poor')
+  const lastRoundGrade = ref<RhythmGrade>('poor')
+  const roundResults = ref<{ grade: RhythmGrade; score: number }[]>([])
+
   let phaseTimeout: ReturnType<typeof setTimeout> | null = null
 
-  // 填充速度随轮次和步骤增加
-  const getFillSpeed = () => {
-    const roundBonus = roundIndex.value * 0.4
-    const stepBonus = brewStep.value * 0.2
-    return 1.0 + roundBonus + stepBonus
-  }
-
   const prize = computed(() => {
-    if (totalScore.value >= 400) return 800
-    if (totalScore.value >= 270) return 500
-    if (totalScore.value >= 150) return 200
+    if (rhythm.totalScore.value >= 400) return 800
+    if (rhythm.totalScore.value >= 270) return 500
+    if (rhythm.totalScore.value >= 150) return 200
     return 50
   })
 
-  const currentStepDef = computed(() => BREW_STEPS[brewStep.value]!)
+  const currentStepDef = computed(() => BREW_STEPS[rhythm.stepIndex.value]!)
 
   const roundDotClass = (idx: number) => {
     if (idx >= roundResults.value.length) {
-      if (idx === roundIndex.value && phase.value !== 'finished') return 'bg-accent dot-pulse'
+      if (idx === rhythm.roundIndex.value && phase.value !== 'finished') return 'bg-accent dot-pulse'
       return 'bg-accent/20'
     }
     const r = roundResults.value[idx]!
@@ -231,52 +219,27 @@
     return 'bg-danger'
   }
 
-  const startGame = () => {
-    sfxGameStart()
-    roundIndex.value = 0
-    totalScore.value = 0
-    roundScore.value = 0
-    roundResults.value = []
-    startBrewStep()
+  const clearPhaseTimeout = () => {
+    if (phaseTimeout) clearTimeout(phaseTimeout)
+    phaseTimeout = null
   }
 
   const startBrewStep = () => {
     phase.value = 'brewing'
-    fillPct.value = 0
-    // 随机目标位置 (25-80范围)
-    targetPosition.value = 25 + Math.random() * 55
-
-    const speed = getFillSpeed()
-    fillTimer = setInterval(() => {
-      fillPct.value = Math.min(100, fillPct.value + speed)
-      if (fillPct.value >= 100) {
-        // 自动超时，强制结算（最差分数）
-        lockStep()
-      }
-    }, 50)
+    rhythm.startStep()
   }
 
-  const lockStep = () => {
+  const startGame = () => {
+    sfxGameStart()
+    rhythm.resetGame()
+    roundResults.value = []
+    startBrewStep()
+  }
+
+  const onLockStep = () => {
     sfxTeaPour()
-    if (fillTimer) clearInterval(fillTimer)
-    fillTimer = null
+    const { grade, score } = rhythm.lockStep()
 
-    const offset = Math.abs(fillPct.value - targetPosition.value)
-    let grade: Grade
-    let score: number
-
-    if (offset <= 4) {
-      grade = 'perfect'
-      score = 50
-    } else if (offset <= 12) {
-      grade = 'good'
-      score = 30
-    } else {
-      grade = 'poor'
-      score = 10
-    }
-
-    // 步骤判定音效
     setTimeout(() => {
       if (grade === 'perfect') sfxTeaBell()
       else if (grade === 'good') sfxMiniGood()
@@ -285,33 +248,28 @@
 
     lastStepGrade.value = grade
     lastStepScore.value = score
-    roundScore.value += score
-    totalScore.value += score
-
     phase.value = 'step_result'
+
+    clearPhaseTimeout()
     phaseTimeout = setTimeout(() => {
-      brewStep.value++
-      if (brewStep.value >= 3) {
-        // 本轮结束
-        let roundGrade: Grade = 'poor'
-        if (roundScore.value >= 120) roundGrade = 'perfect'
-        else if (roundScore.value >= 70) roundGrade = 'good'
+      const next = rhythm.advanceStep(BREW_STEPS.length)
+      if (next === 'round_complete') {
+        let roundGrade: RhythmGrade = 'poor'
+        if (rhythm.roundScore.value >= 120) roundGrade = 'perfect'
+        else if (rhythm.roundScore.value >= 70) roundGrade = 'good'
 
         lastRoundGrade.value = roundGrade
-        roundResults.value.push({ grade: roundGrade, score: roundScore.value })
+        roundResults.value.push({ grade: roundGrade, score: rhythm.roundScore.value })
 
-        // 轮次结果音效
         if (roundGrade === 'perfect') sfxMiniPerfect()
         else if (roundGrade === 'poor') sfxMiniFail()
 
         phase.value = 'round_result'
         phaseTimeout = setTimeout(() => {
-          roundIndex.value++
-          if (roundIndex.value >= 3) {
+          rhythm.startNextRound()
+          if (rhythm.roundIndex.value >= 3) {
             phase.value = 'finished'
           } else {
-            brewStep.value = 0
-            roundScore.value = 0
             startBrewStep()
           }
         }, 1500)
@@ -322,15 +280,15 @@
   }
 
   const handleClaim = () => {
-    if (totalScore.value >= 400) sfxRankFirst()
-    else if (totalScore.value >= 270) sfxRankSecond()
+    if (rhythm.totalScore.value >= 400) sfxRankFirst()
+    else if (rhythm.totalScore.value >= 270) sfxRankSecond()
     else sfxRewardClaim()
     emit('complete', prize.value)
   }
 
   onUnmounted(() => {
-    if (fillTimer) clearInterval(fillTimer)
-    if (phaseTimeout) clearTimeout(phaseTimeout)
+    rhythm.stopFill()
+    clearPhaseTimeout()
   })
 </script>
 

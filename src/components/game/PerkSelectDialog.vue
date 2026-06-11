@@ -21,16 +21,17 @@
 
 <script setup lang="ts">
   import { computed } from 'vue'
-  import type { SkillType, SkillPerk5, SkillPerk10 } from '@/types'
+  import type { SkillType, SkillPerk5, SkillPerk10, SkillPerk15, SkillPerk20 } from '@/types'
   import { useSkillStore } from '@/stores/useSkillStore'
+  import { getPerk15Options, getPerk20Options } from '@/data/skills'
 
   const props = defineProps<{
     skillType: SkillType
-    level: 5 | 10
+    level: 5 | 10 | 15 | 20
   }>()
 
   const emit = defineEmits<{
-    select: [perk: SkillPerk5 | SkillPerk10]
+    select: [perk: SkillPerk5 | SkillPerk10 | SkillPerk15 | SkillPerk20]
   }>()
 
   const skillStore = useSkillStore()
@@ -41,11 +42,12 @@
     fishing: '钓鱼',
     mining: '挖矿',
     combat: '战斗',
-    cooking: '烹饪'
+    cooking: '烹饪',
+    forging: '锻造'
   }
 
   interface PerkOption {
-    id: SkillPerk5 | SkillPerk10
+    id: SkillPerk5 | SkillPerk10 | SkillPerk15 | SkillPerk20
     name: string
     description: string
   }
@@ -74,6 +76,10 @@
     cooking: [
       { id: 'prep_cook', name: '备料手', description: '烹饪时20%概率节省一种主料' },
       { id: 'vendor_chef', name: '市厨', description: '食物售价+15%（当老板的选这个）' }
+    ],
+    forging: [
+      { id: 'apprentice', name: '学徒', description: '锻造经验+15%' },
+      { id: 'merchant', name: '行商', description: '打造装备出售+10%' }
     ]
   }
 
@@ -138,21 +144,40 @@
         { id: 'buff_chef', name: '膳修', description: 'buff效果+30%，持续时段+1' },
         { id: 'tavern_master', name: '肆尊', description: '酒肆经营加成：厨艺+2、失误-3%、食物指导价+10%' }
       ]
+    },
+    forging: {
+      apprentice: [
+        { id: 'smith_sword', name: '铸剑', description: '武器打造小游戏目标区宽度+20%' },
+        { id: 'smith_stamina', name: '省劲', description: '锻造/练习体力消耗-25%' }
+      ],
+      merchant: [
+        { id: 'enchanter', name: '附魔师', description: '词条重刷材料-20%' },
+        { id: 'smith_time', name: '快手', description: '锻造/练习时间-0.5游戏小时' }
+      ]
     }
   }
 
   const options = computed<PerkOption[]>(() => {
+    const skill = skillStore.getSkill(props.skillType)
     if (props.level === 5) return PERK5_OPTIONS[props.skillType]
-    // Lv10：根据 Lv5 选择的专精确定分支
-    const perk5 = skillStore.getSkill(props.skillType).perk5
-    if (perk5) {
-      const branches = PERK10_BRANCHES[props.skillType]
-      return branches[perk5] ?? []
+    if (props.level === 10) {
+      const perk5 = skill.perk5
+      if (perk5) {
+        const branches = PERK10_BRANCHES[props.skillType]
+        return branches[perk5] ?? []
+      }
+      return []
+    }
+    if (props.level === 15) {
+      return getPerk15Options(props.skillType, skill.perk10)
+    }
+    if (props.level === 20) {
+      return getPerk20Options(props.skillType, skill.perk15)
     }
     return []
   })
 
-  const handleSelect = (perkId: SkillPerk5 | SkillPerk10) => {
+  const handleSelect = (perkId: SkillPerk5 | SkillPerk10 | SkillPerk15 | SkillPerk20) => {
     emit('select', perkId)
   }
 </script>

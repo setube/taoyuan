@@ -1,14 +1,21 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import type { SkillType, SkillState, SkillPerk5, SkillPerk10 } from '@/types'
+import { migrateForgingPerkIds } from '@/data/skills'
+import type { SkillType, SkillState, SkillPerk5, SkillPerk10, SkillPerk15, SkillPerk20 } from '@/types'
 import { useInventoryStore } from './useInventoryStore'
+import { getMeritBonus } from '@/composables/useMeritEffects'
+import { useSystemStore } from './useSystemStore'
 
-/** 各等级所需累计经验 **/
-const EXP_TABLE = [0, 100, 380, 770, 1300, 2150, 3300, 4800, 6900, 10000, 15000]
+/** 各等级所需累计经验（Lv0～20，§技能树 spec 5.1） */
+const EXP_TABLE = [
+  0, 100, 380, 770, 1300, 2150, 3300, 4800, 6900, 10000, 15000, 22000, 32000, 46000, 65000, 90000, 125000,
+  175000, 240000, 330000, 450000
+]
+const MAX_SKILL_LEVEL = 20
 
 /** 创建初始技能状态 */
 const createSkill = (type: SkillType): SkillState => {
-  return { type, exp: 0, level: 0, perk5: null, perk10: null }
+  return { type, exp: 0, level: 0, perk5: null, perk10: null, perk15: null, perk20: null }
 }
 
 export const useSkillStore = defineStore('skill', () => {
@@ -18,7 +25,8 @@ export const useSkillStore = defineStore('skill', () => {
     createSkill('fishing'),
     createSkill('mining'),
     createSkill('combat'),
-    createSkill('cooking')
+    createSkill('cooking'),
+    createSkill('forging')
   ])
 
   const getSkill = (type: SkillType): SkillState => {
@@ -31,17 +39,19 @@ export const useSkillStore = defineStore('skill', () => {
   const foragingLevel = computed(() => getSkill('foraging').level)
   const combatLevel = computed(() => getSkill('combat').level)
   const cookingLevel = computed(() => getSkill('cooking').level)
+  const forgingLevel = computed(() => getSkill('forging').level)
 
   /** 增加经验并自动升级（含戒指经验加成） */
   const addExp = (type: SkillType, amount: number): { leveledUp: boolean; newLevel: number } => {
     const ringExpBonus = useInventoryStore().getRingEffectValue('exp_bonus')
-    const adjustedAmount = Math.floor(amount * (1 + ringExpBonus))
+    const meritExpBonus = getMeritBonus('skill_exp')
+    const adjustedAmount = Math.floor(amount * (1 + ringExpBonus + meritExpBonus))
 
     const skill = getSkill(type)
     skill.exp += adjustedAmount
     let leveledUp = false
 
-    while (skill.level < 10) {
+    while (skill.level < MAX_SKILL_LEVEL) {
       const nextLevelExp = EXP_TABLE[skill.level + 1]!
       if (skill.exp >= nextLevelExp) {
         skill.level++
@@ -51,14 +61,52 @@ export const useSkillStore = defineStore('skill', () => {
       }
     }
 
+    if (leveledUp) {
+      try {
+        useSystemStore().onSkillLevelUp(type, skill.level)
+      } catch {
+        /* pinia 未就绪 */
+      }
+    }
+
     return { leveledUp, newLevel: skill.level }
   }
 
   /** 获取升级到下一级所需经验 */
   const getExpToNextLevel = (type: SkillType): { current: number; required: number } | null => {
     const skill = getSkill(type)
-    if (skill.level >= 10) return null
+    if (skill.level >= MAX_SKILL_LEVEL) return null
     return { current: skill.exp, required: EXP_TABLE[skill.level + 1]! }
+  }
+
+  const hasPerk = (perkId: string): boolean => {
+    for (const skill of skills.value) {
+      if (
+        skill.perk5 === perkId ||
+        skill.perk10 === perkId ||
+        skill.perk15 === perkId ||
+        skill.perk20 === perkId
+      ) {
+        return true
+      }
+    }
+    return false
+  }
+
+  /** 设置等级15专精（当前 forging 实装） */
+  const setPerk15 = (type: SkillType, perk: SkillPerk15): boolean => {
+    const skill = getSkill(type)
+    if (skill.level < 15 || !skill.perk10 || skill.perk15 !== null) return false
+    skill.perk15 = perk
+    return true
+  }
+
+  /** 设置等级20专精 */
+  const setPerk20 = (type: SkillType, perk: SkillPerk20): boolean => {
+    const skill = getSkill(type)
+    if (skill.level < 20 || !skill.perk15 || skill.perk20 !== null) return false
+    skill.perk20 = perk
+    return true
   }
 
   /** 计算技能对体力消耗的减免 (每级减少1%，10级共减少10%) */
@@ -125,9 +173,10 @@ export const useSkillStore = defineStore('skill', () => {
   const deserialize = (data: ReturnType<typeof serialize>) => {
     const arr: SkillState[] = data.skills ?? []
     // 确保 5 个技能都存在（旧存档可能没有 combat）
-    const allTypes: SkillType[] = ['farming', 'foraging', 'fishing', 'mining', 'combat', 'cooking']
+    const allTypes: SkillType[] = ['farming', 'foraging', 'fishing', 'mining', 'combat', 'cooking', 'forging']
     for (const type of allTypes) {
-      if (!arr.find(s => s.type === type)) {
+      const existing = arr.find(s => s.type === type)
+      if (!existing) {
         const newSkill = createSkill(type)
         // 旧存档迁移：mining 的 fighter/warrior/brute → combat
         if (type === 'combat') {
@@ -142,6 +191,10 @@ export const useSkillStore = defineStore('skill', () => {
           }
         }
         arr.push(newSkill)
+      } else {
+        existing.perk15 ??= null
+        existing.perk20 ??= null
+        if (existing.type === 'forging') migrateForgingPerkIds(existing)
       }
     }
     skills.value = arr
@@ -155,6 +208,7 @@ export const useSkillStore = defineStore('skill', () => {
     foragingLevel,
     combatLevel,
     cookingLevel,
+    forgingLevel,
     getSkill,
     migrateCookingExpFromRecipes,
     addExp,
@@ -162,6 +216,9 @@ export const useSkillStore = defineStore('skill', () => {
     getStaminaReduction,
     setPerk5,
     setPerk10,
+    setPerk15,
+    setPerk20,
+    hasPerk,
     rollCropQuality,
     rollCropQualityWithBonus,
     rollForageQuality,

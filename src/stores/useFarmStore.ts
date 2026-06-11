@@ -11,6 +11,7 @@ import { GREENHOUSE_PLOT_COUNT } from '@/data/buildings'
 import { useWalletStore } from './useWalletStore'
 import { useGameStore } from './useGameStore'
 import { useHiddenNpcStore } from './useHiddenNpcStore'
+import { getMeritBonus } from '@/composables/useMeritEffects'
 
 /** 已放置洒水器 */
 export interface PlacedSprinkler {
@@ -424,7 +425,7 @@ export const useFarmStore = defineStore('farm', () => {
       if (plot.watered) {
         // 肥料加速：减少作物所需生长天数
         const fertDef = plot.fertilizer ? getFertilizerById(plot.fertilizer) : null
-        const speedup = (fertDef?.growthSpeedup ?? 0) + walletGrowth + spiritGrowth
+        const speedup = (fertDef?.growthSpeedup ?? 0) + walletGrowth + spiritGrowth + getMeritBonus('crop_growth')
         plot.growthDays += 1
         const crop = getCropById(plot.cropId!)
         if (crop) {

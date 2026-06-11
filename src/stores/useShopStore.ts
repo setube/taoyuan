@@ -6,6 +6,8 @@ import { useInventoryStore } from './useInventoryStore'
 import { useSkillStore } from './useSkillStore'
 import { useWalletStore } from './useWalletStore'
 import { getCropsBySeason, getItemById } from '@/data'
+import { getFishById } from '@/data/fish'
+import { getFishWeightMultiplier } from '@/composables/rollFishWeight'
 import { BAITS, TACKLES, FERTILIZERS } from '@/data/processing'
 import { isTravelingMerchantDay, generateMerchantStock, TRAVELING_MERCHANT_POOL } from '@/data/travelingMerchant'
 import { getMarketMultiplier } from '@/data/market'
@@ -16,6 +18,7 @@ import { useHiddenNpcStore } from './useHiddenNpcStore'
 import { isShopAvailable, getShopById } from '@/data/shops'
 import { HAY_PRICE } from '@/data/animals'
 import { getCombinedItemCount } from '@/composables/useCombinedInventory'
+import { getMeritBonus } from '@/composables/useMeritEffects'
 
 const WANWUPU_MISC_PRICES: { itemId: string; price: number }[] = [
   { itemId: 'hay', price: HAY_PRICE },
@@ -326,7 +329,7 @@ export const useShopStore = defineStore('shop', () => {
   }
 
   /** 计算不含行情系数的基础售价 */
-  const _basePrice = (itemId: string, quantity: number, quality: Quality): number => {
+  const _basePrice = (itemId: string, quantity: number, quality: Quality, weight?: number): number => {
     const itemDef = getItemById(itemId)
     if (!itemDef) return 0
     const qualityMultiplier: Record<Quality, number> = {
@@ -334,6 +337,11 @@ export const useShopStore = defineStore('shop', () => {
       fine: 1.25,
       excellent: 1.5,
       supreme: 2.0
+    }
+    let weightMult = 1.0
+    if (weight !== undefined && itemDef.category === 'fish') {
+      const fishDef = getFishById(itemId)
+      if (fishDef) weightMult = getFishWeightMultiplier(itemId, weight, fishDef.minWeight)
     }
     let bonus = 1.0
     if (itemDef.category === 'processed' && skillStore.getSkill('farming').perk10 === 'artisan') bonus *= 1.25
@@ -359,27 +367,30 @@ export const useShopStore = defineStore('shop', () => {
     const hiddenNpcStore = useHiddenNpcStore()
     const sellBonusData = hiddenNpcStore.getBondBonusByType('sell_bonus')
     const spiritSellBonus = sellBonusData?.type === 'sell_bonus' ? sellBonusData.percent / 100 : 0
-    return Math.floor(itemDef.sellPrice * quantity * qualityMultiplier[quality] * bonus * (1 + ringSelBonus) * (1 + spiritSellBonus))
+    const meritSellBonus = getMeritBonus('sell_price_bonus')
+    return Math.floor(
+      itemDef.sellPrice * quantity * weightMult * qualityMultiplier[quality] * bonus * (1 + ringSelBonus) * (1 + spiritSellBonus) * (1 + meritSellBonus)
+    )
   }
 
   /** 计算物品售价（不执行出售，用于估价） */
-  const calculateSellPrice = (itemId: string, quantity: number, quality: Quality): number => {
+  const calculateSellPrice = (itemId: string, quantity: number, quality: Quality, weight?: number): number => {
     const itemDef = getItemById(itemId)
     if (!itemDef) return 0
     const recentVolume = getRecentShipping()[itemDef.category as MarketCategory] ?? 0
     const marketMultiplier = getMarketMultiplier(itemDef.category, gameStore.year, gameStore.seasonIndex, gameStore.day, recentVolume)
-    return Math.floor(_basePrice(itemId, quantity, quality) * marketMultiplier)
+    return Math.floor(_basePrice(itemId, quantity, quality, weight) * marketMultiplier)
   }
 
   /** 计算不含行情的基础售价（用于显示原价） */
-  const calculateBaseSellPrice = (itemId: string, quantity: number, quality: Quality): number => {
-    return _basePrice(itemId, quantity, quality)
+  const calculateBaseSellPrice = (itemId: string, quantity: number, quality: Quality, weight?: number): number => {
+    return _basePrice(itemId, quantity, quality, weight)
   }
 
   /** 出售物品，返回实际售价（0表示失败） */
-  const sellItem = (itemId: string, quantity: number = 1, quality: Quality = 'normal'): number => {
-    if (!inventoryStore.removeItem(itemId, quantity, quality)) return 0
-    const totalPrice = calculateSellPrice(itemId, quantity, quality)
+  const sellItem = (itemId: string, quantity: number = 1, quality: Quality = 'normal', weight?: number): number => {
+    if (!inventoryStore.removeItem(itemId, quantity, quality, weight)) return 0
+    const totalPrice = calculateSellPrice(itemId, quantity, quality, weight)
     playerStore.earnMoney(totalPrice)
     return totalPrice
   }
@@ -431,24 +442,52 @@ export const useShopStore = defineStore('shop', () => {
 
   // === 出货箱 ===
 
-  /** 出货箱中的物品 */
-  const shippingBox = ref<{ itemId: string; quantity: number; quality: Quality }[]>([])
+  const isShippableItem = (itemId: string): boolean => {
+    const def = getItemById(itemId)
+    return !!(def && def.category !== 'seed' && def.category !== 'machine' && def.category !== 'sprinkler')
+  }
 
-  /** 添加物品到出货箱 */
-  const addToShippingBox = (itemId: string, quantity: number, quality: Quality): boolean => {
-    if (!inventoryStore.removeItem(itemId, quantity, quality)) return false
-    const existing = shippingBox.value.find(s => s.itemId === itemId && s.quality === quality)
+  /** 出货箱中的物品 */
+  const shippingBox = ref<{ itemId: string; quantity: number; quality: Quality; weight?: number }[]>([])
+
+  const shippingEntryMatches = (
+    entry: { itemId: string; quality: Quality; weight?: number },
+    itemId: string,
+    quality: Quality,
+    weight?: number
+  ) => entry.itemId === itemId && entry.quality === quality && entry.weight === weight
+
+  /** 收集时直接放入出货箱（不经背包），返回实际放入数量 */
+  const collectToShippingBox = (itemId: string, quantity: number, quality: Quality, weight?: number): number => {
+    if (!isShippableItem(itemId)) return 0
+    const existing = shippingBox.value.find(s => shippingEntryMatches(s, itemId, quality, weight))
     if (existing) {
       existing.quantity += quantity
     } else {
-      shippingBox.value.push({ itemId, quantity, quality })
+      const entry: { itemId: string; quantity: number; quality: Quality; weight?: number } = { itemId, quantity, quality }
+      if (weight !== undefined) entry.weight = weight
+      shippingBox.value.push(entry)
+    }
+    return quantity
+  }
+
+  /** 添加物品到出货箱 */
+  const addToShippingBox = (itemId: string, quantity: number, quality: Quality, weight?: number): boolean => {
+    if (!inventoryStore.removeItem(itemId, quantity, quality, weight)) return false
+    const existing = shippingBox.value.find(s => shippingEntryMatches(s, itemId, quality, weight))
+    if (existing) {
+      existing.quantity += quantity
+    } else {
+      const entry: { itemId: string; quantity: number; quality: Quality; weight?: number } = { itemId, quantity, quality }
+      if (weight !== undefined) entry.weight = weight
+      shippingBox.value.push(entry)
     }
     return true
   }
 
   /** 从出货箱取回物品 */
-  const removeFromShippingBox = (itemId: string, quantity: number, quality: Quality): boolean => {
-    const idx = shippingBox.value.findIndex(s => s.itemId === itemId && s.quality === quality)
+  const removeFromShippingBox = (itemId: string, quantity: number, quality: Quality, weight?: number): boolean => {
+    const idx = shippingBox.value.findIndex(s => shippingEntryMatches(s, itemId, quality, weight))
     if (idx === -1) return false
     const entry = shippingBox.value[idx]!
     if (entry.quantity < quantity) return false
@@ -456,7 +495,7 @@ export const useShopStore = defineStore('shop', () => {
     const MAX_STACK = 999
     let space = 0
     for (const s of inventoryStore.items) {
-      if (s.itemId === itemId && s.quality === quality && s.quantity < MAX_STACK) {
+      if (s.itemId === itemId && s.quality === quality && s.weight === weight && s.quantity < MAX_STACK) {
         space += MAX_STACK - s.quantity
       }
     }
@@ -468,7 +507,8 @@ export const useShopStore = defineStore('shop', () => {
     if (entry.quantity <= 0) {
       shippingBox.value.splice(idx, 1)
     }
-    inventoryStore.addItem(itemId, toTransfer, quality)
+    const addOpts = weight !== undefined ? { weight } : undefined
+    inventoryStore.addItem(itemId, toTransfer, quality, addOpts)
     return true
   }
 
@@ -478,7 +518,7 @@ export const useShopStore = defineStore('shop', () => {
     const dayKey = `${gameStore.year}-${gameStore.seasonIndex}-${gameStore.day}`
     const dayRecord: Record<string, number> = { ...(shippingHistory.value[dayKey] ?? {}) }
     for (const entry of shippingBox.value) {
-      total += calculateSellPrice(entry.itemId, entry.quantity, entry.quality)
+      total += calculateSellPrice(entry.itemId, entry.quantity, entry.quality, entry.weight)
       // 记录出货收集
       if (!shippedItems.value.includes(entry.itemId)) {
         shippedItems.value.push(entry.itemId)
@@ -590,6 +630,7 @@ export const useShopStore = defineStore('shop', () => {
     // 出货箱
     shippingBox,
     addToShippingBox,
+    collectToShippingBox,
     removeFromShippingBox,
     processShippingBox,
     // 出货收集

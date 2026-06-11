@@ -1,63 +1,135 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { PersonaId, SystemMessage, ConnectionMode, SystemQuest, MeritBuff, MemoryTimelineEntry } from '@/types/system'
-import { AFFINITY_MILESTONES } from '@/types/system'
+import type {
+  PersonaId,
+  SystemMessage,
+  SystemMessageKind,
+  ConnectionMode,
+  SystemQuest,
+  MeritBuff,
+  MeritShopOffer,
+  MemoryTimelineEntry,
+  SystemAffinityDaily,
+  SystemMemoryState,
+  AffinityBehaviorKey,
+  SystemTriggerType
+} from '@/types/system'
+import {
+  AFFINITY_MILESTONES,
+  createDefaultAffinityDaily,
+  createDefaultMemoryState
+} from '@/types/system'
+import { MERIT_CATALOG, getMeritBagExpandCost } from '@/data/meritShop'
+import { PERSONA_AWAKENING_GIFTS } from '@/data/personaAwakeningGifts'
+import {
+  applyMeritEffect,
+  canPurchaseOffer,
+  catalogToOffer,
+  expireTimedBuffs,
+  getPurchaseCount,
+  isOfferSoldOut,
+  migratePurchasedCatalogIds,
+  recordMeritPurchase
+} from '@/composables/meritShopEngine'
+import {
+  meritWishApiToOffer,
+  type MeritWishApiResponse
+} from '@/composables/meritWishEngine'
+import { tryMeritDevCheat } from '@/composables/meritDevCheat'
+import { applyMaterialDevCheat, tryMaterialDevCheat } from '@/composables/materialDevCheat'
+import { applyRecipeDevCheat, tryRecipeDevCheat } from '@/composables/recipeDevCheat'
+import { getAnalyticsSessionId, getAnalyticsVisitorId } from '@/composables/useAnalytics'
 import { matchKnowledge } from '@/data/systemKnowledge'
+import {
+  checkPanelAbsencePenalties,
+  ensureAffinityDaily,
+  evaluatePersonaBehavior,
+  GEM_ITEM_IDS,
+  isTeaOrIncenseGift,
+  onAdviceAdoptedDaily,
+  onPanelOpenDaily,
+  onPlayerChatDaily,
+  RARE_DROP_IDS,
+  SPICY_RECIPE_IDS,
+  SWEET_RECIPE_IDS,
+  TEA_DRINK_IDS
+} from '@/composables/systemAffinityEngine'
+import {
+  appendTimeline,
+  buildPeriodicSummary,
+  detectOfflineDays,
+  pickMilestoneRecall,
+  recordCropHarvest,
+  recordFirstCrop,
+  recordFirstDeathFloor,
+  recordFirstExpansion,
+  recordFirstFish,
+  recordFirstMaxFriendNpc,
+  shouldWritePeriodicSummary,
+  trackMiningActivity,
+  updateDeepestMine
+} from '@/composables/systemMemoryEngine'
+import {
+  getAbsenceWelcomeMessage,
+  getGoodnightMessage,
+  getProactiveCareMessage,
+  shouldShowMilestoneRecall
+} from '@/composables/systemCompanionEngine'
+import {
+  buildTriggerEventSummary,
+  buildTriggerMessage,
+  canFireTrigger,
+  evaluateStaminaAlert,
+  markTriggerFired,
+  type TriggerPayload
+} from '@/composables/systemTriggerEngine'
+import { getNpcById } from '@/data/npcs'
 import { getItemById } from '@/data/items'
 import { useGameStore } from '@/stores/useGameStore'
 import { usePlayerStore } from '@/stores/usePlayerStore'
+import { useSettingsStore } from '@/stores/useSettingsStore'
+import { useInventoryStore } from '@/stores/useInventoryStore'
 import { useSkillStore } from '@/stores/useSkillStore'
 import { useHomeStore } from '@/stores/useHomeStore'
 import { useTavernStore } from '@/stores/useTavernStore'
-import { useInventoryStore } from '@/stores/useInventoryStore'
-
-/** 构建玩家游戏状态上下文，随 chat 请求发送给后端 */
-function buildGameContext(): Record<string, unknown> {
-  try {
-    const game = useGameStore()
-    const player = usePlayerStore()
-    const skill = useSkillStore()
-    const home = useHomeStore()
-    const tavern = useTavernStore()
-    const inv = useInventoryStore()
-
-    // 背包摘要：取数量最多的前 15 项，过滤掉干草等消耗品
-    const topItems = [...inv.items]
-      .filter(i => {
-        const def = getItemById(i.itemId)
-        return def && def.sellPrice > 0
-      })
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 15)
-      .map(i => {
-        const def = getItemById(i.itemId)
-        return `${def?.name ?? i.itemId}×${i.quantity}`
-      })
-
-    return {
-      season: game.season,
-      day: game.day,
-      playerName: player.playerName,
-      gender: player.gender,
-      money: player.money,
-      stamina: player.stamina,
-      maxStamina: player.maxStamina,
-      skills: {
-        farming: skill.farmingLevel,
-        mining: skill.miningLevel,
-        fishing: skill.fishingLevel,
-        foraging: skill.foragingLevel,
-        combat: skill.combatLevel,
-        cooking: skill.cookingLevel,
-      },
-      farmhouseLevel: home.farmhouseLevel,
-      tavernLevel: tavern.tavernLevel,
-      topItems,
-    }
-  } catch {
-    return {}
-  }
-}
+import { createId } from '@/utils/id'
+import { getBackendUrl } from '@/utils/backendUrl'
+import { useSaveStore } from './useSaveStore'
+import { getCombinedItemCount } from '@/composables/useCombinedInventory'
+import {
+  applyNegotiation,
+  countActiveQuests,
+  createQuestFromTemplate,
+  formatQuestDescription,
+  getQuestAnnouncement,
+  getQuestRequestRedirectReply,
+  getNegotiationPersonaLine,
+  isQuestRequestIntent,
+  MAX_ACTIVE_QUESTS,
+  getExpireMessage,
+  pickQuestTemplate,
+  processExpiredQuests,
+  reconcileQuestsOnLoad as reconcileQuestsEngine,
+  recordFeastCompleted,
+  recordTavernDailyRevenue,
+  canSubmitSystemQuest,
+  consumeQuestSubmissionMaterials,
+  type QuestProgressContext,
+  type QuestValidationContext
+} from '@/composables/systemQuestEngine'
+import { requestAiQuestDispatch } from '@/composables/systemQuestDispatch'
+import { buildGameContext } from '@/composables/buildGameContext'
+import type { QuestNegotiationType, QuestOutcomeAlert } from '@/types/system'
+import {
+  buildOfflineQuestEvaluation,
+  type QuestEvaluationOutcome
+} from '@/composables/questEvaluationEngine'
+import { useAchievementStore } from '@/stores/useAchievementStore'
+import { useNpcStore } from '@/stores/useNpcStore'
+import { useWarehouseStore } from '@/stores/useWarehouseStore'
+import { useAnimalStore } from '@/stores/useAnimalStore'
+import { useFishPondStore } from '@/stores/useFishPondStore'
+import { useBreedingStore } from '@/stores/useBreedingStore'
 
 export const useSystemStore = defineStore('system', () => {
   // === 人格 ===
@@ -74,9 +146,10 @@ export const useSystemStore = defineStore('system', () => {
   const sessionToken = ref<string | null>(null)
   const cloudBackupEnabled = ref(false)
   const isConnecting = ref(false)
+  /** 在线对话会话 ID（每存档独立，随 system 序列化） */
+  const chatSessionId = ref<string | null>(null)
 
-  /** Go 后端地址（开发默认 localhost:8080，编译时可通过 VITE_BACKEND_URL 覆盖） */
-  const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL ?? 'http://localhost:8080'
+  const BACKEND_URL = getBackendUrl()
 
   /** 后端 API 公共请求 */
   const apiFetch = async (path: string, options?: RequestInit): Promise<any> => {
@@ -112,14 +185,42 @@ export const useSystemStore = defineStore('system', () => {
   const merit = ref(0)
   const quests = ref<SystemQuest[]>([])
   const activeBuffs = ref<MeritBuff[]>([])
+  /** 玩家向 AI 许愿后生成的专属商品（随存档持久化） */
+  const customShopOffers = ref<MeritShopOffer[]>([])
+  /** 目录/许愿商品已兑换次数 */
+  const purchasedCatalogCounts = ref<Record<string, number>>({})
+  /** @deprecated 仅用于旧存档迁移 */
+  const purchasedCatalogIds = ref<string[]>([])
 
   // === 长期记忆 ===
   const timeline = ref<MemoryTimelineEntry[]>([])
+  const memoryState = ref<SystemMemoryState>(createDefaultMemoryState())
+  const affinityDaily = ref<SystemAffinityDaily>(createDefaultAffinityDaily())
 
   // === 面板状态 ===
   const panelOpen = ref(false)
   const panelFullscreen = ref(false)
+  const panelTab = ref<'chat' | 'quests' | 'shop'>('chat')
   const inputText = ref('')
+  /** 新派发任务的弹窗提示（不持久化） */
+  const newQuestAlert = ref<{
+    questId: string
+    title: string
+    description: string
+    reward: number
+    deadline: number
+  } | null>(null)
+  /** 任务完成/失败结算弹窗 */
+  const questOutcomeAlert = ref<QuestOutcomeAlert | null>(null)
+  /** 碎碎念气泡（面板关闭时展示） */
+  const bubbleVisible = ref(false)
+  const bubblePayload = ref<{
+    content: string
+    gameDay: number
+    gameSeason: import('@/types/game').Season
+    gameHour: number
+  } | null>(null)
+  let bubbleDismissTimer: ReturnType<typeof setTimeout> | null = null
   const isStreaming = ref(false)           // 是否正在接收流式回复
   const streamingMessageId = ref<string | null>(null)  // 当前流式消息 ID
 
@@ -142,79 +243,268 @@ export const useSystemStore = defineStore('system', () => {
     awakened.value = true
     firstContactDay.value = day
     affinity.value = 0
-    addSystemMessage(getAwakeningGreeting(persona))
+    addMumbleMessage(getAwakeningGreeting(persona), day)
+
+    const gift = PERSONA_AWAKENING_GIFTS[persona]
+    if (gift.merit) merit.value += gift.merit
+    if (gift.money) usePlayerStore().earnMoney(gift.money)
+    if (gift.items?.length) {
+      const inv = useInventoryStore()
+      for (const { itemId, quantity } of gift.items) {
+        inv.addItem(itemId, quantity)
+      }
+    }
+    addMumbleMessage(gift.giftLine, day)
   }
 
-  function addSystemMessage(content: string, gameDay = 0) {
+  function dismissBubble() {
+    bubbleVisible.value = false
+    bubblePayload.value = null
+    if (bubbleDismissTimer) {
+      clearTimeout(bubbleDismissTimer)
+      bubbleDismissTimer = null
+    }
+  }
+
+  function captureGameTime() {
+    const game = useGameStore()
+    return { gameYear: game.year, gameSeason: game.season, gameHour: game.hour }
+  }
+
+  function showMumbleBubble(content: string, gameDay: number) {
+    if (panelOpen.value) return
+    const settings = useSettingsStore()
+    if (!settings.systemBubbleEnabled) return
+    const { gameSeason, gameHour } = captureGameTime()
+    bubblePayload.value = { content, gameDay, gameSeason, gameHour }
+    bubbleVisible.value = true
+    if (bubbleDismissTimer) clearTimeout(bubbleDismissTimer)
+    if (settings.systemBubbleAutoClose) {
+      bubbleDismissTimer = setTimeout(() => dismissBubble(), settings.systemBubbleAutoCloseMs)
+    }
+  }
+
+  function pushMessage(
+    role: 'system' | 'player',
+    content: string,
+    gameDay: number,
+    kind: SystemMessageKind
+  ) {
+    const { gameYear, gameSeason, gameHour } = captureGameTime()
     messages.value.push({
-      id: crypto.randomUUID(),
-      role: 'system',
+      id: createId(),
+      role,
+      kind,
       content,
       timestamp: Date.now(),
-      gameDay
+      gameDay,
+      gameYear,
+      gameSeason,
+      gameHour
     })
     if (!panelOpen.value) {
       unreadCount.value++
+      if (kind === 'mumble') showMumbleBubble(content, gameDay)
     }
-    // 滚动窗口：保持最近 200 条
     if (messages.value.length > 200) {
       messages.value = messages.value.slice(-200)
     }
   }
 
+  /** 系统提示（任务、连接、亲和等） */
+  function addSystemMessage(content: string, gameDay = 0, kind: SystemMessageKind = 'notice') {
+    pushMessage('system', content, gameDay, kind)
+  }
+
+  /** 碎碎念 / 日常问候 / 主动搭话 */
+  function addMumbleMessage(content: string, gameDay = 0) {
+    pushMessage('system', content, gameDay, 'mumble')
+  }
+
+  /** 对话回复（玩家主动发起） */
+  function addChatMessage(content: string, gameDay = 0) {
+    pushMessage('system', content, gameDay, 'chat')
+  }
+
   function addPlayerMessage(content: string, gameDay = 0) {
-    messages.value.push({
-      id: crypto.randomUUID(),
-      role: 'player',
-      content,
-      timestamp: Date.now(),
-      gameDay
-    })
+    pushMessage('player', content, gameDay, 'chat')
   }
 
   function processPlayerInput(input: string, gameDay = 0): string | null {
     addPlayerMessage(input, gameDay)
+    if (awakened.value) {
+      const chatGain = onPlayerChatDaily(affinityDaily.value, gameDay)
+      if (chatGain) applyAffinityGain(chatGain)
+    }
+
+    if (tryMaterialDevCheat(input)) {
+      const reply = applyMaterialDevCheat()
+      addSystemMessage(reply, gameDay)
+      return reply
+    }
+
+    if (tryRecipeDevCheat(input)) {
+      const reply = applyRecipeDevCheat()
+      addSystemMessage(reply, gameDay)
+      void useSaveStore().autoSave()
+      return reply
+    }
+
+    const cheat = tryMeritDevCheat(input)
+    if (cheat.matched) {
+      merit.value += cheat.grant
+      const reply = `斯巴拉西！测试口令生效：功勋 +${cheat.grant}。当前功勋：${merit.value}`
+      addSystemMessage(reply, gameDay)
+      return reply
+    }
+
+    if (isQuestRequestIntent(input)) {
+      const reply = getQuestRequestRedirectReply(personaId.value)
+      addChatMessage(reply, gameDay)
+      return reply
+    }
 
     if (mode.value === 'offline') {
       const match = matchKnowledge(input)
       if (match) {
         const reply = wrapWithPersona(match.content)
-        addSystemMessage(reply, gameDay)
+        addChatMessage(reply, gameDay)
         return reply
       }
-      addSystemMessage('灵识信号微弱……请尝试换个关键词，或点击「呼叫系统」链接系统以获得完整对话能力。', gameDay)
+      addChatMessage('灵识信号微弱……请尝试换个关键词，或点击「呼叫系统」链接系统以获得完整对话能力。', gameDay)
       return null
     }
 
-    // 在线模式：异步发送到后端
     sendToBackend(input, gameDay)
     return null
   }
 
-  /** 获取或创建聊天会话 ID */
-  const getChatSessionId = (): string => {
-    const key = 'taoyuan_chat_session'
-    let id = localStorage.getItem(key)
-    if (!id) {
-      id = crypto.randomUUID()
-      localStorage.setItem(key, id)
+  function addCustomShopOffer(offer: MeritShopOffer) {
+    const dup = customShopOffers.value.find(
+      o => !o.purchased && o.wishPrompt === offer.wishPrompt && o.effect.type === offer.effect.type
+    )
+    if (dup) {
+      dup.cost = offer.cost
+      dup.description = offer.description
+      dup.name = offer.name
+      return
     }
-    return id
+    customShopOffers.value.push(offer)
+  }
+
+  const catalogShopOffers = computed(() => {
+    const inv = useInventoryStore()
+    return MERIT_CATALOG.map(catalogToOffer)
+      .filter(o => o.effect.type !== 'expand_bag' || inv.capacity < inv.MAX_CAPACITY)
+      .map(o => {
+        const count = getPurchaseCount(o.id, purchasedCatalogCounts.value)
+        const soldOut = isOfferSoldOut(o, purchasedCatalogCounts.value)
+        let cost = o.cost
+        if (o.id === 'bag_expand') {
+          cost = getMeritBagExpandCost(inv.capacity)
+        }
+        return {
+          ...o,
+          cost,
+          purchaseCount: count,
+          purchased: soldOut
+        }
+      })
+  })
+
+  const allShopOffers = computed(() => [
+    ...catalogShopOffers.value,
+    ...customShopOffers.value
+      .filter(o => !o.purchased)
+      .map(o => ({
+        ...o,
+        purchaseCount: getPurchaseCount(o.id, purchasedCatalogCounts.value),
+        purchased: isOfferSoldOut(o, purchasedCatalogCounts.value) || o.purchased === true
+      }))
+  ])
+
+  function purchaseMeritShopItem(offerId: string): { ok: boolean; message: string } {
+    const catalog = catalogShopOffers.value.find(o => o.id === offerId)
+    const custom = customShopOffers.value.find(o => o.id === offerId)
+    const offer = catalog ?? custom
+    if (!offer) return { ok: false, message: '商品不存在。' }
+
+    const check = canPurchaseOffer(offer, merit.value, purchasedCatalogCounts.value)
+    if (!check.ok) return { ok: false, message: check.reason ?? '无法购买' }
+
+    merit.value -= offer.cost
+    const result = applyMeritEffect(offer.effect, offer)
+    if (!result.ok) {
+      merit.value += offer.cost
+      return result
+    }
+
+    recordMeritPurchase(offer, purchasedCatalogCounts.value)
+
+    if (result.buff && offer.effect.type !== 'max_stamina' && offer.effect.type !== 'max_hp') {
+      activeBuffs.value.push(result.buff)
+    }
+
+    const msg = `兑换成功：${offer.name}（−${offer.cost} 功勋）。${result.message} 当前功勋：${merit.value}`
+    addSystemMessage(msg)
+    return { ok: true, message: msg }
+  }
+
+  function processMeritBuffExpiry(currentDay: number) {
+    activeBuffs.value = expireTimedBuffs(activeBuffs.value, currentDay)
+    customShopOffers.value = customShopOffers.value.filter(o => !o.purchased)
+  }
+
+  /** 废弃旧版全局会话键（所有路径调用，防止旧 bundle 残留） */
+  function purgeLegacyChatSessionKey() {
+    try {
+      localStorage.removeItem('taoyuan_chat_session')
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** 为指定槽位生成全新会话 ID（新游戏必须调用，不可复用旧会话） */
+  function resetChatSessionForSlot(saveSlot: number) {
+    purgeLegacyChatSessionKey()
+    chatSessionId.value =
+      saveSlot >= 0 ? `save-${saveSlot}-${createId()}` : createId()
+  }
+
+  /** 获取或创建当前存档的聊天会话 ID（与后端历史隔离） */
+  function getChatSessionId(): string {
+    purgeLegacyChatSessionKey()
+    if (!chatSessionId.value) {
+      resetChatSessionForSlot(useSaveStore().activeSlot)
+    }
+    return chatSessionId.value!
+  }
+
+  /** 读档时确保会话 ID 存在；旧存档无 ID 则按槽位生成新会话 */
+  function ensureChatSessionForSlot(saveSlot: number) {
+    purgeLegacyChatSessionKey()
+    if (!chatSessionId.value) {
+      resetChatSessionForSlot(saveSlot)
+    }
   }
 
   /** 在线模式：SSE 流式发送消息到后端 Chat API */
   async function sendToBackend(input: string, gameDay: number) {
     isStreaming.value = true
-    const msgId = crypto.randomUUID()
+    const msgId = createId()
     streamingMessageId.value = msgId
 
     // 插入占位消息
+    const { gameSeason, gameHour } = captureGameTime()
     messages.value.push({
       id: msgId,
       role: 'system',
+      kind: 'chat',
       content: '',
       timestamp: Date.now(),
-      gameDay
+      gameDay,
+      gameSeason,
+      gameHour
     })
 
     try {
@@ -228,6 +518,8 @@ export const useSystemStore = defineStore('system', () => {
           message: input,
           personaId: personaId.value,
           sessionId: getChatSessionId(),
+          visitorId: getAnalyticsVisitorId(),
+          analyticsSessionId: getAnalyticsSessionId(),
           context: buildGameContext()
         })
       })
@@ -241,9 +533,18 @@ export const useSystemStore = defineStore('system', () => {
       const contentType = res.headers.get('Content-Type') ?? ''
       if (contentType.includes('application/json')) {
         const result = await res.json()
-        if (result.type === 'knowledge' && result.results?.length > 0) {
+        if (result.type === 'wish') {
+          const wish = result as MeritWishApiResponse
+          updateStreamingMessage(msgId, wish.reply || '（无回复）')
+          const offer = meritWishApiToOffer(wish, input, gameDay)
+          if (offer) addCustomShopOffer(offer)
+        } else if (result.type === 'knowledge' && result.results?.length > 0) {
           const parts = result.results.map((r: any) => `${r.entry.title}：${r.entry.content}`)
           updateStreamingMessage(msgId, parts.join('\n\n'))
+        } else if (result.type === 'llm' && result.message) {
+          updateStreamingMessage(msgId, result.message)
+        } else if (result.error) {
+          throw new Error(result.error)
         } else {
           updateStreamingMessage(msgId, result.message ?? '收到。')
         }
@@ -278,6 +579,11 @@ export const useSystemStore = defineStore('system', () => {
               const msg = messages.value.find(m => m.id === msgId)
               if (msg) {
                 msg.content += event.content
+              }
+            } else if (event.type === 'revision') {
+              const msg = messages.value.find(m => m.id === msgId)
+              if (msg && event.content) {
+                msg.content = event.content
               }
             } else if (event.type === 'error') {
               throw new Error(event.error)
@@ -350,9 +656,20 @@ export const useSystemStore = defineStore('system', () => {
     addSystemMessage('已断开连接，切回灵识托管模式。')
   }
 
-  function openPanel() {
+  function openPanel(tab?: 'chat' | 'quests' | 'shop') {
+    panelTab.value = tab ?? 'chat'
     panelOpen.value = true
     unreadCount.value = 0
+    dismissBubble()
+    if (!awakened.value) return
+    const day = useGameStore().day
+    memoryState.value.lastPanelOpenDay = day
+    const gain = onPanelOpenDaily(affinityDaily.value, day)
+    if (gain) applyAffinityGain(gain)
+    if (shouldShowMilestoneRecall(memoryState.value, day)) {
+      const recall = pickMilestoneRecall(memoryState.value, personaId.value)
+      if (recall) addMumbleMessage(recall, day)
+    }
   }
 
   function closePanel() {
@@ -363,7 +680,342 @@ export const useSystemStore = defineStore('system', () => {
     panelFullscreen.value = !panelFullscreen.value
   }
 
-  // === 亲和度 ===
+  // === 亲和度与陪伴 ===
+  function applyAffinityGain(result: { delta: number; reason?: string }) {
+    if (!result.delta) return
+    adjustAffinity(result.delta)
+    if (result.reason && Math.abs(result.delta) >= 2) {
+      const sign = result.delta > 0 ? '+' : ''
+      addSystemMessage(`（亲和 ${sign}${result.delta}：${result.reason}）`)
+    }
+  }
+
+  function pushTimeline(entry: Omit<MemoryTimelineEntry, 'createdAt'>) {
+    timeline.value = appendTimeline(timeline.value, entry)
+  }
+
+  function notifyAffinityBehavior(behavior: AffinityBehaviorKey) {
+    if (!awakened.value) return
+    const gain = evaluatePersonaBehavior(personaId.value, behavior, memoryState.value)
+    if (gain) applyAffinityGain(gain)
+  }
+
+  function onFoodConsumed(itemOrRecipeId: string, isRecipe = false) {
+    if (!awakened.value) return
+    const id = isRecipe ? itemOrRecipeId : itemOrRecipeId
+    if (TEA_DRINK_IDS.has(id) || (!isRecipe && id.includes('tea'))) {
+      notifyAffinityBehavior('drink_tea')
+    }
+    if (isRecipe && SWEET_RECIPE_IDS.has(id)) notifyAffinityBehavior('eat_sweet')
+    if (isRecipe && SPICY_RECIPE_IDS.has(id)) notifyAffinityBehavior('eat_spicy')
+  }
+
+  function onNpcGift(itemId: string, npcId: string, reaction: string) {
+    if (!awakened.value) return
+    const npc = getNpcById(npcId)
+    if (!npc) return
+    if (reaction === '讨厌' || npc.hatedItems.includes(itemId)) {
+      if (itemId === 'stone' || itemId === 'weed' || npc.hatedItems.includes(itemId)) {
+        notifyAffinityBehavior('gift_rude')
+      }
+    } else if (
+      (npc.lovedItems.includes(itemId) || npc.likedItems.includes(itemId)) &&
+      isTeaOrIncenseGift(itemId)
+    ) {
+      notifyAffinityBehavior('gift_tea_liked')
+    }
+  }
+
+  function onCropHarvested(cropId: string, season: string) {
+    if (!awakened.value) return
+    const day = useGameStore().day
+    const first = recordFirstCrop(memoryState.value, cropId, day)
+    recordCropHarvest(memoryState.value)
+    if (first) pushTimeline(first)
+    if (season === 'spring') notifyAffinityBehavior('spring_harvest')
+  }
+
+  function onFishCaught(fishId: string, difficulty: string) {
+    if (!awakened.value) return
+    const day = useGameStore().day
+    const first = recordFirstFish(memoryState.value, fishId, day)
+    if (first) pushTimeline(first)
+    if (difficulty === 'legendary' || RARE_DROP_IDS.has(fishId)) {
+      notifyAffinityBehavior('rare_drop')
+    }
+    const game = useGameStore()
+    if (game.weather === 'stormy') notifyAffinityBehavior('stormy_adventure')
+  }
+
+  function onMineFloorReached(floor: number, isBossFloor = false) {
+    if (!awakened.value) return
+    updateDeepestMine(memoryState.value, floor)
+    trackMiningActivity(memoryState.value, useGameStore().day)
+    if (floor > 40) notifyAffinityBehavior('mine_floor_40')
+    const game = useGameStore()
+    if (game.weather === 'stormy') notifyAffinityBehavior('stormy_adventure')
+    fireSystemTrigger('mine_new_floor', { floor })
+    if (isBossFloor) fireSystemTrigger('mine_boss_near', { floor })
+  }
+
+  function onSafePointUnlocked(floor: number) {
+    fireSystemTrigger('safe_point', { floor })
+  }
+
+  function onSeasonChange(oldSeason: string, newSeason: string) {
+    fireSystemTrigger('season_change', {
+      oldSeason: oldSeason as TriggerPayload['oldSeason'],
+      season: newSeason as TriggerPayload['season']
+    })
+  }
+
+  function onFestivalDay(festivalName: string) {
+    fireSystemTrigger('festival', { festivalName })
+  }
+
+  function onSkillLevelUp(skillType: string, newLevel: number) {
+    fireSystemTrigger('skill_level_up', { skillType, skillLevel: newLevel })
+  }
+
+  function onStaminaThreshold() {
+    const player = usePlayerStore()
+    const { band, fire } = evaluateStaminaAlert(
+      memoryState.value.staminaAlertBand,
+      player.stamina,
+      player.maxStamina
+    )
+    memoryState.value.staminaAlertBand = band
+    if (fire) fireSystemTrigger(fire)
+  }
+
+  function onInventoryPressure(usageRatio: number) {
+    if (usageRatio >= 0.8) fireSystemTrigger('inventory_full')
+  }
+
+  function onProcessingDone(itemId: string) {
+    const def = getItemById(itemId)
+    fireSystemTrigger('processing_done', { itemName: def?.name ?? itemId })
+    onProcessingCollected(itemId)
+  }
+
+  function onMineDefeat(floor: number) {
+    if (!awakened.value) return
+    const day = useGameStore().day
+    const entry = recordFirstDeathFloor(memoryState.value, floor, day)
+    if (entry) pushTimeline(entry)
+    const player = usePlayerStore()
+    if (player.hp < player.getMaxHp() * 0.5) notifyAffinityBehavior('mine_injured')
+  }
+
+  function onMineLeaveEarly() {
+    if (!awakened.value) return
+    const player = usePlayerStore()
+    if (player.stamina >= player.maxStamina * 0.3) notifyAffinityBehavior('early_retreat')
+  }
+
+  function onRareItemObtained(itemId: string) {
+    if (RARE_DROP_IDS.has(itemId)) notifyAffinityBehavior('rare_drop')
+  }
+
+  function onAnimalCare() {
+    notifyAffinityBehavior('pet_or_feed_animal')
+  }
+
+  function onMuseumGemDonate(itemId: string) {
+    if (GEM_ITEM_IDS.has(itemId)) notifyAffinityBehavior('museum_gem_donate')
+  }
+
+  function onHomeUpgraded(level: number) {
+    if (!awakened.value) return
+    const entry = recordFirstExpansion(memoryState.value, level, useGameStore().day)
+    if (entry) pushTimeline(entry)
+  }
+
+  function onNpcMaxFriendship(npcId: string) {
+    if (!awakened.value) return
+    const entry = recordFirstMaxFriendNpc(memoryState.value, npcId, useGameStore().day)
+    if (entry) pushTimeline(entry)
+  }
+
+  function onPerfectFeast() {
+    notifyAffinityBehavior('perfect_feast')
+  }
+
+  function onProcessingCollected(outputItemId: string) {
+    if (outputItemId === 'osmanthus_wine') notifyAffinityBehavior('brew_osmanthus_wine')
+  }
+
+  function processGoodnight(endingDay: number, recoveryMode: 'normal' | 'late' | 'passout') {
+    if (!awakened.value || !personaId.value) return
+    addSystemMessage(getGoodnightMessage(personaId.value, recoveryMode), endingDay)
+    if (useGameStore().hour >= 24) notifyAffinityBehavior('late_night')
+  }
+
+  function processCompanionNewDay(newDay: number) {
+    if (!awakened.value || !personaId.value) return
+    const endingDay = newDay - 1
+    if (endingDay >= 1) {
+      for (const penalty of checkPanelAbsencePenalties(memoryState.value, endingDay, personaId.value)) {
+        applyAffinityGain(penalty)
+      }
+    }
+    affinityDaily.value = ensureAffinityDaily(affinityDaily.value, newDay)
+
+    if (shouldWritePeriodicSummary(memoryState.value, newDay)) {
+      const player = usePlayerStore()
+      const npc = useNpcStore()
+      const achievement = useAchievementStore()
+      let maxNpcId: string | null = null
+      let maxFriend = 0
+      for (const s of npc.npcStates) {
+        if (s.friendship > maxFriend) {
+          maxFriend = s.friendship
+          maxNpcId = s.npcId
+        }
+      }
+      const game = useGameStore()
+      const summary = buildPeriodicSummary({
+        day: newDay,
+        season: game.season,
+        year: game.year,
+        totalCropsHarvested: memoryState.value.totalCropsHarvested,
+        money: player.money,
+        deepestMineFloor: Math.max(memoryState.value.deepestMineFloor, achievement.stats.highestMineFloor),
+        maxNpcFriendship: maxFriend,
+        maxNpcId,
+        affinity: affinity.value
+      })
+      memoryState.value.lastPeriodicSummaryDay = newDay
+      pushTimeline({ day: newDay, summary, trigger: 'periodic' })
+      addMumbleMessage(`【记忆摘要】${summary}`, newDay)
+    }
+
+    const player = usePlayerStore()
+    const care = getProactiveCareMessage(personaId.value, {
+      stamina: player.stamina,
+      maxStamina: player.maxStamina,
+      hp: player.hp,
+      maxHp: player.getMaxHp(),
+      animalNeglectStreak: memoryState.value.animalNeglectStreak,
+      consecutiveMiningDays: memoryState.value.consecutiveMiningDays,
+      season: useGameStore().season
+    })
+    if (care) addSystemMessage(care, newDay)
+
+    checkBirthdayNpcs()
+    const weather = useGameStore().weather
+    if (weather === 'stormy' || weather === 'green_rain' || weather === 'windy') {
+      fireSystemTrigger('weather_special', {
+        weather,
+        weatherName: useGameStore().weatherName
+      })
+    }
+  }
+
+  function onAnimalNeglectDay(unfedCount: number) {
+    if (!awakened.value || unfedCount <= 0) return
+    memoryState.value.animalNeglectStreak++
+    if (memoryState.value.animalNeglectStreak >= 3) {
+      notifyAffinityBehavior('animal_neglect')
+    }
+  }
+
+  function onAnimalCareDay() {
+    memoryState.value.animalNeglectStreak = 0
+    delete memoryState.value.onceFlags['behavior_animal_neglect']
+  }
+
+  function onSaveLoaded() {
+    if (!awakened.value) return
+    const now = Date.now()
+    const offlineDays = detectOfflineDays(memoryState.value.lastOnlineRealMs, now)
+    memoryState.value.lastOnlineRealMs = now
+    const day = useGameStore().day
+    if (offlineDays >= 3 && memoryState.value.absenceWelcomeDay !== day && personaId.value) {
+      memoryState.value.absenceWelcomeDay = day
+      addMumbleMessage(getAbsenceWelcomeMessage(personaId.value, offlineDays), day)
+      pushTimeline({
+        day,
+        summary: `离线 ${offlineDays} 天后回归`,
+        trigger: 'milestone'
+      })
+    }
+  }
+
+  function touchOnlineTime() {
+    memoryState.value.lastOnlineRealMs = Date.now()
+  }
+
+  /** 在线模式：事件搭话走 LLM，失败回退模板 */
+  async function sendTriggerToBackend(type: SystemTriggerType, payload: TriggerPayload, gameDay: number) {
+    const persona = personaId.value!
+    const templateHint = buildTriggerMessage(persona, type, payload)
+    const eventSummary = buildTriggerEventSummary(type, payload)
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/chat/trigger`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sessionToken.value ? { Authorization: `Bearer ${sessionToken.value}` } : {})
+        },
+        body: JSON.stringify({
+          personaId: persona,
+          triggerType: type,
+          eventSummary,
+          templateHint,
+          affinity: affinity.value,
+          context: buildGameContext()
+        })
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = (await res.json()) as { message?: string }
+      if (data.message?.trim()) {
+        addMumbleMessage(data.message.trim(), gameDay)
+        return
+      }
+    } catch (e) {
+      console.warn('[SystemStore] trigger LLM failed:', e)
+    }
+    addMumbleMessage(templateHint, gameDay)
+  }
+
+  /** §5.2 事件驱动主动搭话（含 §5.4 冷却与每日上限） */
+  function fireSystemTrigger(type: SystemTriggerType, payload: TriggerPayload = {}) {
+    if (!awakened.value || !personaId.value) return
+    const game = useGameStore()
+    if (!canFireTrigger(memoryState.value, type, game.day, game.hour, mode.value)) return
+    markTriggerFired(memoryState.value, type, game.day, game.hour)
+    if (mode.value === 'online') {
+      void sendTriggerToBackend(type, payload, game.day)
+      return
+    }
+    addMumbleMessage(buildTriggerMessage(personaId.value, type, payload), game.day)
+  }
+
+  function checkNpcHeartUp(npcId: string, before: number, after: number) {
+    const oldHearts = Math.floor(before / 250)
+    const newHearts = Math.floor(after / 250)
+    if (newHearts > oldHearts) {
+      fireSystemTrigger('npc_heart_up', {
+        npcId,
+        npcName: getNpcById(npcId)?.name,
+        hearts: newHearts
+      })
+    }
+  }
+
+  function checkBirthdayNpcs() {
+    const npc = useNpcStore()
+    for (const state of npc.npcStates) {
+      if (npc.isBirthday(state.npcId)) {
+        fireSystemTrigger('npc_birthday', {
+          npcId: state.npcId,
+          npcName: getNpcById(state.npcId)?.name
+        })
+      }
+    }
+  }
+
   function adjustAffinity(delta: number) {
     const old = affinity.value
     affinity.value = Math.max(0, Math.min(100, affinity.value + delta))
@@ -405,7 +1057,14 @@ export const useSystemStore = defineStore('system', () => {
       }
     }
     const line = lines[milestone]?.[personaId.value]
-    if (line) addSystemMessage(line)
+    if (line) {
+      addMumbleMessage(line)
+      pushTimeline({
+        day: useGameStore().day,
+        summary: `亲和里程碑 ${milestone}：${line.slice(0, 24)}…`,
+        trigger: 'affinity'
+      })
+    }
   }
 
   // === 序列化 ===
@@ -419,54 +1078,395 @@ export const useSystemStore = defineStore('system', () => {
       affinityMilestonesReached: Array.from(affinityMilestonesReached.value),
       merit: merit.value,
       quests: quests.value,
+      lastQuestDay: lastQuestDay.value,
       activeBuffs: activeBuffs.value,
+      customShopOffers: customShopOffers.value,
+      purchasedCatalogCounts: purchasedCatalogCounts.value,
       timeline: timeline.value,
+      memoryState: memoryState.value,
+      affinityDaily: affinityDaily.value,
       cloudBackupEnabled: cloudBackupEnabled.value,
-      sessionToken: sessionToken.value
+      sessionToken: sessionToken.value,
+      chatSessionId: chatSessionId.value,
+      mode: mode.value
     }
   }
 
-  function deserialize(data: any) {
+  function deserialize(data: any, saveSlot = -1) {
     if (!data) return
     personaId.value = data.personaId ?? null
     awakened.value = data.awakened ?? false
     firstContactDay.value = data.firstContactDay ?? -1
-    messages.value = data.messages ?? []
+    messages.value = (data.messages ?? []).map((m: SystemMessage) => ({
+      ...m,
+      kind: m.kind ?? (m.role === 'player' ? 'chat' : 'notice')
+    }))
     affinity.value = data.affinity ?? 0
     affinityMilestonesReached.value = new Set(data.affinityMilestonesReached ?? [])
     merit.value = data.merit ?? 0
-    quests.value = data.quests ?? []
+    quests.value = (data.quests ?? []).map((q: SystemQuest) => ({
+      ...q,
+      expired: q.expired ?? false,
+      progress: q.progress ?? 0,
+      swappedType: q.swappedType ?? false,
+      evaluationPending: q.evaluationPending ?? false
+    }))
+    lastQuestDay.value = data.lastQuestDay ?? -1
     activeBuffs.value = data.activeBuffs ?? []
+    customShopOffers.value = data.customShopOffers ?? []
+    purchasedCatalogCounts.value = data.purchasedCatalogCounts ?? migratePurchasedCatalogIds(data.purchasedCatalogIds ?? [])
+    purchasedCatalogIds.value = data.purchasedCatalogIds ?? []
     cloudBackupEnabled.value = data.cloudBackupEnabled ?? false
     timeline.value = data.timeline ?? []
+    memoryState.value = { ...createDefaultMemoryState(), ...(data.memoryState ?? {}) }
+    affinityDaily.value = { ...createDefaultAffinityDaily(), ...(data.affinityDaily ?? {}) }
     sessionToken.value = data.sessionToken ?? null
+    chatSessionId.value = data.chatSessionId ?? null
     // 恢复在线模式（有 token 且之前是在线模式）
     if (data.sessionToken && data.mode === 'online') {
       mode.value = 'online'
+    } else if (!data.sessionToken) {
+      mode.value = 'offline'
+    }
+    ensureChatSessionForSlot(saveSlot)
+  }
+
+  // === 任务系统 ===
+  const lastQuestDay = ref(-1)
+  const questDispatchInFlight = ref(false)
+
+  function buildQuestProgressContext(): QuestProgressContext {
+    const achievement = useAchievementStore()
+    const skill = useSkillStore()
+    const home = useHomeStore()
+    const tavern = useTavernStore()
+    const warehouse = useWarehouseStore()
+    const animal = useAnimalStore()
+    const fishPond = useFishPondStore()
+    const breeding = useBreedingStore()
+    return {
+      tavernLevel: tavern.tavernLevel,
+      farmhouseLevel: home.farmhouseLevel,
+      highestMineFloor: achievement.stats.highestMineFloor,
+      greenhouseUnlocked: home.greenhouseUnlocked,
+      caveUnlocked: home.caveUnlocked,
+      warehouseUnlocked: warehouse.unlocked,
+      animalCount: animal.animals.length,
+      fishPondBuilt: fishPond.pond.built,
+      breedingStationCount: breeding.stationCount,
+      getSkillLevel: (skillType: string) => {
+        const types = ['farming', 'foraging', 'fishing', 'mining', 'combat', 'cooking'] as const
+        if ((types as readonly string[]).includes(skillType)) {
+          return skill.getSkill(skillType as (typeof types)[number]).level
+        }
+        return 0
+      }
     }
   }
 
-  // === 简单任务系统 ===
-  let lastQuestDay = -1
+  function buildQuestContext(): QuestValidationContext {
+    const achievement = useAchievementStore()
+    const npc = useNpcStore()
+    const skill = useSkillStore()
+    const tavern = useTavernStore()
+    return {
+      getItemCount: (itemId: string) => getCombinedItemCount(itemId),
+      highestMineFloor: achievement.stats.highestMineFloor,
+      getNpcFriendship: (npcId: string) => npc.npcStates.find(n => n.npcId === npcId)?.friendship ?? 0,
+      maxNpcFriendship: () => Math.max(0, ...npc.npcStates.map(n => n.friendship)),
+      getSkillLevel: (skillType: string) => {
+        const types = ['farming', 'foraging', 'fishing', 'mining', 'combat', 'cooking'] as const
+        if ((types as readonly string[]).includes(skillType)) {
+          return skill.getSkill(skillType as (typeof types)[number]).level
+        }
+        return 0
+      },
+      tavernReputation: tavern.reputation
+    }
+  }
 
-  function checkQuestAssignment(currentDay: number) {
-    if (!awakened.value) return
-    if (quests.value.length >= 3) return
-    if (currentDay - lastQuestDay < 3) return
+  async function requestQuestEvaluation(questId: string, outcome: QuestEvaluationOutcome) {
+    const q = quests.value.find(item => item.id === questId)
+    if (!q) return
+    q.evaluationPending = true
+    const gameStore = useGameStore()
+    const persona = personaId.value ?? 'qingluan'
+    const ctx = {
+      currentDay: gameStore.day,
+      merit: merit.value,
+      affinity: affinity.value
+    }
+    let evaluation = ''
+    if (mode.value === 'online' && sessionToken.value) {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/v1/quest/evaluate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${sessionToken.value}`
+          },
+          body: JSON.stringify({
+            personaId: persona,
+            outcome,
+            quest: { ...q },
+            context: buildGameContext()
+          })
+        })
+        if (res.ok) {
+          const data = (await res.json()) as { evaluation?: string }
+          evaluation = (data.evaluation ?? '').trim()
+        }
+      } catch {
+        /* 离线兜底 */
+      }
+    }
+    if (!evaluation) {
+      evaluation = buildOfflineQuestEvaluation(q, outcome, persona, ctx)
+    }
+    q.evaluation = evaluation
+    q.evaluationPending = false
+  }
 
-    lastQuestDay = currentDay
-    const quest = generateQuest(currentDay)
-    quests.value.push(quest)
-    addSystemMessage(getQuestAnnouncement(quest), currentDay)
+  function showQuestOutcomeAlert(
+    q: SystemQuest,
+    type: QuestOutcomeAlert['type'],
+    meritBefore: number,
+    meritAfter: number
+  ) {
+    questOutcomeAlert.value = {
+      type,
+      questId: q.id,
+      title: q.title ?? q.type,
+      description: q.description ?? formatQuestDescription(q),
+      reward: q.reward,
+      fine: q.fine ?? (type === 'failed' ? Math.ceil(q.reward * 0.5) : 0),
+      meritBefore,
+      meritAfter,
+      endedDay: q.endedDay ?? useGameStore().day
+    }
   }
 
   function completeQuest(questId: string) {
-    const q = quests.value.find(q => q.id === questId)
-    if (q && !q.completed) {
-      q.completed = true
-      merit.value += q.reward
-      addSystemMessage(`任务完成！获得 ${q.reward} 功勋。当前功勋：${merit.value}`)
+    const q = quests.value.find(item => item.id === questId)
+    if (!q || q.completed || q.expired) return
+    const meritBefore = merit.value
+    q.completed = true
+    q.endedDay = useGameStore().day
+    merit.value += q.reward
+    addSystemMessage(
+      `任务「${q.title ?? q.type}」完成！获得 ${q.reward} 功勋。当前功勋：${merit.value}`
+    )
+    showQuestOutcomeAlert(q, 'completed', meritBefore, merit.value)
+    void requestQuestEvaluation(questId, 'completed')
+  }
+
+  function failQuest(questId: string, fine: number) {
+    const q = quests.value.find(item => item.id === questId)
+    if (!q || q.completed || q.expired) return
+    const meritBefore = merit.value
+    q.expired = true
+    q.endedDay = useGameStore().day
+    q.fine = fine
+    merit.value -= fine
+    addSystemMessage(getExpireMessage(q, fine))
+    showQuestOutcomeAlert(q, 'failed', meritBefore, merit.value)
+    void requestQuestEvaluation(questId, 'failed')
+  }
+
+  function dismissQuestOutcomeAlert() {
+    questOutcomeAlert.value = null
+  }
+
+  function viewQuestOutcomeInPanel() {
+    questOutcomeAlert.value = null
+    openPanel('quests')
+  }
+
+  /** 保留调用点；任务改为手动提交，不再自动结算 */
+  function validateQuests(): void {
+    /* no-op */
+  }
+
+  function canSubmitQuest(questId: string): boolean {
+    const q = quests.value.find(item => item.id === questId)
+    if (!q) return false
+    return canSubmitSystemQuest(q, buildQuestContext())
+  }
+
+  function submitQuest(questId: string): { ok: boolean; reason?: string } {
+    const q = quests.value.find(item => item.id === questId)
+    if (!q || !q.accepted || q.completed || q.expired) {
+      return { ok: false, reason: 'not_found' }
     }
+    if (!canSubmitSystemQuest(q, buildQuestContext())) {
+      return { ok: false, reason: 'not_ready' }
+    }
+    const consumed = consumeQuestSubmissionMaterials(q)
+    if (!consumed.ok) {
+      return { ok: false, reason: consumed.reason ?? 'materials' }
+    }
+    completeQuest(questId)
+    return { ok: true }
+  }
+
+  function processQuestExpiry(currentDay: number): void {
+    const { expiredIds } = processExpiredQuests(quests.value, currentDay)
+    for (const id of expiredIds) {
+      const q = quests.value.find(item => item.id === id)
+      if (!q) continue
+      const fine = q.fine ?? Math.ceil(q.reward * 0.5)
+      failQuest(id, fine)
+    }
+  }
+
+  function pushNewQuestAlert(quest: typeof quests.value[0]) {
+    newQuestAlert.value = {
+      questId: quest.id,
+      title: quest.title ?? quest.type,
+      description: quest.description ?? formatQuestDescription(quest),
+      reward: quest.reward,
+      deadline: quest.deadline
+    }
+  }
+
+  function assignQuestFromTemplate(currentDay: number) {
+    const progress = buildQuestProgressContext()
+    const template = pickQuestTemplate(currentDay, quests.value, progress)
+    if (!template) return false
+
+    lastQuestDay.value = currentDay
+    const quest = createQuestFromTemplate(template, currentDay, affinity.value, createId)
+    quests.value.push(quest)
+    const persona = personaId.value ?? 'qingluan'
+    addSystemMessage(getQuestAnnouncement(quest, persona), currentDay)
+    pushNewQuestAlert(quest)
+    return true
+  }
+
+  async function assignQuestFromAi(currentDay: number): Promise<boolean> {
+    const persona = personaId.value ?? 'qingluan'
+    const result = await requestAiQuestDispatch({
+      personaId: persona,
+      affinity: affinity.value,
+      merit: merit.value,
+      currentDay,
+      sessionToken: sessionToken.value
+    })
+    if (!result) return false
+
+    lastQuestDay.value = currentDay
+    const quest = { ...result.quest, id: createId() }
+    quests.value.push(quest)
+    addSystemMessage(result.announcement, currentDay)
+    pushNewQuestAlert(quest)
+    return true
+  }
+
+  async function requestSystemQuest(): Promise<{ ok: boolean; message: string }> {
+    if (!awakened.value) {
+      return { ok: false, message: '系统尚未觉醒，请先完成首次过夜。' }
+    }
+    if (questDispatchInFlight.value) {
+      return { ok: false, message: '正在生成任务，请稍候…' }
+    }
+    const active = countActiveQuests(quests.value)
+    if (active >= MAX_ACTIVE_QUESTS) {
+      return {
+        ok: false,
+        message: `最多同时持有 ${MAX_ACTIVE_QUESTS} 个任务（当前 ${active}/${MAX_ACTIVE_QUESTS}），请先完成或处理现有任务。`
+      }
+    }
+
+    const currentDay = useGameStore().day
+    questDispatchInFlight.value = true
+    try {
+      let ok = false
+      if (mode.value === 'online' && sessionToken.value) {
+        ok = await assignQuestFromAi(currentDay)
+        if (!ok) ok = assignQuestFromTemplate(currentDay)
+      } else {
+        ok = assignQuestFromTemplate(currentDay)
+      }
+      if (!ok) {
+        return { ok: false, message: '暂无适合当前进度的任务，稍后再试。' }
+      }
+      return { ok: true, message: '新任务已生成，可先议价再接受。' }
+    } finally {
+      questDispatchInFlight.value = false
+    }
+  }
+
+  function dismissNewQuestAlert() {
+    newQuestAlert.value = null
+  }
+
+  function viewNewQuestAlert() {
+    const id = newQuestAlert.value?.questId
+    newQuestAlert.value = null
+    openPanel('quests')
+    if (id) {
+      addSystemMessage('新任务已列入「任务」页，可先议价再接受。')
+    }
+  }
+
+  function acceptQuest(questId: string) {
+    const q = quests.value.find(item => item.id === questId)
+    if (!q || q.accepted || q.completed || q.expired) return
+    // 功勋可为负，接受任务不受功勋余额限制
+    q.accepted = true
+    q.acceptedDay = useGameStore().day
+    addSystemMessage(`已接受任务「${q.title ?? q.type}」。期限：第 ${q.deadline} 日。`)
+    const adviceGain = onAdviceAdoptedDaily(affinityDaily.value, useGameStore().day)
+    if (adviceGain) applyAffinityGain(adviceGain)
+    validateQuests()
+  }
+
+  function negotiateQuest(questId: string, kind: QuestNegotiationType) {
+    const idx = quests.value.findIndex(item => item.id === questId)
+    if (idx < 0) return
+    const q = quests.value[idx]!
+    const persona = personaId.value ?? 'qingluan'
+    const result = applyNegotiation(q, kind, useGameStore().day, affinity.value)
+    if (!result.ok) {
+      addSystemMessage(result.message)
+      return
+    }
+    if (result.newQuest) {
+      quests.value[idx] = result.newQuest
+    }
+    addSystemMessage(getNegotiationPersonaLine(persona, quests.value[idx]!.negotiationRounds))
+    if (result.message) addSystemMessage(result.message)
+  }
+
+  function reconcileQuestsOnLoad(currentDay: number) {
+    const result = reconcileQuestsEngine(quests.value, currentDay, buildQuestProgressContext())
+    for (const id of result.expired.expiredIds) {
+      const q = quests.value.find(item => item.id === id)
+      if (!q || q.expired) continue
+      const fine = Math.ceil(q.reward * 0.5)
+      q.expired = true
+      q.endedDay = currentDay
+      q.fine = fine
+      merit.value -= fine
+      const persona = personaId.value ?? 'qingluan'
+      q.evaluation = buildOfflineQuestEvaluation(q, 'failed', persona, {
+        currentDay,
+        merit: merit.value,
+        affinity: affinity.value
+      })
+      q.evaluationPending = false
+    }
+    validateQuests()
+  }
+
+  function onTavernRevenue(revenue: number) {
+    recordTavernDailyRevenue(quests.value, revenue)
+    validateQuests()
+  }
+
+  function onFeastCompleted() {
+    recordFeastCompleted(quests.value)
+    validateQuests()
   }
 
   return {
@@ -474,16 +1474,34 @@ export const useSystemStore = defineStore('system', () => {
     mode, backendUrl, sessionToken, cloudBackupEnabled, isConnecting,
     messages, unreadCount,
     affinity, affinityMilestonesReached,
-    merit, quests, activeBuffs,
-    timeline,
-    panelOpen, panelFullscreen, inputText,
+    merit, quests, activeBuffs, customShopOffers, purchasedCatalogCounts,
+    catalogShopOffers, allShopOffers, purchaseMeritShopItem, processMeritBuffExpiry,
+    timeline, memoryState, affinityDaily,
+    panelOpen, panelFullscreen, panelTab, inputText,
+    newQuestAlert, dismissNewQuestAlert, viewNewQuestAlert,
+    questOutcomeAlert, dismissQuestOutcomeAlert, viewQuestOutcomeInPanel,
+    bubbleVisible, bubblePayload,
     displayName, connectionLabel,
     isStreaming, streamingMessageId,
-    awaken, addSystemMessage, addPlayerMessage, processPlayerInput,
+    awaken, addSystemMessage, addMumbleMessage, addChatMessage, addPlayerMessage, processPlayerInput,
+    dismissBubble,
     tryConnect, disconnect, sendToBackend,
     openPanel, closePanel, toggleFullscreen,
-    adjustAffinity, checkQuestAssignment, completeQuest,
-    serialize, deserialize
+    adjustAffinity,
+    requestSystemQuest, questDispatchInFlight, MAX_ACTIVE_QUESTS,
+    acceptQuest, negotiateQuest, validateQuests,
+    canSubmitQuest, submitQuest,
+    processQuestExpiry, reconcileQuestsOnLoad, completeQuest,
+    onTavernRevenue, onFeastCompleted,
+    notifyAffinityBehavior, onFoodConsumed, onNpcGift, onCropHarvested,
+    onFishCaught, onMineFloorReached, onMineDefeat, onMineLeaveEarly,
+    onRareItemObtained, onAnimalCare, onMuseumGemDonate, onHomeUpgraded,
+    onNpcMaxFriendship, onPerfectFeast, onProcessingCollected,
+    processGoodnight, processCompanionNewDay, onAnimalNeglectDay, onAnimalCareDay,
+    onSaveLoaded, touchOnlineTime,
+    fireSystemTrigger, checkNpcHeartUp, onSafePointUnlocked, onSeasonChange, onFestivalDay,
+    onSkillLevelUp, onStaminaThreshold, onInventoryPressure, onProcessingDone,
+    serialize, deserialize, ensureChatSessionForSlot, resetChatSessionForSlot
   }
 })
 
@@ -528,48 +1546,4 @@ export function getMorningGreeting(persona: PersonaId, season: string): string {
 
 function wrapWithPersona(content: string): string {
   return content
-}
-
-function generateQuest(currentDay: number): SystemQuest {
-  const types = ['collect', 'mine', 'social', 'skill', 'craft', 'fish', 'tavern'] as const
-  const type = types[Math.floor(Math.random() * types.length)]
-  const difficulty = (Math.floor(Math.random() * 3) + 1) as SystemQuest['difficulty']
-  const rewards = [2, 5, 10, 20]
-  const deadlines = [3, 5, 10, 20]
-
-  return {
-    id: crypto.randomUUID(),
-    type,
-    difficulty,
-    target: generateTarget(type, difficulty),
-    deadline: currentDay + deadlines[difficulty - 1],
-    reward: rewards[difficulty - 1],
-    accepted: true,
-    completed: false,
-    negotiationRounds: 0
-  }
-}
-
-function generateTarget(type: string, difficulty: number): Record<string, unknown> {
-  switch (type) {
-    case 'collect': return { itemId: 'copper_ore', quantity: 3 + difficulty * 2 }
-    case 'mine': return { floor: 10 * difficulty }
-    case 'social': return { hearts: difficulty + 1 }
-    case 'skill': return { skillType: 'farming', skillLevel: difficulty + 2 }
-    case 'craft': return { itemId: 'food_stir_fried_cabbage', quantity: 1 + difficulty }
-    case 'fish': return { fishId: 'crucian', quantity: 2 + difficulty }
-    case 'tavern': return { metric: 'revenue', threshold: 300 * difficulty }
-    default: return {}
-  }
-}
-
-function getQuestAnnouncement(quest: SystemQuest): string {
-  const lines: Record<PersonaId, string> = {
-    qingluan: `新任务：${quest.type}，难度 ${quest.difficulty}★。功勋：${quest.reward}。`,
-    chaofeng: `喂，新任务。${quest.type}，${quest.difficulty}★，功勋 ${quest.reward}——别跟我说做不到。`,
-    taosu: `主人主人！新任务来啦~ 功勋 ${quest.reward} 哦 (◕ᴗ◕✿)`,
-    moyan: `任务：${quest.type}。难度：${quest.difficulty}。功勋：${quest.reward}。`
-  }
-  // 使用 store 实例的人格 — 简化版用默认值
-  return lines.qingluan
 }

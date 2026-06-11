@@ -1,0 +1,79 @@
+/**
+ * 桃源乡：解锁全部烹饪 + 锻造配方（Chrome 控制台粘贴运行）
+ * 1. 打开游戏页并保持当前存档已加载过
+ * 2. F12 → Console → 粘贴本段 → Enter
+ * 3. 刷新页面，主菜单读档
+ */
+(async () => {
+  const KEY = 'taoyuanxiang_2024_secret'
+  const PREFIX = 'taoyuanxiang_save_'
+  const COOKING = ["stir_fried_cabbage","radish_soup","braised_carp","herbal_porridge","osmanthus_cake","miner_lunch","spicy_hotpot","steamed_bass","honey_tea","ginger_soup","jujube_cake","peach_blossom_cake","fish_noodle","miner_iron_pot","bamboo_shoot_stir_fry","dried_persimmon","lotus_seed_soup","sesame_paste","ginseng_soup","corn_pancake","osmanthus_lotus_root","scrambled_egg_rice","stir_fried_potato","boiled_egg","congee","rice_ball","steamed_bun","roasted_sweet_potato","vegetable_soup","chive_egg_stir_fry","peanut_candy","sweet_osmanthus_tea","aged_radish_stew","maple_grilled_fish","herbal_pill","embroidered_cake","deep_mine_stew","wild_berry_jam","farmers_feast","autumn_moon_feast","longevity_soup","lovers_pastry","forgemasters_meal","spirit_fruit_wine","phoenix_cake","molten_hotpot","moonlight_sashimi","tea_banquet","snow_plum_soup","silk_dumpling","drunken_chicken","scholars_porridge","ironforge_stew","hunters_roast","ranch_milk_soup","moonlit_tea_rice","pumpkin_pie","golden_fried_rice","supreme_farm_feast","braised_catfish","grilled_eel","crab_soup","sturgeon_stew","dragon_sashimi","stone_soup","crystal_jelly","iron_tonic","gold_dumpling","void_essence_soup","wild_salad","mushroom_stew","forest_tonic","spirit_herb_elixir","warrior_ration","battle_stew","iron_fist_soup","shadow_brew","void_elixir","spring_roll","lotus_lantern_cake","harvest_feast","new_year_dumpling","nian_gao","hua_gao","qing_tuan","yue_bing","la_ba_zhou","dragon_boat_zongzi","qiao_guo","chrysanthemum_wine","jiaozi","tangyuan","dou_cha_yin","zhi_yuan_gao","first_catch_soup","bountiful_porridge","miners_glory","chef_special","social_tea","anglers_platter","legendary_feast","abyss_stew","collectors_banquet","silkie_egg_soup","goat_milk_soup","truffle_fried_rice","antler_soup","camel_milk_tea","peacock_feast","spiced_lamb","silk_dumpling_deluxe","desert_cactus_soup","date_cake","cactus_salad","spice_fried_rice","turquoise_tea","silk_tofu","date_porridge","desert_feast","brocade_dumpling","vinegar_cabbage","cheese_baked_rice","goat_cheese_salad","mayo_noodles","smoked_fish_platter","dried_fruit_mix","pickled_veggie_fried_rice","pickled_chili_fish","honey_cake","antler_tonic","tea_oil_fried_egg","truffle_oil_risotto","sesame_paste_noodles","peanut_tofu_soup","pumpkin_preserve_cake","dried_mushroom_stew","ginger_green_tea","snow_lotus_honey_paste","buffalo_cheese_pizza","yak_cheese_hotpot","herbal_healing_soup","chrysanthemum_jelly","watermelon_wine_sorbet","jujube_wine_stew","osmanthus_wine_chicken","smoked_eel_rice","rapeseed_honey_bread","corn_wine_braised_pork","ginseng_tea_rice"]
+  const FORGE = ["forge_weapon_copper_sword","forge_weapon_iron_blade","forge_ring_frost_queen_circlet","forge_hat_frost_queen_tiara","forge_shoe_frost_queen_slippers","forge_weapon_frost_queen_sting","forge_weapon_abyss_dragon_mace","forge_ring_jade_guard_ring","forge_ring_quartz_ring","forge_ring_farmers_ring","forge_ring_jade_spirit_ring","forge_ring_anglers_ring","forge_ring_friendship_ring","forge_ring_ruby_flame_ring","forge_ring_miners_ring","forge_ring_merchants_ring","forge_ring_moonlight_ring","forge_ring_harvest_moon_ring","forge_ring_exp_ring","forge_ring_shadow_ring","forge_ring_treasure_hunter_ring","forge_ring_stalwart_ring","forge_ring_dragon_ring","forge_ring_fortune_ring","forge_ring_warlord_ring","forge_ring_prismatic_ring","forge_ring_endurance_ring","forge_ring_fish_jade_ring","forge_ring_growth_ring","forge_ring_travel_ring","forge_ring_wolf_fang_pendant","forge_ring_tiger_fang_ring","forge_hat_iron_helm","forge_hat_scholar_hat","forge_hat_herbalist_hat","forge_hat_merchant_hat","forge_hat_golden_crown","forge_hat_dragon_helm","forge_hat_jade_hairpin","forge_hat_obsidian_helm","forge_hat_phoenix_crown","forge_hat_wolf_pelt_hood","forge_hat_tiger_pelt_cape","forge_shoe_gale_boots","forge_shoe_iron_greaves","forge_shoe_silk_slippers","forge_shoe_merchant_boots","forge_shoe_moon_step_boots","forge_shoe_dragon_scale_boots","forge_shoe_obsidian_greaves","forge_shoe_wind_walker","forge_shoe_phoenix_boots","forge_shoe_bear_pelt_boots"]
+
+  if (typeof CryptoJS === 'undefined') {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script')
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js'
+      s.onload = resolve
+      s.onerror = () => reject(new Error('无法加载 crypto-js'))
+      document.head.appendChild(s)
+    })
+  }
+
+  const decrypt = (cipher) => {
+    try {
+      const text = CryptoJS.AES.decrypt(cipher, KEY).toString(CryptoJS.enc.Utf8)
+      return text || null
+    } catch {
+      return null
+    }
+  }
+  const encrypt = (json) => CryptoJS.AES.encrypt(json, KEY).toString()
+
+  const patched = []
+  for (let slot = 0; slot < 5; slot++) {
+    const raw = localStorage.getItem(PREFIX + slot)
+    if (!raw) continue
+    const plain = decrypt(raw)
+    if (!plain) {
+      console.warn('槽位', slot, '解密失败，跳过')
+      continue
+    }
+    let data
+    try {
+      data = JSON.parse(plain)
+    } catch {
+      console.warn('槽位', slot, 'JSON 无效，跳过')
+      continue
+    }
+    if (!data.cooking) data.cooking = {}
+    if (!data.forge) data.forge = {}
+    const beforeCook = (data.cooking.unlockedRecipes || []).length
+    const beforeForge = (data.forge.unlockedRecipeIds || []).length
+    data.cooking.unlockedRecipes = [...new Set([...(data.cooking.unlockedRecipes || []), ...COOKING])]
+    data.forge.unlockedRecipeIds = [...new Set([...(data.forge.unlockedRecipeIds || []), ...FORGE])]
+    localStorage.setItem(PREFIX + slot, encrypt(JSON.stringify(data)))
+    const g = data.game || {}
+    patched.push({
+      slot,
+      day: g.day,
+      season: g.season,
+      year: g.year,
+      cooking: data.cooking.unlockedRecipes.length,
+      forge: data.forge.unlockedRecipeIds.length,
+      addedCook: data.cooking.unlockedRecipes.length - beforeCook,
+      addedForge: data.forge.unlockedRecipeIds.length - beforeForge
+    })
+  }
+
+  if (!patched.length) {
+    alert('未找到任何存档（taoyuanxiang_save_0~4）。请确认在游戏同源页面运行。')
+    return
+  }
+  console.table(patched)
+  alert(
+    '已解锁全部配方！共处理 ' + patched.length + ' 个槽位。\n' +
+    patched.map(p => '槽' + p.slot + ': 春' + (p.season === 'spring' ? '' : p.season) + ' 第' + p.day + '天 → 烹饪' + p.cooking + ' / 锻造' + p.forge).join('\n') +
+    '\n\n请刷新页面后重新读档。'
+  )
+})()

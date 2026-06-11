@@ -18,8 +18,12 @@ type SaveData struct {
 type ChatMessage struct {
 	ID        int64     `json:"id"`
 	SessionID string    `json:"sessionId"`
+	VisitorID string    `json:"visitorId,omitempty"`
+	PersonaID string    `json:"personaId,omitempty"`
 	Role      string    `json:"role"`
 	Content   string    `json:"content"`
+	IP        string    `json:"ip,omitempty"`
+	Region    string    `json:"region,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
@@ -37,8 +41,16 @@ type Store interface {
 	ValidateToken(deviceID, token string) bool
 
 	// 聊天历史
-	SaveChatMessage(sessionID, role, content string) error
+	SaveChatMessage(sessionID, role, content string, meta *ChatMeta) error
 	GetChatHistory(sessionID string, limit int) ([]ChatMessage, error)
+	ListRecentChats(limit int) ([]ChatMessage, error)
+
+	// 统计
+	StartAnalyticsSession(s AnalyticsSession) error
+	TouchAnalyticsSession(sessionID string, at time.Time) error
+	EndAnalyticsSession(sessionID string, at time.Time) error
+	GetAnalyticsStats(days int) (*AnalyticsStats, error)
+	CountOnlineChats() (int, error)
 }
 
 func generateToken() string {

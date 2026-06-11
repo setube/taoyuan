@@ -12,6 +12,7 @@ export interface QmsgConfigOptions {
   limitWidthWrap: 'no-wrap' | 'wrap' | 'ellipsis'
   animation: boolean
   autoClose: boolean
+  listenEventToPauseAutoClose?: boolean
   showClose: boolean
   showIcon: boolean
   showReverse: boolean
@@ -23,8 +24,16 @@ Qmsg.config({
   showIcon: false,
   maxNums: 5,
   timeout: 2500,
+  autoClose: true,
+  listenEventToPauseAutoClose: true,
   isHTML: true,
   useShadowRoot: false
+})
+
+const toastOpts = (timeout = 2500) => ({
+  timeout,
+  autoClose: true,
+  listenEventToPauseAutoClose: true
 })
 
 /** 动态更新 Qmsg 全部通知配置 */
@@ -39,6 +48,7 @@ export const applyQmsgConfig = (opts: QmsgConfigOptions) => {
     limitWidthWrap: opts.limitWidthWrap,
     animation: opts.animation,
     autoClose: opts.autoClose,
+    listenEventToPauseAutoClose: opts.listenEventToPauseAutoClose ?? false,
     showClose: opts.showClose,
     showIcon: opts.showIcon,
     showReverse: opts.showReverse,
@@ -74,7 +84,7 @@ export const _registerDayLabelGetter = (fn: () => string) => {
 
 /** 添加日志消息（显示为 toast 通知，同时记录到历史） */
 export const addLog = (msg: string) => {
-  Qmsg.info(msg)
+  Qmsg.info(msg, toastOpts())
   const dayLabel = _dayLabelGetter?.() ?? ''
   logHistory.value.push({ msg, dayLabel })
   _perkChecker?.()
@@ -82,18 +92,19 @@ export const addLog = (msg: string) => {
 
 /** 显示浮动文本反馈（显示为 toast 通知） */
 export const showFloat = (text: string, color: FloatColor = 'accent') => {
+  const opts = toastOpts(1500)
   switch (color) {
     case 'danger':
-      Qmsg.error(text, { timeout: 1500 })
+      Qmsg.error(text, opts)
       break
     case 'success':
-      Qmsg.success(text, { timeout: 1500 })
+      Qmsg.success(text, opts)
       break
     case 'accent':
-      Qmsg.warning(text, { timeout: 1500 })
+      Qmsg.warning(text, opts)
       break
     case 'water':
-      Qmsg.info(text, { timeout: 1500 })
+      Qmsg.info(text, opts)
       break
   }
 }

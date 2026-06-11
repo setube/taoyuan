@@ -22,6 +22,8 @@ export type EquipmentEffectType =
   | 'ore_bonus'
   | 'luck'
   | 'travel_speed'
+  | 'foraging_stamina'
+  | 'forging_exp_bonus'
 
 /** 兼容别名 */
 export type RingEffectType = EquipmentEffectType
@@ -54,4 +56,11 @@ export interface RingDef {
 /** 拥有的戒指实例（存储用） */
 export interface OwnedRing {
   defId: string
+  recipeId?: string
+  quality?: import('./item').Quality
+  affixes?: { id: string; rolledValue: number }[]
+  setId?: string | null
+  forgedDay?: number
+  forgeScore?: number
+  forgedWeather?: import('./game').Weather
 }

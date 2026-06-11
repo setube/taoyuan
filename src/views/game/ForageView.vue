@@ -346,7 +346,15 @@
   const foragingSkill = computed(() => skillStore.getSkill('foraging'))
 
   const forageCost = computed(() =>
-    Math.max(1, Math.floor(5 * inventoryStore.getToolStaminaMultiplier('axe') * (1 - skillStore.getStaminaReduction('foraging'))))
+    Math.max(
+      1,
+      Math.floor(
+        5 *
+          inventoryStore.getToolStaminaMultiplier('axe') *
+          (1 - skillStore.getStaminaReduction('foraging')) *
+          (1 - inventoryStore.getEquipmentBonus('foraging_stamina'))
+      )
+    )
   )
 
   /** 采集耗时（小时），受工具和技能减免 */
@@ -390,7 +398,7 @@
     }
 
     const cost = forageCost.value
-    if (!playerStore.consumeStamina(cost)) {
+    if (!playerStore.consumeStamina(cost, 'foraging')) {
       addLog('体力不足，无法采集。')
       return
     }

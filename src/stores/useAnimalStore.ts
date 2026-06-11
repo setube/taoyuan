@@ -16,6 +16,8 @@ import { useInventoryStore } from './useInventoryStore'
 import { useGameStore } from './useGameStore'
 import { useSkillStore } from './useSkillStore'
 import { useHiddenNpcStore } from './useHiddenNpcStore'
+import { adjustAnimalProduceDays } from '@/composables/useMeritEffects'
+import { useSystemStore } from './useSystemStore'
 import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
 
 export const useAnimalStore = defineStore('animal', () => {
@@ -183,6 +185,11 @@ export const useAnimalStore = defineStore('animal', () => {
     animal.wasFed = true
     animal.fedWith = feedId
     animal.hunger = 0
+    try {
+      useSystemStore().onAnimalCare()
+    } catch {
+      /* pinia 未就绪 */
+    }
     return true
   }
 
@@ -204,6 +211,11 @@ export const useAnimalStore = defineStore('animal', () => {
     animal.wasPetted = true
     const coopmasterBonus = useSkillStore().getSkill('farming').perk10 === 'coopmaster' ? 1.5 : 1.0
     animal.friendship = Math.min(1000, animal.friendship + Math.floor(5 * coopmasterBonus))
+    try {
+      useSystemStore().onAnimalCare()
+    } catch {
+      /* pinia 未就绪 */
+    }
     return true
   }
 
@@ -595,7 +607,8 @@ export const useAnimalStore = defineStore('animal', () => {
       // 产品检查（跳过马，马无产出；生病时不产出）
       const def = ANIMAL_DEFS.find(d => d.type === animal.type)
       if (def && def.produceDays > 0 && animal.wasFed && !animal.sick) {
-        const effectiveDays = animal.fedWith === NOURISHING_FEED_ID ? Math.max(1, def.produceDays - 1) : def.produceDays
+        let effectiveDays = animal.fedWith === NOURISHING_FEED_ID ? Math.max(1, def.produceDays - 1) : def.produceDays
+        effectiveDays = adjustAnimalProduceDays(effectiveDays)
         if (animal.daysSinceProduct >= effectiveDays) {
           let quality = getAnimalProductQuality(animal.friendship)
           // 牧羊人专精：品质提升一档

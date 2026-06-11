@@ -253,6 +253,15 @@
             <Button class="w-full" :icon="MessageCircle" :disabled="selectedNpcState?.talkedToday" @click="handleTalk">
               {{ selectedNpcState?.talkedToday ? '今天已聊过' : '聊天' }}
             </Button>
+            <Button
+              v-if="isForgeTeacher"
+              class="w-full"
+              :icon="GraduationCap"
+              :disabled="forgeLessonTakenToday"
+              @click="showForgeLessonModal = true"
+            >
+              {{ forgeLessonTakenToday ? '今日已请教' : '请教' }}
+            </Button>
             <!-- 每日提示按钮 -->
             <Button
               v-if="selectedNpc && npcStore.hasDailyTip(selectedNpc)"
@@ -505,6 +514,36 @@
               </div>
             </div>
           </Transition>
+
+          <!-- 锻造请教弹窗 -->
+          <Transition name="panel-fade">
+            <div
+              v-if="showForgeLessonModal && isForgeTeacher"
+              class="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4"
+              @click.self="showForgeLessonModal = false"
+            >
+              <div class="game-panel max-w-sm w-full relative">
+                <button class="absolute top-2 right-2 text-muted hover:text-text" @click="showForgeLessonModal = false">
+                  <X :size="14" />
+                </button>
+                <p class="text-sm text-accent mb-2">{{ selectedNpcDef?.name }} · 请教</p>
+                <p class="text-xs text-muted mb-2">每日可与工坊请教共用 1 次。</p>
+                <div class="flex flex-col space-y-2 max-h-64 overflow-y-auto">
+                  <div
+                    v-for="lesson in npcForgeLessons"
+                    :key="lesson.id"
+                    class="border border-accent/20 rounded-xs px-3 py-2 cursor-pointer hover:bg-accent/5"
+                    @click="handleNpcForgeLesson(lesson.id)"
+                  >
+                    <p class="text-sm">{{ lesson.title }}</p>
+                    <p class="text-xs text-muted">{{ lesson.description }}</p>
+                    <p class="text-[10px] text-accent mt-0.5">需锻造 Lv{{ lesson.requiredForgingLevel }}</p>
+                  </div>
+                  <p v-if="npcForgeLessons.length === 0" class="text-xs text-muted text-center py-4">暂无可学课目</p>
+                </div>
+              </div>
+            </div>
+          </Transition>
         </div>
       </div>
     </Transition>
@@ -513,7 +552,7 @@
 
 <script setup lang="ts">
   import { ref, computed } from 'vue'
-  import { MessageCircle, Heart, Gift, Cake, X, Package, Lightbulb, Circle, CircleCheck, Users, Sparkles, Diamond } from 'lucide-vue-next'
+  import { MessageCircle, Heart, Gift, Cake, X, Package, Lightbulb, Circle, CircleCheck, Users, Sparkles, Diamond, GraduationCap } from 'lucide-vue-next'
   import { useCookingStore } from '@/stores/useCookingStore'
   import { useGameStore } from '@/stores/useGameStore'
   import { useInventoryStore } from '@/stores/useInventoryStore'
@@ -521,6 +560,9 @@
   import { usePlayerStore } from '@/stores/usePlayerStore'
   import { useTutorialStore } from '@/stores/useTutorialStore'
   import { useHiddenNpcStore } from '@/stores/useHiddenNpcStore'
+  import { useForgeStore } from '@/stores/useForgeStore'
+  import { useSkillStore } from '@/stores/useSkillStore'
+  import { getAvailableLessons } from '@/data/forgeLessons'
   import { NPCS, getNpcById, getItemById, getHeartEventById } from '@/data'
   import { getHiddenNpcById } from '@/data/hiddenNpcs'
   import { ACTION_TIME_COSTS, isNpcAvailable } from '@/data/timeConstants'
@@ -540,6 +582,26 @@
   const playerStore = usePlayerStore()
   const tutorialStore = useTutorialStore()
   const hiddenNpcStore = useHiddenNpcStore()
+  const forgeStore = useForgeStore()
+  const skillStore = useSkillStore()
+
+  const FORGE_TEACHER_IDS = ['sun_tiejiang', 'a_tie'] as const
+  const showForgeLessonModal = ref(false)
+
+  const isForgeTeacher = computed(
+    () => selectedNpc.value != null && FORGE_TEACHER_IDS.includes(selectedNpc.value as (typeof FORGE_TEACHER_IDS)[number])
+  )
+
+  const forgeLessonTakenToday = computed(() => forgeStore.lastLessonDay === gameStore.day)
+
+  const npcForgeLessons = computed(() => {
+    if (!selectedNpc.value || !isForgeTeacher.value) return []
+    return getAvailableLessons(
+      skillStore.getSkill('forging').level,
+      forgeStore.lessonsSeen,
+      selectedNpc.value
+    )
+  })
 
   const activeTab = ref<'villager' | 'spirit'>('villager')
   const selectedHiddenNpc = ref<string | null>(null)
@@ -783,6 +845,28 @@
       if (heartEvent) {
         triggerHeartEvent(heartEvent)
       }
+    }
+  }
+
+  const handleNpcForgeLesson = (lessonId: string) => {
+    if (gameStore.isPastBedtime) {
+      addLog('太晚了，没法请教了。')
+      handleEndDay()
+      return
+    }
+    const res = forgeStore.attendLesson(lessonId)
+    if (res.ok) {
+      addLog(res.message ?? '请教完成。')
+      showForgeLessonModal.value = false
+      const tr = gameStore.advanceTime(ACTION_TIME_COSTS.talk)
+      if (tr.message) addLog(tr.message)
+      if (tr.passedOut) handleEndDay()
+    } else if (res.reason === 'daily_limit') {
+      addLog('今天已经请教过了。')
+    } else if (res.reason === 'prerequisite') {
+      addLog('还需先完成前置课目。')
+    } else {
+      addLog('暂时无法请教。')
     }
   }
 

@@ -24,6 +24,7 @@ import { useGameStore } from './useGameStore'
 import { useSkillStore } from './useSkillStore'
 import { useNpcStore } from './useNpcStore'
 import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
+import { getMeritTavernGuestBonus } from '@/composables/useMeritEffects'
 
 export type TavernTodayMode = 'auto' | 'manual' | 'closed'
 
@@ -385,7 +386,7 @@ export const useTavernStore = defineStore('tavern', () => {
       .map((slot, index) => ({ slot, index }))
       .filter(({ slot }) => slot.itemId && getSlotStock(slot) > 0)
     if (activeEntries.length === 0) return []
-    const guestCount = Math.max(2, Math.floor(def.baseGuests * (0.9 + reputation.value / 200) * 1.15))
+    const guestCount = Math.max(2, Math.floor(def.baseGuests * (0.9 + reputation.value / 200) * 1.15)) + getMeritTavernGuestBonus()
     const queue: ManualGuest[] = []
     for (let i = 0; i < guestCount; i++) {
       const isNpc = Math.random() < 0.25
@@ -513,7 +514,13 @@ export const useTavernStore = defineStore('tavern', () => {
     if (total > 0) usePlayerStore().earnMoney(total)
     reputation.value = Math.min(100, reputation.value + Math.floor(session.servedCount / 3))
     manualSession.value = null
-    return { revenue: session.todayEarnings, tips: session.todayTips }
+    const revenue = session.todayEarnings
+    if (revenue > 0) {
+      import('@/stores/useSystemStore').then(({ useSystemStore }) => {
+        useSystemStore().onTavernRevenue(revenue)
+      })
+    }
+    return { revenue, tips: session.todayTips }
   }
 
   const checkFeastUnlocks = (): void => {
@@ -552,6 +559,9 @@ export const useTavernStore = defineStore('tavern', () => {
     usePlayerStore().earnMoney(order.rewardMoney)
     reputation.value = Math.min(100, reputation.value + order.rewardReputation)
     useNpcStore().adjustFriendship(order.npcId, 50)
+    import('@/stores/useSystemStore').then(({ useSystemStore }) => {
+      useSystemStore().onFeastCompleted()
+    })
     return true
   }
 

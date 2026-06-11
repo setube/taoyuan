@@ -79,6 +79,9 @@ export const ACTION_TIME_COSTS = {
   // 烹饪
   cook: 0.5,
   eat: 0,
+  // 锻造（亲手打造 / 练习共用基准，§6.2）
+  forge: 2,
+  forgePractice: 2,
   // 社交
   talk: 0.17,
   gift: 0,
@@ -217,6 +220,20 @@ const LOCATION_GROUP_NAMES: Record<LocationGroup, string> = {
 
 export const getLocationGroupName = (group: LocationGroup): string => {
   return LOCATION_GROUP_NAMES[group]
+}
+
+/** 根据当前路由面板解析实际所在地点组（UI 面板与存档地点组不同步时以路由为准） */
+export const resolveEffectiveLocationGroup = (
+  storedGroup: LocationGroup,
+  routeTabKey: string | null | undefined
+): LocationGroup => {
+  if (routeTabKey) {
+    const routeGroup = TAB_TO_LOCATION_GROUP[routeTabKey]
+    if (routeGroup !== null && routeGroup !== undefined) {
+      return routeGroup
+    }
+  }
+  return storedGroup
 }
 
 // === 商店营业 ===

@@ -23,6 +23,10 @@ import { useFarmStore } from './useFarmStore'
 import { useAnimalStore } from './useAnimalStore'
 import { useFishPondStore } from './useFishPondStore'
 import { useFishingStore } from './useFishingStore'
+import { useSystemStore } from './useSystemStore'
+import { useForgeStore } from './useForgeStore'
+import { getBlueprintById } from '@/data/forgeBlueprints'
+import { addLog } from '@/composables/useGameLog'
 
 /** 好感等级阈值 (10心制, 每心250点, 上限2500) */
 const FRIENDSHIP_THRESHOLDS: { level: FriendshipLevel; min: number }[] = [
@@ -315,11 +319,26 @@ export const useNpcStore = defineStore('npc', () => {
     }
   }
 
+  /** 好感跨越阈值时赠送锻造图纸 */
+  const _notifyForgeFriendshipGifts = (npcId: string, before: number, after: number) => {
+    try {
+      const learned = useForgeStore().onNpcFriendshipChanged(npcId, before, after)
+      for (const bpId of learned) {
+        const name = getBlueprintById(bpId)?.name ?? bpId
+        addLog(`获得了图纸：${name}！`)
+      }
+    } catch {
+      /* pinia 未就绪 */
+    }
+  }
+
   /** 调整好感度（心事件选择结果） */
   const adjustFriendship = (npcId: string, amount: number) => {
     const state = getNpcState(npcId)
     if (state) {
+      const before = state.friendship
       state.friendship = Math.max(0, state.friendship + amount)
+      _notifyForgeFriendshipGifts(npcId, before, state.friendship)
     }
   }
 
@@ -336,7 +355,14 @@ export const useNpcStore = defineStore('npc', () => {
     if (state.talkedToday) return null
 
     state.talkedToday = true
+    const beforeFriendship = state.friendship
     state.friendship += 20
+    try {
+      useSystemStore().checkNpcHeartUp(npcId, beforeFriendship, state.friendship)
+      _notifyForgeFriendshipGifts(npcId, beforeFriendship, state.friendship)
+    } catch {
+      /* pinia 未就绪 */
+    }
 
     const npcDef = getNpcById(npcId)
     if (!npcDef) return null
@@ -448,7 +474,18 @@ export const useNpcStore = defineStore('npc', () => {
     const birthdayMultiplier = isBirthday(npcId) ? 4 : 1
 
     gain = Math.floor(gain * qualityMultiplier[quality] * birthdayMultiplier * giftBonusMultiplier)
+    const beforeFriendship = state.friendship
     state.friendship = Math.max(0, state.friendship + gain)
+
+    try {
+      const systemStore = useSystemStore()
+      systemStore.onNpcGift(itemId, npcId, reaction)
+      systemStore.checkNpcHeartUp(npcId, beforeFriendship, state.friendship)
+      if (state.friendship >= 2500) systemStore.onNpcMaxFriendship(npcId)
+      _notifyForgeFriendshipGifts(npcId, beforeFriendship, state.friendship)
+    } catch {
+      /* pinia 未就绪 */
+    }
 
     return { gain, reaction }
   }

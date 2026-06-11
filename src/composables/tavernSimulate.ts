@@ -8,6 +8,7 @@ import {
 import { isFruitInSeason } from '@/data/fruitSeason'
 import { getNpcTavernPref, NPC_TAVERN_PREFS } from '@/data/npcTavernPrefs'
 import { useTavernStore } from '@/stores/useTavernStore'
+import { getMeritTavernGuestBonus } from '@/composables/useMeritEffects'
 import { useGameStore } from '@/stores/useGameStore'
 import { usePlayerStore } from '@/stores/usePlayerStore'
 import { useSkillStore } from '@/stores/useSkillStore'
@@ -51,7 +52,7 @@ export function runTavernEndDay(): TavernNightResult | null {
   }
   avgDemand = Math.pow(avgDemand, 1 / active.length)
 
-  const guests = calcGuestCount(def.baseGuests, tavern.reputation, avgDemand)
+  const guests = calcGuestCount(def.baseGuests, tavern.reputation, avgDemand) + getMeritTavernGuestBonus()
   const chefs = tavern.employees.filter(e => e.role === 'chef' && e.onDuty)
   const waiters = tavern.employees.filter(e => e.role === 'waiter' && e.onDuty)
   const skill = useSkillStore().getSkill('cooking')

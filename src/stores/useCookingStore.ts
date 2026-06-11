@@ -9,6 +9,7 @@ import { useAchievementStore } from './useAchievementStore'
 import { useWalletStore } from './useWalletStore'
 import { useHomeStore } from './useHomeStore'
 import { useHiddenNpcStore } from './useHiddenNpcStore'
+import { useSystemStore } from './useSystemStore'
 import { getCombinedItemCount, removeCombinedItem, getLowestCombinedQuality } from '@/composables/useCombinedInventory'
 import {
   applyBuffChefEffect,
@@ -202,6 +203,12 @@ export const useCookingStore = defineStore('cooking', () => {
       if (recipe.effect.buff.type === 'stamina') {
         playerStore.restoreStamina(playerStore.maxStamina)
       }
+    }
+
+    try {
+      useSystemStore().onFoodConsumed(recipeId, true)
+    } catch {
+      /* pinia 未就绪 */
     }
 
     return { success: true, message: msg }

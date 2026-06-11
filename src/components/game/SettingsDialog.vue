@@ -316,6 +316,73 @@
                 </template>
               </div>
 
+              <!-- 系统碎碎念气泡 -->
+              <div class="border border-accent/20 rounded-xs p-3 mr-1">
+                <p class="text-xs text-muted mb-2">系统碎碎念气泡</p>
+                <div class="flex flex-col items-center space-y-2">
+                  <div class="flex flex-col items-center space-y-1">
+                    <span class="text-xs text-muted">显示气泡</span>
+                    <div class="flex items-center space-x-1">
+                      <Button
+                        class="py-0 px-2"
+                        :class="settingsStore.systemBubbleEnabled ? '!bg-accent/20 !text-accent !border-accent' : ''"
+                        @click="settingsStore.changeSystemBubbleEnabled(true)"
+                      >
+                        开
+                      </Button>
+                      <Button
+                        class="py-0 px-2"
+                        :class="!settingsStore.systemBubbleEnabled ? '!bg-accent/20 !text-accent !border-accent' : ''"
+                        @click="settingsStore.changeSystemBubbleEnabled(false)"
+                      >
+                        关
+                      </Button>
+                    </div>
+                  </div>
+                  <template v-if="settingsStore.systemBubbleEnabled">
+                    <div class="flex flex-col items-center space-y-1">
+                      <span class="text-xs text-muted">自动关闭</span>
+                      <div class="flex items-center space-x-1">
+                        <Button
+                          class="py-0 px-2"
+                          :class="settingsStore.systemBubbleAutoClose ? '!bg-accent/20 !text-accent !border-accent' : ''"
+                          @click="settingsStore.changeSystemBubbleAutoClose(true)"
+                        >
+                          开
+                        </Button>
+                        <Button
+                          class="py-0 px-2"
+                          :class="!settingsStore.systemBubbleAutoClose ? '!bg-accent/20 !text-accent !border-accent' : ''"
+                          @click="settingsStore.changeSystemBubbleAutoClose(false)"
+                        >
+                          关
+                        </Button>
+                      </div>
+                    </div>
+                    <div v-if="settingsStore.systemBubbleAutoClose" class="flex flex-col items-center space-y-1">
+                      <span class="text-xs text-muted">自动关闭时间</span>
+                      <div class="flex items-center justify-center space-x-2">
+                        <Button
+                          class="py-0 px-1.5"
+                          :icon="Minus"
+                          :icon-size="10"
+                          :disabled="settingsStore.systemBubbleAutoCloseMs <= 500"
+                          @click="settingsStore.changeSystemBubbleAutoCloseMs(-500)"
+                        />
+                        <span class="text-xs w-12 text-center">{{ (settingsStore.systemBubbleAutoCloseMs / 1000).toFixed(1) }}s</span>
+                        <Button
+                          class="py-0 px-1.5"
+                          :icon="Plus"
+                          :icon-size="10"
+                          :disabled="settingsStore.systemBubbleAutoCloseMs >= 10000"
+                          @click="settingsStore.changeSystemBubbleAutoCloseMs(500)"
+                        />
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+
               <!-- 开关选项 -->
               <div class="border border-accent/20 rounded-xs p-3 mr-1 flex flex-col space-y-2">
                 <div v-for="opt in TOGGLE_OPTIONS" :key="opt.key" class="flex flex-col items-center space-y-1">

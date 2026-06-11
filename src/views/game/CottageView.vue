@@ -35,7 +35,7 @@
           灶台
           <span class="text-[10px] text-muted ml-1">Lv.{{ skillStore.getSkill('cooking').level }}</span>
         </p>
-        <Button class="py-0 px-1" @click="router.push({ name: 'cooking' })">进入烹饪</Button>
+        <Button class="py-0 px-1" @click="navigateToPanel('cooking')">进入烹饪</Button>
       </div>
       <p class="text-xs text-muted">制作品质受烹饪等级加成，等级越高制作越快。</p>
     </div>
@@ -259,7 +259,7 @@
             {{ tavernStore.displayName }} · 口碑 {{ tavernStore.reputation }}
           </span>
         </p>
-        <Button v-if="tavernStore.isBuilt" class="py-0 px-1" @click="router.push({ name: 'tavern' })">进入经营</Button>
+        <Button v-if="tavernStore.isBuilt" class="py-0 px-1" @click="navigateToPanel('tavern')">进入经营</Button>
       </div>
       <template v-if="!tavernStore.isBuilt">
         <p class="text-xs text-muted mb-2">扩建前厅，经营酒肆变现酒坊与烹饪产出。</p>
@@ -735,7 +735,6 @@
 
 <script setup lang="ts">
   import { computed, ref } from 'vue'
-  import { useRouter } from 'vue-router'
   import { ArrowUp, Beer, Calendar, ChefHat, Gift, Hammer, Home, Heart, MessageCircle, UserPlus, Users, Wine, X } from 'lucide-vue-next'
   import { useTavernStore } from '@/stores/useTavernStore'
   import { getTavernUpgrade, TAVERN_NAME_MAX_LEN } from '@/data/tavern'
@@ -757,9 +756,9 @@
   import { addLog } from '@/composables/useGameLog'
   import { showChildProposal, triggerHeartEvent } from '@/composables/useDialogs'
   import { handleEndDay } from '@/composables/useEndDay'
+  import { navigateToPanel } from '@/composables/useNavigation'
   import Button from '@/components/game/Button.vue'
 
-  const router = useRouter()
   const homeStore = useHomeStore()
   const inventoryStore = useInventoryStore()
   const gameStore = useGameStore()
@@ -1003,7 +1002,7 @@
     if (tavernStore.buildTavern(name)) {
       showBuildTavernModal.value = false
       addLog(`「${tavernStore.displayName}」开张了！去配置菜单开始经营吧。`)
-      void router.push({ name: 'tavern' })
+      navigateToPanel('tavern')
     }
   }
 

@@ -25,6 +25,10 @@ import { useCookingStore } from './useCookingStore'
 import { useWalletStore } from './useWalletStore'
 import { useSecretNoteStore } from './useSecretNoteStore'
 import { useHiddenNpcStore } from './useHiddenNpcStore'
+import { useSystemStore } from './useSystemStore'
+import { getMeritBonus } from '@/composables/useMeritEffects'
+import { rollFishWeight } from '@/composables/rollFishWeight'
+import { useShopStore } from './useShopStore'
 
 const STAMINA_COST = 4
 const MAX_CRAB_POTS = 12
@@ -234,6 +238,7 @@ export const useFishingStore = defineStore('fishing', () => {
     // 基础钩子高度（鱼竿等级）
     const rodHookMap: Record<ToolTier, number> = { basic: 40, iron: 45, steel: 50, iridium: 60 }
     let hookHeight = rodHookMap[rodTier] + level * 2
+    hookHeight += Math.floor(hookHeight * getMeritBonus('fishing_rate'))
 
     // 基础时限（鱼竿等级）
     const rodTimeMap: Record<ToolTier, number> = { basic: 30, iron: 33, steel: 36, iridium: 40 }
@@ -341,15 +346,16 @@ export const useFishingStore = defineStore('fishing', () => {
     const legendaryBoost = 1 + hiddenNpcStore.getAbilityValue('long_ling_3') / 100
     const bondBonus = hiddenNpcStore.getBondBonusByType('fish_attraction')
     const fishAttractionMult = bondBonus?.type === 'fish_attraction' ? 1.5 : 1
+    const meritRare = 1 + getMeritBonus('fish_rare')
     const weights: number[] = fishPool.map(f => {
       if (f.difficulty === 'legendary') {
         const minLevel = hasAngler ? 6 : 8
         if (rodTier === 'basic' || effectiveLevel < minLevel) return 0
-        return (hasAngler ? 1.5 : 0.5) * (1 + luckBuff) * legendaryMult * legendaryBoost
+        return (hasAngler ? 1.5 : 0.5) * (1 + luckBuff) * legendaryMult * legendaryBoost * meritRare
       }
       if (f.difficulty === 'hard') {
         if (rodTier === 'basic' && effectiveLevel < 4) return 0
-        return (rodTier === 'basic' ? 0.5 : 1) * (1 + luckBuff) * hardMult * fishAttractionMult
+        return (rodTier === 'basic' ? 0.5 : 1) * (1 + luckBuff) * hardMult * fishAttractionMult * meritRare
       }
       if (f.difficulty === 'easy') return 3
       if (f.difficulty === 'normal') return 2
@@ -376,6 +382,8 @@ export const useFishingStore = defineStore('fishing', () => {
     description?: string
     quality?: Quality
     quantity?: number
+    weight?: number
+    isNewRecord?: boolean
     success: boolean
   } | null => {
     if (!currentFish.value) return null
@@ -446,18 +454,21 @@ export const useFishingStore = defineStore('fishing', () => {
     const luremasterCatchMult = skillStore.getSkill('fishing').perk10 === 'luremaster' ? 2 : 1
     const doubleCatchChance = (activeBaitDef.value?.doubleCatchChance ?? 0) * luremasterCatchMult
     const catchQty = doubleCatchChance > 0 && Math.random() < doubleCatchChance ? 2 : 1
+    const fishWeight = rollFishWeight(currentFish.value, rating, skillStore.getSkill('fishing').level)
+    const unitSellPrice = useShopStore().calculateBaseSellPrice(currentFish.value.id, 1, quality, fishWeight)
     const caughtFish = {
       name: currentFish.value.name,
       id: currentFish.value.id,
       difficulty: currentFish.value.difficulty,
-      sellPrice: currentFish.value.sellPrice,
+      sellPrice: unitSellPrice,
       description: currentFish.value.description
     }
 
-    const added = inventoryStore.addItem(currentFish.value.id, catchQty, quality)
+    const added = inventoryStore.addItem(currentFish.value.id, catchQty, quality, { weight: fishWeight })
     const achievementStore = useAchievementStore()
     achievementStore.discoverItem(currentFish.value.id)
     achievementStore.recordFishCaught()
+    const isNewRecord = achievementStore.recordFishWeight(currentFish.value.id, fishWeight)
     useQuestStore().onItemObtained(currentFish.value.id, catchQty)
 
     // 4% 概率获得秘密笔记
@@ -496,6 +507,11 @@ export const useFishingStore = defineStore('fishing', () => {
     }
 
     lastPerfect.value = rating === 'perfect'
+    try {
+      useSystemStore().onFishCaught(caughtFish.id, caughtFish.difficulty)
+    } catch {
+      /* pinia 未就绪 */
+    }
     endFishing()
     return {
       message,
@@ -506,6 +522,8 @@ export const useFishingStore = defineStore('fishing', () => {
       description: caughtFish.description,
       quality,
       quantity: catchQty,
+      weight: fishWeight,
+      isNewRecord,
       success: true
     }
   }

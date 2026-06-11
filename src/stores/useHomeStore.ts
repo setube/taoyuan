@@ -5,6 +5,9 @@ import {
   FARMHOUSE_UPGRADES,
   GREENHOUSE_UNLOCK_COST,
   GREENHOUSE_MATERIAL_COST,
+  FORGE_WORKSHOP_UNLOCK_COST,
+  FORGE_WORKSHOP_MATERIAL_COST,
+  FORGE_WORKSHOP_MIN_LEVEL,
   CELLAR_VALUE_CYCLE_DAYS,
   CELLAR_UPGRADES,
   CAVE_UPGRADES,
@@ -12,9 +15,11 @@ import {
   getCaveQuality
 } from '@/data/buildings'
 import { usePlayerStore } from './usePlayerStore'
+import { useSkillStore } from './useSkillStore'
 import { useInventoryStore } from './useInventoryStore'
 import { useFarmStore } from './useFarmStore'
 import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
+import { useSystemStore } from './useSystemStore'
 
 /** 酒窖陈酿槽 */
 interface CellarSlot {
@@ -42,6 +47,7 @@ export const useHomeStore = defineStore('home', () => {
   const caveChoice = ref<CaveChoice>('none')
   const caveUnlocked = ref(false)
   const greenhouseUnlocked = ref(false)
+  const forgeWorkshopBuilt = ref(false)
   const cellarSlots = ref<CellarSlot[]>([])
   const cellarLevel = ref(1)
   const caveLevel = ref(1)
@@ -103,6 +109,11 @@ export const useHomeStore = defineStore('home', () => {
     }
 
     farmhouseLevel.value = upgrade.level
+    try {
+      useSystemStore().onHomeUpgraded(upgrade.level)
+    } catch {
+      /* pinia 未就绪 */
+    }
     return true
   }
 
@@ -175,6 +186,23 @@ export const useHomeStore = defineStore('home', () => {
     // 初始化温室地块
     const farmStore = useFarmStore()
     farmStore.initGreenhouse()
+    return true
+  }
+
+  /** 建造家造锻造工坊（§2.1） */
+  const buildForgeWorkshop = (): boolean => {
+    const playerStore = usePlayerStore()
+    const skillStore = useSkillStore()
+    if (forgeWorkshopBuilt.value) return false
+    if (skillStore.getSkill('forging').level < FORGE_WORKSHOP_MIN_LEVEL) return false
+    for (const mat of FORGE_WORKSHOP_MATERIAL_COST) {
+      if (getCombinedItemCount(mat.itemId) < mat.quantity) return false
+    }
+    if (!playerStore.spendMoney(FORGE_WORKSHOP_UNLOCK_COST)) return false
+    for (const mat of FORGE_WORKSHOP_MATERIAL_COST) {
+      removeCombinedItem(mat.itemId, mat.quantity)
+    }
+    forgeWorkshopBuilt.value = true
     return true
   }
 
@@ -276,6 +304,7 @@ export const useHomeStore = defineStore('home', () => {
       caveChoice: caveChoice.value,
       caveUnlocked: caveUnlocked.value,
       greenhouseUnlocked: greenhouseUnlocked.value,
+      forgeWorkshopBuilt: forgeWorkshopBuilt.value,
       cellarSlots: cellarSlots.value,
       cellarLevel: cellarLevel.value,
       caveLevel: caveLevel.value,
@@ -288,6 +317,7 @@ export const useHomeStore = defineStore('home', () => {
     caveChoice.value = data.caveChoice ?? 'none'
     caveUnlocked.value = data.caveUnlocked ?? false
     greenhouseUnlocked.value = data.greenhouseUnlocked ?? false
+    forgeWorkshopBuilt.value = data.forgeWorkshopBuilt ?? false
     cellarLevel.value = data.cellarLevel ?? 1
     caveLevel.value = data.caveLevel ?? 1
     caveDaysActive.value = data.caveDaysActive ?? 0
@@ -311,6 +341,7 @@ export const useHomeStore = defineStore('home', () => {
     caveChoice,
     caveUnlocked,
     greenhouseUnlocked,
+    forgeWorkshopBuilt,
     cellarSlots,
     cellarLevel,
     caveLevel,
@@ -329,6 +360,7 @@ export const useHomeStore = defineStore('home', () => {
     chooseCave,
     dailyCaveUpdate,
     unlockGreenhouse,
+    buildForgeWorkshop,
     startAging,
     removeAging,
     dailyCellarUpdate,

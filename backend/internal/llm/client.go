@@ -3,11 +3,13 @@ package llm
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // Client DeepSeek API 客户端（OpenAI 兼容）
@@ -52,7 +54,8 @@ type Choice struct {
 type streamChunk struct {
 	Choices []struct {
 		Delta struct {
-			Content string `json:"content"`
+			Content          string `json:"content"`
+			ReasoningContent string `json:"reasoning_content"`
 		} `json:"delta"`
 		Index int `json:"index"`
 	} `json:"choices"`
@@ -61,13 +64,15 @@ type streamChunk struct {
 	} `json:"error,omitempty"`
 }
 
+const llmRequestTimeout = 90 * time.Second
+
 // New 创建 LLM 客户端
 func New(apiKey, baseURL, model string) *Client {
 	return &Client{
 		apiKey:  apiKey,
 		baseURL: baseURL,
 		model:   model,
-		http:    &http.Client{Timeout: 0}, // 流式无超时
+		http:    &http.Client{Timeout: llmRequestTimeout},
 	}
 }
 
@@ -149,7 +154,10 @@ func (c *Client) ChatStream(messages []Message, temperature float64, maxTokens i
 			return
 		}
 
-		req, err := http.NewRequest("POST", c.baseURL+"/chat/completions", bytes.NewReader(jsonBody))
+		ctx, cancel := context.WithTimeout(context.Background(), llmRequestTimeout)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/chat/completions", bytes.NewReader(jsonBody))
 		if err != nil {
 			done <- fmt.Errorf("创建请求失败: %w", err)
 			return
@@ -194,8 +202,12 @@ func (c *Client) ChatStream(messages []Message, temperature float64, maxTokens i
 			}
 
 			for _, choice := range chunk.Choices {
-				if choice.Delta.Content != "" {
-					contentChan <- choice.Delta.Content
+				text := choice.Delta.Content
+				if text == "" {
+					text = choice.Delta.ReasoningContent
+				}
+				if text != "" {
+					contentChan <- text
 				}
 			}
 		}

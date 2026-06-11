@@ -35,3 +35,13 @@ images/app/*
 # backend artifacts
 backend/data/
 backend/server.exe
+backend/server.exe~
+backend/server-linux
+
+# dev save patches (local only)
+public/dev-patch-*.html
+public/dev-patch-*.txt
+
+.superpowers/
+scripts/output/
+data/*.db

@@ -28,6 +28,9 @@ export const useAchievementStore = defineStore('achievement', () => {
   /** 物品发现时间记录 { itemId: "第X年 春 第Y天" } */
   const discoveryTimes = ref<Record<string, string>>({})
 
+  /** 鱼类历史最大重量（斤） */
+  const fishMaxWeights = ref<Record<string, number>>({})
+
   /** 已完成的成就ID集合 */
   const completedAchievements = ref<string[]>([])
 
@@ -80,6 +83,20 @@ export const useAchievementStore = defineStore('achievement', () => {
 
   const recordFishCaught = () => {
     stats.value.totalFishCaught++
+  }
+
+  /** 记录鱼重，返回是否刷新纪录 */
+  const recordFishWeight = (fishId: string, weight: number): boolean => {
+    const prev = fishMaxWeights.value[fishId]
+    if (prev === undefined || weight > prev) {
+      fishMaxWeights.value[fishId] = weight
+      return true
+    }
+    return false
+  }
+
+  const getFishMaxWeight = (fishId: string): number | null => {
+    return fishMaxWeights.value[fishId] ?? null
   }
 
   const recordMoneyEarned = (amount: number) => {
@@ -336,6 +353,7 @@ export const useAchievementStore = defineStore('achievement', () => {
     return {
       discoveredItems: discoveredItems.value,
       discoveryTimes: discoveryTimes.value,
+      fishMaxWeights: fishMaxWeights.value,
       completedAchievements: completedAchievements.value,
       bundleSubmissions: bundleSubmissions.value,
       completedBundles: completedBundles.value,
@@ -346,6 +364,7 @@ export const useAchievementStore = defineStore('achievement', () => {
   const deserialize = (data: ReturnType<typeof serialize>) => {
     discoveredItems.value = data.discoveredItems ?? []
     discoveryTimes.value = data.discoveryTimes ?? {}
+    fishMaxWeights.value = data.fishMaxWeights ?? {}
     completedAchievements.value = data.completedAchievements ?? []
     bundleSubmissions.value = data.bundleSubmissions ?? {}
     completedBundles.value = data.completedBundles ?? []
@@ -392,6 +411,7 @@ export const useAchievementStore = defineStore('achievement', () => {
   return {
     discoveredItems,
     discoveryTimes,
+    fishMaxWeights,
     completedAchievements,
     bundleSubmissions,
     completedBundles,
@@ -402,6 +422,8 @@ export const useAchievementStore = defineStore('achievement', () => {
     getDiscoveryTime,
     recordCropHarvest,
     recordFishCaught,
+    recordFishWeight,
+    getFishMaxWeight,
     recordMoneyEarned,
     recordMineFloor,
     recordRecipeCooked,

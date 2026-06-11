@@ -313,6 +313,26 @@
         <template v-else-if="shopStore.currentShopId === 'tiejiangpu'">
           <ShopHeader name="铁匠铺" npc="孙铁匠" />
 
+          <div class="flex gap-1.5 mb-3">
+            <Button
+              class="text-xs py-1 px-2"
+              :class="{ '!bg-accent !text-bg': blacksmithTab === 'materials' }"
+              @click="blacksmithTab = 'materials'"
+            >
+              材料
+            </Button>
+            <Button
+              class="text-xs py-1 px-2"
+              :class="{ '!bg-accent !text-bg': blacksmithTab === 'forge' }"
+              @click="blacksmithTab = 'forge'"
+            >
+              锻造工坊
+            </Button>
+          </div>
+
+          <ForgeView v-if="blacksmithTab === 'forge'" />
+
+          <template v-else>
           <div class="flex flex-col space-y-2">
             <div
               v-for="item in shopStore.blacksmithItems"
@@ -338,6 +358,10 @@
               <span class="text-xs text-accent whitespace-nowrap">{{ discounted(item.price) }}文</span>
             </div>
           </div>
+
+          <p class="text-[10px] text-muted mb-2 mt-2">
+            下方为弱化合成（固定属性）。亲手锻造品质更高、可出词条，请用「锻造工坊」。
+          </p>
 
           <!-- 戒指合成 -->
           <h4 class="text-accent text-sm mb-2 mt-4">
@@ -414,6 +438,7 @@
               <span class="text-xs text-accent whitespace-nowrap">{{ shoe.recipeMoney }}文</span>
             </div>
           </div>
+          </template>
         </template>
 
         <!-- ====== 镖局 ====== -->
@@ -1031,6 +1056,7 @@
     Filter
   } from 'lucide-vue-next'
   import Button from '@/components/game/Button.vue'
+  import ForgeView from '@/components/game/ForgeView.vue'
   import { useFarmStore } from '@/stores/useFarmStore'
   import { useGameStore, SEASON_NAMES } from '@/stores/useGameStore'
   import { useInventoryStore } from '@/stores/useInventoryStore'
@@ -1112,6 +1138,7 @@
   // === 移动端切换 ===
 
   const mobileTab = ref<'buy' | 'sell'>('buy')
+  const blacksmithTab = ref<'materials' | 'forge'>('materials')
 
   // === 一键出售确认 ===
 
@@ -1678,7 +1705,9 @@
     treasure_find: '宝箱概率',
     ore_bonus: '矿石额外',
     luck: '幸运',
-    travel_speed: '旅行加速'
+    travel_speed: '旅行加速',
+    foraging_stamina: '采集体力减免',
+    forging_exp_bonus: '锻造经验加成'
   }
 
   const craftableRings = computed(() => CRAFTABLE_RINGS)
@@ -1997,5 +2026,5 @@
     }
   })
 
-  export default { components: { ShopHeader } }
+  export default { components: { ShopHeader, ForgeView } }
 </script>

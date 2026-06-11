@@ -1,4 +1,5 @@
 import type { ShoeDef } from '@/types'
+import { FORGE_ONLY_SHOE_DEFS } from '@/data/forgeSets'
 
 /** 所有鞋子定义 */
 export const SHOES: ShoeDef[] = [
@@ -442,7 +443,8 @@ export const SHOES: ShoeDef[] = [
     recipeMoney: 1200,
     obtainSource: '铁匠铺合成',
     sellPrice: 600
-  }
+  },
+  ...FORGE_ONLY_SHOE_DEFS
 ]
 
 /** 根据ID获取鞋子定义 */

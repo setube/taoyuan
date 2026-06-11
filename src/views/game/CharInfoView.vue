@@ -388,7 +388,9 @@
     treasure_find: '宝箱',
     ore_bonus: '矿石',
     luck: '幸运',
-    travel_speed: '旅行加速'
+    travel_speed: '旅行加速',
+    foraging_stamina: '采集体力减免',
+    forging_exp_bonus: '锻造经验加成'
   }
 
   const formatRingEffects = (defId: string): string => {
@@ -538,7 +540,8 @@
     fishing: '钓鱼',
     mining: '挖矿',
     combat: '战斗',
-    cooking: '烹饪'
+    cooking: '烹饪',
+    forging: '锻造'
   }
 
   const PERK_NAMES: Record<SkillPerk5 | SkillPerk10, string> = {
@@ -577,7 +580,13 @@
     double_batch: '双灶',
     gourmet_craft: '匠心',
     buff_chef: '膳修',
-    tavern_master: '肆尊'
+    tavern_master: '肆尊',
+    apprentice: '学徒',
+    merchant: '行商',
+    smith_sword: '铸剑',
+    smith_tool: '工具匠',
+    enchanter: '附魔师',
+    smith_armor: '护甲匠'
   }
 
   // === 被动 ===

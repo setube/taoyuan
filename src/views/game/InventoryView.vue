@@ -44,7 +44,7 @@
           v-for="(item, idx) in filteredItems"
           :key="idx"
           class="border border-accent/20 rounded-xs p-1.5 text-center cursor-pointer hover:bg-accent/5 transition-colors relative"
-          @click="activeItemKey = item.itemId + ':' + item.quality"
+          @click="activeItemKey = item.itemId + ':' + item.quality + ':' + (item.weight ?? '')"
         >
           <Lock v-if="item.locked" :size="10" class="absolute top-0.5 left-0.5 text-accent/60" />
           <div
@@ -295,17 +295,30 @@
         <p v-else class="text-xs text-muted/40 text-center py-2">暂无戒指</p>
       </div>
 
-      <!-- 套装效果 -->
-      <div v-if="inventoryStore.activeSets.length > 0" class="border border-accent/20 rounded-xs p-2 mt-3">
-        <p class="text-xs text-muted mb-1">套装效果</p>
-        <div v-for="set in inventoryStore.activeSets" :key="set.id" class="border border-accent/10 rounded-xs p-2 mb-1.5 last:mb-0">
-          <div class="flex items-center justify-between mb-1">
+      <!-- 套装 -->
+      <div v-if="inventoryStore.setsWithOwnedPieces.length > 0" class="border border-accent/20 rounded-xs p-2 mt-3">
+        <p class="text-xs text-muted mb-1">套装</p>
+        <div
+          v-for="set in inventoryStore.setsWithOwnedPieces"
+          :key="set.id"
+          class="border border-accent/10 rounded-xs p-2 mb-1.5 last:mb-0"
+        >
+          <div class="flex items-center justify-between mb-1 gap-2">
             <span class="text-xs text-accent">{{ set.name }}</span>
-            <span class="text-xs text-muted">{{ set.equippedCount }}/3</span>
+            <span class="text-xs text-muted shrink-0">背包 {{ set.owned }}/{{ set.total }} · 已穿 {{ set.equipped }}</span>
           </div>
-          <div v-for="bonus in set.bonuses" :key="bonus.count" class="text-[10px]" :class="bonus.active ? 'text-success' : 'text-muted/40'">
-            ({{ bonus.count }}件) {{ bonus.description }}
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-[10px] text-muted/70 truncate" :title="setSourceHint(set.id)">{{ setSourceHint(set.id) }}</p>
+            <div class="flex gap-1 shrink-0">
+              <Button class="text-[10px] py-0 px-1.5" @click="handleEquipSet(set.id)">穿戴</Button>
+              <Button class="text-[10px] py-0 px-1.5 opacity-80" @click="handleEquipSetWithPreset(set.id)">穿戴并存方案</Button>
+            </div>
           </div>
+          <template v-for="active in inventoryStore.activeSets.filter(s => s.id === set.id)" :key="active.id + '-b'">
+            <div v-for="bonus in active.bonuses" :key="bonus.count" class="text-[10px] mt-1" :class="bonus.active ? 'text-success' : 'text-muted/40'">
+              ({{ bonus.count }}件) {{ bonus.description }}
+            </div>
+          </template>
         </div>
       </div>
     </template>
@@ -507,9 +520,13 @@
                 {{ QUALITY_NAMES[activeItem.quality] }}
               </span>
             </div>
+            <div v-if="activeItem.weight != null" class="flex items-center justify-between mt-0.5">
+              <span class="text-xs text-muted">重量</span>
+              <span class="text-xs text-accent">{{ activeItem.weight }}斤</span>
+            </div>
             <div v-if="activeItemDef?.sellPrice" class="flex items-center justify-between mt-0.5">
               <span class="text-xs text-muted">售价</span>
-              <span class="text-xs text-accent">{{ activeItemDef.sellPrice }}文</span>
+              <span class="text-xs text-accent">{{ activeItemSellPrice }}文</span>
             </div>
             <div v-if="activeItemDef?.staminaRestore" class="flex items-center justify-between mt-0.5">
               <span class="text-xs text-muted">恢复</span>
@@ -774,7 +791,9 @@
   import { useCookingStore } from '@/stores/useCookingStore'
   import { useGameStore } from '@/stores/useGameStore'
   import { useInventoryStore } from '@/stores/useInventoryStore'
+  import { useShopStore } from '@/stores/useShopStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
+  import { useSystemStore } from '@/stores/useSystemStore'
   import { useSettingsStore } from '@/stores/useSettingsStore'
   import { useSkillStore } from '@/stores/useSkillStore'
   import { getItemById, getItemSource } from '@/data'
@@ -785,9 +804,36 @@
   import { getShoeById } from '@/data/shoes'
   import { QUALITY_NAMES } from '@/composables/useFarmActions'
   import { addLog } from '@/composables/useGameLog'
+  import { getSetSourceHint } from '@/data/forgeSetSources'
+  import { getEquipmentSetById } from '@/data/equipmentSets'
   import type { Quality, RingEffectType, ItemCategory } from '@/types'
 
   const inventoryStore = useInventoryStore()
+
+  const setSourceHint = (setId: string) => getSetSourceHint(setId)
+
+  const handleEquipSet = (setId: string) => {
+    const res = inventoryStore.equipSet(setId)
+    const setName = getEquipmentSetById(setId)?.name ?? setId
+    if (res.ok) {
+      addLog(`已穿戴整套：${setName}`)
+    } else if (res.missing.length > 0) {
+      addLog(`缺少 ${res.missing.map(m => m.name).join('、')}。${getSetSourceHint(setId)}`)
+    } else {
+      addLog('无法穿戴该套装。')
+    }
+  }
+
+  const handleEquipSetWithPreset = (setId: string) => {
+    const res = inventoryStore.equipSetWithPreset(setId)
+    const setName = getEquipmentSetById(setId)?.name ?? setId
+    if (res.ok) {
+      addLog(`已穿戴整套：${setName}${res.presetSaved ? '，并保存为装备方案' : ''}`)
+    } else if (res.missing.length > 0) {
+      addLog(`缺少 ${res.missing.map(m => m.name).join('、')}。${getSetSourceHint(setId)}`)
+    }
+  }
+  const shopStore = useShopStore()
   const playerStore = usePlayerStore()
   const skillStore = useSkillStore()
   const gameStore = useGameStore()
@@ -992,7 +1038,9 @@
     treasure_find: '宝箱概率',
     ore_bonus: '矿石加成',
     luck: '幸运',
-    travel_speed: '旅行加速'
+    travel_speed: '旅行加速',
+    foraging_stamina: '采集体力减免',
+    forging_exp_bonus: '锻造经验加成'
   }
 
   const PERCENTAGE_EFFECTS: Set<RingEffectType> = new Set([
@@ -1226,13 +1274,28 @@
 
   const activeItem = computed(() => {
     if (!activeItemKey.value) return null
-    const [itemId, quality] = activeItemKey.value.split(':')
-    return inventoryStore.items.find(i => i.itemId === itemId && i.quality === quality) ?? null
+    const [itemId, quality, weightStr] = activeItemKey.value.split(':')
+    const weight = weightStr === undefined || weightStr === '' ? undefined : parseFloat(weightStr)
+    return (
+      inventoryStore.items.find(
+        i => i.itemId === itemId && i.quality === quality && i.weight === weight
+      ) ?? null
+    )
   })
 
   const activeItemDef = computed(() => {
     if (!activeItem.value) return null
     return getItemById(activeItem.value.itemId) ?? null
+  })
+
+  const activeItemSellPrice = computed(() => {
+    if (!activeItem.value || !activeItemDef.value?.sellPrice) return 0
+    return shopStore.calculateBaseSellPrice(
+      activeItem.value.itemId,
+      1,
+      activeItem.value.quality,
+      activeItem.value.weight
+    )
   })
 
   /** 烹饪品的buff描述 */
@@ -1275,7 +1338,12 @@
       return
     }
 
-    if (!inventoryStore.removeItem(itemId, 1, quality)) return
+    if (!inventoryStore.removeItem(itemId, 1, quality, activeItem.value?.weight)) return
+    try {
+      useSystemStore().onFoodConsumed(itemId, false)
+    } catch {
+      /* pinia 未就绪 */
+    }
     // 炼金师专精：食物恢复+50%
     const alchemistBonus = skillStore.getSkill('foraging').perk10 === 'alchemist' ? 1.5 : 1.0
     const staminaRestore = Math.floor(def.staminaRestore * alchemistBonus)
@@ -1303,7 +1371,7 @@
 
   const handleUse = (itemId: string, quality: Quality) => {
     if (itemId === 'rain_totem') {
-      if (!inventoryStore.removeItem(itemId, 1, quality)) return
+      if (!inventoryStore.removeItem(itemId, 1, quality, activeItem.value?.weight)) return
       gameStore.setTomorrowWeather('rainy')
       addLog('你使用了雨图腾，明天将会下雨。')
     }
@@ -1312,7 +1380,7 @@
         addLog('体力上限已达到最高，无法再使用仙桃。')
         return
       }
-      if (!inventoryStore.removeItem(itemId, 1, quality)) return
+      if (!inventoryStore.removeItem(itemId, 1, quality, activeItem.value?.weight)) return
       playerStore.upgradeMaxStamina()
       addLog(`食用了仙桃，体力上限永久提升至${playerStore.maxStamina}！`)
     }
@@ -1340,11 +1408,11 @@
   /** 确认丢弃 */
   const confirmDiscard = () => {
     if (!activeItem.value) return
-    const { itemId, quality } = activeItem.value
+    const { itemId, quality, weight } = activeItem.value
     const name = activeItemDef.value?.name ?? ''
     const qty = Math.min(discardQty.value, activeItem.value.quantity)
     if (qty <= 0) return
-    if (!inventoryStore.removeItem(itemId, qty, quality)) return
+    if (!inventoryStore.removeItem(itemId, qty, quality, weight)) return
     addLog(`丢弃了${name}×${qty}。`)
     discardMode.value = false
     // 物品消耗完则关闭弹窗

@@ -1,4 +1,5 @@
 import type { RingDef } from '@/types'
+import { FORGE_ONLY_RING_DEFS } from '@/data/forgeSets'
 
 /** 所有戒指定义 */
 export const RINGS: RingDef[] = [
@@ -526,7 +527,8 @@ export const RINGS: RingDef[] = [
     recipeMoney: 1500,
     obtainSource: '铁匠铺合成',
     sellPrice: 700
-  }
+  },
+  ...FORGE_ONLY_RING_DEFS
 ]
 
 /** 根据ID获取戒指定义 */

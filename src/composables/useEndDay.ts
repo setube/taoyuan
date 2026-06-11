@@ -664,7 +664,10 @@ export const handleEndDay = () => {
   // === 晚间结算（旧日期） ===
 
   // 酒肆日结自动营业
-  runTavernEndDay()
+  const tavernNight = runTavernEndDay()
+  if (tavernNight && tavernNight.revenue > 0) {
+    useSystemStore().onTavernRevenue(tavernNight.revenue)
+  }
 
   // 出货箱结算
   const shopStore = useShopStore()
@@ -686,18 +689,32 @@ export const handleEndDay = () => {
   // 钱庄日息（在日期推进前，按当日结算）
   useBankStore().processEndOfDay()
 
+  // === 系统晚安（日期推进前，对应当日） ===
+  const systemStore = useSystemStore()
+  if (systemStore.awakened && systemStore.personaId) {
+    systemStore.processGoodnight(gameStore.day, recoveryMode)
+  }
+
   // === 日期推进 ===
   const { seasonChanged, oldSeason } = gameStore.nextDay()
 
   // === 系统觉醒检测（首次过夜后触发，不限季节/天数） ===
-  const systemStore = useSystemStore()
   if (!systemStore.awakened) {
     systemStore.pendingAwakening = true
   }
 
+  // === 系统任务：过期 → 派发 → 验收 ===
+  if (systemStore.awakened) {
+    systemStore.processQuestExpiry(gameStore.day)
+    systemStore.validateQuests()
+    systemStore.processMeritBuffExpiry(gameStore.day)
+    systemStore.processCompanionNewDay(gameStore.day)
+    systemStore.touchOnlineTime()
+  }
+
   // === 每日早安 ===
   if (systemStore.awakened && systemStore.personaId) {
-    systemStore.addSystemMessage(getMorningGreeting(systemStore.personaId, gameStore.season), gameStore.day)
+    systemStore.addMumbleMessage(getMorningGreeting(systemStore.personaId, gameStore.season), gameStore.day)
   }
 
   useTavernStore().onNewDay()
@@ -710,7 +727,12 @@ export const handleEndDay = () => {
   }
 
   // 动物产出
+  const unfedYesterday = animalStore.animals.filter(a => !a.wasFed).length
   const animalResult = animalStore.dailyUpdate()
+  if (systemStore.awakened) {
+    if (unfedYesterday > 0) systemStore.onAnimalNeglectDay(unfedYesterday)
+    else systemStore.onAnimalCareDay()
+  }
   if (animalResult.products.length > 0) {
     addLog(`动物们产出了${animalResult.products.length}件产品，快去拾取吧。`)
   }
@@ -984,6 +1006,9 @@ export const handleEndDay = () => {
 
   // 换季处理
   if (seasonChanged) {
+    if (systemStore.awakened) {
+      systemStore.onSeasonChange(oldSeason, gameStore.season)
+    }
     const { witheredCount, reclaimedCount } = farmStore.onSeasonChange(gameStore.season)
     addLog(`—— 季节更替：${SEASON_NAMES[oldSeason]}→${SEASON_NAMES[gameStore.season]} ——`)
     if (witheredCount > 0) {
@@ -1108,6 +1133,9 @@ export const handleEndDay = () => {
   // 季节事件
   const event = getTodayEvent(gameStore.season, gameStore.day)
   if (event) {
+    if (systemStore.awakened) {
+      systemStore.onFestivalDay(event.name)
+    }
     applyEventEffects(event)
     if (event.interactive && event.festivalType) {
       showFestival(event.festivalType)

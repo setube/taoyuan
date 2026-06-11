@@ -12,8 +12,10 @@ import {
   TAB_TO_LOCATION_GROUP,
   TRAVEL_TIME,
   TRAVEL_STAMINA,
-  getLocationGroupName
+  getLocationGroupName,
+  resolveEffectiveLocationGroup
 } from '@/data/timeConstants'
+import router from '@/router'
 import { useCookingStore } from './useCookingStore'
 import { useAnimalStore } from './useAnimalStore'
 import { useInventoryStore } from './useInventoryStore'
@@ -154,12 +156,17 @@ export const useGameStore = defineStore('game', () => {
     return { ok: true, passedOut: false, message: '' }
   }
 
+  const getEffectiveLocationGroup = (): LocationGroup => {
+    return resolveEffectiveLocationGroup(currentLocationGroup.value, router.currentRoute.value.name as string | undefined)
+  }
+
   /** 查询切换到目标 tab 的移动耗时 */
   const getTravelCost = (targetTab: string): number => {
     const targetGroup = TAB_TO_LOCATION_GROUP[targetTab]
     if (!targetGroup) return 0
-    if (targetGroup === currentLocationGroup.value) return 0
-    const key = `${currentLocationGroup.value}->${targetGroup}`
+    const fromGroup = getEffectiveLocationGroup()
+    if (targetGroup === fromGroup) return 0
+    const key = `${fromGroup}->${targetGroup}`
     const baseCost = TRAVEL_TIME[key] ?? 0.5
     // 拥有马减少30%旅行时间
     const animalStore = useAnimalStore()
@@ -177,12 +184,17 @@ export const useGameStore = defineStore('game', () => {
   const travelTo = (targetTab: string): { ok: boolean; timeCost: number; passedOut: boolean; message: string } => {
     const targetGroup = TAB_TO_LOCATION_GROUP[targetTab]
     if (!targetGroup) return { ok: true, timeCost: 0, passedOut: false, message: '' }
-    if (targetGroup === currentLocationGroup.value) return { ok: true, timeCost: 0, passedOut: false, message: '' }
+
+    const fromGroup = getEffectiveLocationGroup()
+    if (targetGroup === fromGroup) {
+      currentLocationGroup.value = targetGroup
+      return { ok: true, timeCost: 0, passedOut: false, message: '' }
+    }
 
     const cost = getTravelCost(targetTab)
 
     // 体力消耗：有马减半（向下取整）
-    const key = `${currentLocationGroup.value}->${targetGroup}`
+    const key = `${fromGroup}->${targetGroup}`
     const baseStamina = TRAVEL_STAMINA[key] ?? 1
     const animalStore = useAnimalStore()
     const staminaCost = animalStore.hasHorse ? Math.max(1, Math.floor(baseStamina / 2)) : baseStamina

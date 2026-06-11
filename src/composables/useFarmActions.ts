@@ -21,6 +21,8 @@ import { shouldReturnBreedingSeed, generateGeneticsId } from '@/data/breeding'
 import { addLog, showFloat } from './useGameLog'
 import { handleEndDay } from './useEndDay'
 import { sfxDig, sfxPlant, sfxWater, sfxHarvest, sfxLevelUp, sfxBuy, sfxCoin } from './useAudio'
+import { applyMeritCropYieldBonus } from '@/composables/useMeritEffects'
+import { useSystemStore } from '@/stores/useSystemStore'
 
 export const QUALITY_NAMES: Record<Quality, string> = {
   normal: '普通',
@@ -81,7 +83,7 @@ export const handlePlotClick = (plotId: number) => {
           (1 - ringGlobalReduction)
       )
     )
-    if (!playerStore.consumeStamina(cost)) {
+    if (!playerStore.consumeStamina(cost, 'farming')) {
       addLog('体力不足，无法开垦。')
       return
     }
@@ -117,7 +119,7 @@ export const handlePlotClick = (plotId: number) => {
           (1 - cropRingGlobalReduction)
       )
     )
-    if (!playerStore.consumeStamina(cost)) {
+    if (!playerStore.consumeStamina(cost, 'farming')) {
       addLog('体力不足，无法播种。')
       return
     }
@@ -167,7 +169,7 @@ export const handlePlotClick = (plotId: number) => {
           (1 - waterRingGlobalReduction)
       )
     )
-    if (!playerStore.consumeStamina(cost)) {
+    if (!playerStore.consumeStamina(cost, 'farming')) {
       addLog('体力不足，无法浇水。')
       return
     }
@@ -206,11 +208,17 @@ export const handlePlotClick = (plotId: number) => {
       const yieldDouble = genetics && !intensiveDouble && Math.random() < (genetics.yield / 100) * 0.3
       // 桃源田庄：15% 概率额外收获
       const standardDouble = !intensiveDouble && !yieldDouble && gameStore.farmMapType === 'standard' && Math.random() < 0.15
-      const harvestQty = intensiveDouble || yieldDouble || standardDouble ? 2 : 1
+      let harvestQty = intensiveDouble || yieldDouble || standardDouble ? 2 : 1
+      harvestQty = applyMeritCropYieldBonus(harvestQty)
       inventoryStore.addItem(cropId, harvestQty, quality)
       achievementStore.discoverItem(cropId)
       achievementStore.recordCropHarvest()
       useQuestStore().onItemObtained(cropId, harvestQty)
+      try {
+        useSystemStore().onCropHarvested(cropId, gameStore.season)
+      } catch {
+        /* pinia 未就绪 */
+      }
       const { leveledUp, newLevel } = skillStore.addExp('farming', 10)
       const qualityLabel = quality !== 'normal' ? `(${QUALITY_NAMES[quality]})` : ''
       sfxHarvest()
@@ -372,7 +380,7 @@ export const handleBatchWater = () => {
           (1 - batchRingGlobalReduction)
       )
     )
-    if (!playerStore.consumeStamina(cost)) break
+    if (!playerStore.consumeStamina(cost, 'farming')) break
     farmStore.waterPlot(plot.id)
     skillStore.addExp('farming', 2)
     watered++
@@ -431,7 +439,7 @@ export const handleBatchTill = () => {
           (1 - tillRingGlobalReduction)
       )
     )
-    if (!playerStore.consumeStamina(cost)) break
+    if (!playerStore.consumeStamina(cost, 'farming')) break
     farmStore.tillPlot(plot.id)
     tilled++
   }
@@ -512,7 +520,8 @@ export const handleBatchHarvest = () => {
       const intensiveDouble = skillStore.getSkill('farming').perk10 === 'intensive' && Math.random() < 0.2
       const yieldDouble = genetics && !intensiveDouble && Math.random() < (genetics.yield / 100) * 0.3
       const standardDouble = !intensiveDouble && !yieldDouble && gameStore.farmMapType === 'standard' && Math.random() < 0.15
-      const harvestQty = intensiveDouble || yieldDouble || standardDouble ? 2 : 1
+      let harvestQty = intensiveDouble || yieldDouble || standardDouble ? 2 : 1
+      harvestQty = applyMeritCropYieldBonus(harvestQty)
       inventoryStore.addItem(cropId, harvestQty, quality)
       achievementStore.discoverItem(cropId)
       achievementStore.recordCropHarvest()
@@ -606,7 +615,7 @@ export const handleBatchPlant = (cropId: string) => {
           (1 - plantRingGlobalReduction)
       )
     )
-    if (!playerStore.consumeStamina(cost)) break
+    if (!playerStore.consumeStamina(cost, 'farming')) break
     inventoryStore.removeItem(cropDef.seedId)
     farmStore.plantCrop(plot.id, cropDef.id)
     planted++
@@ -708,7 +717,7 @@ export const handleRemoveCrop = (plotId: number) => {
       2 * (1 - skillStore.getStaminaReduction('farming')) * (1 - farmingBuff) * (1 - ringFarmReduction) * (1 - ringGlobalReduction)
     )
   )
-  if (!playerStore.consumeStamina(cost)) {
+  if (!playerStore.consumeStamina(cost, 'farming')) {
     addLog('体力不足，无法铲除。')
     return
   }
@@ -754,7 +763,7 @@ export const handleCurePest = (plotId: number) => {
       2 * (1 - skillStore.getStaminaReduction('farming')) * (1 - farmingBuff) * (1 - ringFarmReduction) * (1 - ringGlobalReduction)
     )
   )
-  if (!playerStore.consumeStamina(cost)) {
+  if (!playerStore.consumeStamina(cost, 'farming')) {
     addLog('体力不足，无法除虫。')
     return
   }
@@ -804,7 +813,7 @@ export const handleBatchCurePest = () => {
           (1 - batchRingGlobalReduction)
       )
     )
-    if (!playerStore.consumeStamina(cost)) break
+    if (!playerStore.consumeStamina(cost, 'farming')) break
     farmStore.curePest(plot.id)
     cured++
   }
@@ -850,7 +859,7 @@ export const handleClearWeed = (plotId: number) => {
       2 * (1 - skillStore.getStaminaReduction('farming')) * (1 - farmingBuff) * (1 - ringFarmReduction) * (1 - ringGlobalReduction)
     )
   )
-  if (!playerStore.consumeStamina(cost)) {
+  if (!playerStore.consumeStamina(cost, 'farming')) {
     addLog('体力不足，无法除草。')
     return
   }
@@ -900,7 +909,7 @@ export const handleBatchClearWeed = () => {
           (1 - batchRingGlobalReduction)
       )
     )
-    if (!playerStore.consumeStamina(cost)) break
+    if (!playerStore.consumeStamina(cost, 'farming')) break
     farmStore.clearWeed(plot.id)
     cleared++
   }

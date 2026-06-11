@@ -387,6 +387,33 @@ export const useWarehouseStore = defineStore('warehouse', () => {
     return withdrawn
   }
 
+  /** 收集时直接存入仓库（不经背包），返回实际存入数量 */
+  const depositCollectedItem = (itemId: string, quantity: number, quality: Quality = 'normal', weight?: number): number => {
+    if (!unlocked.value) return 0
+    let remaining = quantity
+    for (const chest of chests.value) {
+      if (remaining <= 0) break
+      if (!canDepositItemToChest(chest.id, itemId)) continue
+      const cap = CHEST_DEFS[chest.tier].capacity
+      for (const slot of chest.items) {
+        if (remaining <= 0) break
+        if (slot.itemId === itemId && slot.quality === quality && slot.weight === weight && slot.quantity < MAX_STACK) {
+          const canAdd = Math.min(remaining, MAX_STACK - slot.quantity)
+          slot.quantity += canAdd
+          remaining -= canAdd
+        }
+      }
+      while (remaining > 0 && chest.items.length < cap) {
+        const batch = Math.min(remaining, MAX_STACK)
+        const newSlot: { itemId: string; quantity: number; quality: Quality; weight?: number } = { itemId, quantity: batch, quality }
+        if (weight !== undefined) newSlot.weight = weight
+        chest.items.push(newSlot)
+        remaining -= batch
+      }
+    }
+    return quantity - remaining
+  }
+
   /** 将背包物品存入第一个可接受的箱子 */
   const depositToFirstAvailableChest = (itemId: string, quantity: number, quality: Quality): number => {
     for (const chest of chests.value) {
@@ -548,6 +575,7 @@ export const useWarehouseStore = defineStore('warehouse', () => {
     aggregateAllItems,
     withdrawFromAnyChest,
     depositToFirstAvailableChest,
+    depositCollectedItem,
     serialize,
     deserialize
   }

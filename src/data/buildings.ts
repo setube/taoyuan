@@ -152,6 +152,15 @@ export const GREENHOUSE_MATERIAL_COST = [
 /** 温室地块数 */
 export const GREENHOUSE_PLOT_COUNT = 12
 
+/** 家造锻造工坊（§2.1） */
+export const FORGE_WORKSHOP_UNLOCK_COST = 8000
+export const FORGE_WORKSHOP_MATERIAL_COST = [
+  { itemId: 'wood', quantity: 30 },
+  { itemId: 'copper_bar', quantity: 10 },
+  { itemId: 'stone', quantity: 50 }
+]
+export const FORGE_WORKSHOP_MIN_LEVEL = 3
+
 /** 温室升级定义 */
 export interface GreenhouseUpgradeDef {
   level: number

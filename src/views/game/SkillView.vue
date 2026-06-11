@@ -31,20 +31,30 @@
         </div>
 
         <!-- 天赋 -->
-        <div v-if="skill.perk5 || skill.perk10" class="flex flex-col space-y-1">
+        <div v-if="skill.perk5 || skill.perk10 || skill.perk15 || skill.perk20" class="flex flex-col space-y-1">
           <div v-if="skill.perk5" class="flex items-center space-x-1.5 border border-water rounded-xs px-2 py-1">
             <span class="text-[10px] text-water shrink-0">Lv5</span>
-            <span class="text-xs text-water shrink-0">{{ PERK_NAMES[skill.perk5] }}</span>
-            <span class="text-[10px] text-muted">{{ PERK_DESCS[skill.perk5] }}</span>
+            <span class="text-xs text-water shrink-0">{{ perkLabel(skill, skill.perk5) }}</span>
+            <span class="text-[10px] text-muted">{{ perkDesc(skill, skill.perk5) }}</span>
           </div>
           <div v-if="skill.perk10" class="flex items-center space-x-1.5 border border-water rounded-xs px-2 py-1">
             <span class="text-[10px] text-water shrink-0">Lv10</span>
-            <span class="text-xs text-water shrink-0">{{ PERK_NAMES[skill.perk10] }}</span>
-            <span class="text-[10px] text-muted">{{ PERK_DESCS[skill.perk10] }}</span>
+            <span class="text-xs text-water shrink-0">{{ perkLabel(skill, skill.perk10) }}</span>
+            <span class="text-[10px] text-muted">{{ perkDesc(skill, skill.perk10) }}</span>
+          </div>
+          <div v-if="skill.perk15" class="flex items-center space-x-1.5 border border-water rounded-xs px-2 py-1">
+            <span class="text-[10px] text-water shrink-0">Lv15</span>
+            <span class="text-xs text-water shrink-0">{{ perkLabel(skill, skill.perk15) }}</span>
+            <span class="text-[10px] text-muted">{{ perkDesc(skill, skill.perk15) }}</span>
+          </div>
+          <div v-if="skill.perk20" class="flex items-center space-x-1.5 border border-water rounded-xs px-2 py-1">
+            <span class="text-[10px] text-water shrink-0">Lv20</span>
+            <span class="text-xs text-water shrink-0">{{ perkLabel(skill, skill.perk20) }}</span>
+            <span class="text-[10px] text-muted">{{ perkDesc(skill, skill.perk20) }}</span>
           </div>
         </div>
-        <p v-else-if="skill.level < 5" class="text-[10px] text-muted">Lv5 / Lv10 时可选择专精天赋</p>
-        <p v-else class="text-[10px] text-muted">升级到 Lv{{ !skill.perk5 ? 5 : 10 }} 后可选择天赋</p>
+        <p v-else-if="skill.level < 5" class="text-[10px] text-muted">Lv5 / 10 / 15 / 20 时可选择专精天赋</p>
+        <p v-else class="text-[10px] text-muted">升级到 Lv{{ nextPerkLevel(skill) }} 后可选择天赋</p>
       </div>
     </div>
   </div>
@@ -52,9 +62,10 @@
 
 <script setup lang="ts">
   import { type Component } from 'vue'
-  import { Star, Wheat, TreePine, Fish, Pickaxe, Sword, ChefHat } from 'lucide-vue-next'
+  import { Star, Wheat, TreePine, Fish, Pickaxe, Sword, ChefHat, Hammer } from 'lucide-vue-next'
   import { useSkillStore } from '@/stores/useSkillStore'
-  import type { SkillType, SkillPerk5, SkillPerk10 } from '@/types'
+  import type { SkillType, SkillPerk5, SkillPerk10, SkillState } from '@/types'
+  import { FORGING_PERK15_BRANCHES, FORGING_PERK20_BRANCHES } from '@/data/skills'
 
   const skillStore = useSkillStore()
 
@@ -64,7 +75,8 @@
     fishing: Fish,
     mining: Pickaxe,
     combat: Sword,
-    cooking: ChefHat
+    cooking: ChefHat,
+    forging: Hammer
   }
 
   const SKILL_NAMES: Record<SkillType, string> = {
@@ -73,7 +85,8 @@
     fishing: '钓鱼',
     mining: '挖矿',
     combat: '战斗',
-    cooking: '烹饪'
+    cooking: '烹饪',
+    forging: '锻造'
   }
 
   const SKILL_DESCS: Record<SkillType, string> = {
@@ -82,7 +95,8 @@
     fishing: '在各水域钓鱼。等级越高，钓鱼成功率越高。',
     mining: '在矿洞中采矿和战斗。等级越高，矿石产出越多。',
     combat: '与矿洞中的怪物战斗。等级越高，生命值上限越高。',
-    cooking: '烹制料理。等级越高，成品品质越好。'
+    cooking: '烹制料理。等级越高，成品品质越好。',
+    forging: '亲手打铁铸器。孙铁匠处习得开炉后可升级。'
   }
 
   const SKILL_LEVEL_BONUS: Record<SkillType, string> = {
@@ -91,7 +105,8 @@
     fishing: '钓鱼成功率提升',
     mining: '矿石产出提升',
     combat: '生命值上限+5',
-    cooking: '烹饪升档概率提升'
+    cooking: '烹饪升档概率提升',
+    forging: '打造品质与词条提升'
   }
 
   const PERK_DESCS: Record<SkillPerk5 | SkillPerk10, string> = {
@@ -130,7 +145,13 @@
     double_batch: '烹饪成功15%概率额外+1份',
     gourmet_craft: '25%概率成品品质+1档',
     buff_chef: 'buff效果+30%，持续时段+1',
-    tavern_master: '酒肆经营加成：厨艺+2、失误-3%、食物指导价+10%'
+    tavern_master: '酒肆经营加成：厨艺+2、失误-3%、食物指导价+10%',
+    apprentice: '锻造经验+15%',
+    merchant: '打造装备出售+10%',
+    smith_sword: '武器打造目标区宽度+20%',
+    smith_tool: '工具升级材料-20%',
+    enchanter: '词条重刷材料-20%',
+    smith_armor: '帽/鞋/戒打造铜钱-15%'
   }
 
   const PERK_NAMES: Record<SkillPerk5 | SkillPerk10, string> = {
@@ -169,7 +190,13 @@
     double_batch: '双灶',
     gourmet_craft: '匠心',
     buff_chef: '膳修',
-    tavern_master: '肆尊'
+    tavern_master: '肆尊',
+    apprentice: '学徒',
+    merchant: '行商',
+    smith_sword: '铸剑',
+    smith_tool: '工具匠',
+    enchanter: '附魔师',
+    smith_armor: '护甲匠'
   }
 
   const expInfo = (type: SkillType) => {
@@ -180,5 +207,36 @@
     const info = skillStore.getExpToNextLevel(type)
     if (!info) return 100
     return Math.round((info.current / info.required) * 100)
+  }
+
+  const forgingPerkMeta = (): Record<string, { name: string; description: string }> => {
+    const map: Record<string, { name: string; description: string }> = {}
+    for (const branch of Object.values(FORGING_PERK15_BRANCHES)) {
+      for (const p of branch) map[p.id] = { name: p.name, description: p.description }
+    }
+    for (const branch of Object.values(FORGING_PERK20_BRANCHES)) {
+      for (const p of branch) map[p.id] = { name: p.name, description: p.description }
+    }
+    return map
+  }
+
+  const FORGING_EXTRA = forgingPerkMeta()
+
+  const perkLabel = (skill: SkillState, id: string) => {
+    if (skill.type === 'forging' && FORGING_EXTRA[id]) return FORGING_EXTRA[id].name
+    return PERK_NAMES[id as SkillPerk5 | SkillPerk10] ?? id
+  }
+
+  const perkDesc = (skill: SkillState, id: string) => {
+    if (skill.type === 'forging' && FORGING_EXTRA[id]) return FORGING_EXTRA[id].description
+    return PERK_DESCS[id as SkillPerk5 | SkillPerk10] ?? ''
+  }
+
+  const nextPerkLevel = (skill: SkillState): number => {
+    if (!skill.perk5) return 5
+    if (!skill.perk10) return 10
+    if (!skill.perk15) return 15
+    if (!skill.perk20) return 20
+    return 20
   }
 </script>

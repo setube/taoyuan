@@ -74,6 +74,10 @@ func main() {
 
 		// 对话
 		r.Post("/chat", h.Chat)
+		r.Post("/chat/trigger", h.ChatTrigger)
+		r.Post("/merit/evaluate", h.EvaluateMeritWish)
+		r.Post("/quest/evaluate", h.EvaluateQuest)
+		r.Post("/quest/dispatch", h.DispatchQuest)
 
 		// 存档
 		r.Get("/saves", h.ListSaves)
@@ -83,7 +87,12 @@ func main() {
 
 		// 设备注册
 		r.Post("/device/register", h.RegisterDevice)
+
+		// 统计埋点
+		handler.RegisterAnalyticsRoutes(r, h)
 	})
+
+	r.Get("/admin/stats", h.AnalyticsAdminPage)
 
 	// 静态文件服务 + SPA fallback
 	r.NotFound(serveSPA())

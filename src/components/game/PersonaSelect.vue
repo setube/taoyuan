@@ -83,6 +83,10 @@ const personas: PersonaOption[] = [
   }
 ]
 
+function selectPersona(id: PersonaId) {
+  selected.value = id
+}
+
 function confirm() {
   if (!selected.value) return
   const gameStore = useGameStore()
@@ -148,7 +152,7 @@ function confirm() {
         <div
           v-for="p in personas"
           :key="p.id"
-          @click="selected = p.id"
+          @click="selectPersona(p.id)"
           class="cursor-pointer p-3 border rounded transition-colors"
           :class="selected === p.id
             ? 'border-accent bg-accent/10'
@@ -161,6 +165,7 @@ function confirm() {
       </div>
 
       <button
+        type="button"
         @click="confirm"
         :disabled="!selected"
         class="w-full py-2 text-sm border border-accent/40 rounded

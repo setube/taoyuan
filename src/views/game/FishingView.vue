@@ -339,6 +339,13 @@
               <span class="text-xs text-muted">数量</span>
               <span class="text-xs">×{{ catchResult.quantity }}</span>
             </div>
+            <div v-if="catchResult.success && catchResult.weight" class="flex items-center justify-between mt-0.5">
+              <span class="text-xs text-muted">重量</span>
+              <span class="text-xs text-accent">
+                {{ catchResult.weight }}斤
+                <span v-if="catchResult.isNewRecord" class="text-quality-supreme ml-1">新纪录!</span>
+              </span>
+            </div>
             <div v-if="catchResult.success && catchResult.quality" class="flex items-center justify-between mt-0.5">
               <span class="text-xs text-muted">品质</span>
               <span class="text-xs" :class="QUALITY_COLORS[catchResult.quality]">{{ QUALITY_NAMES[catchResult.quality] }}</span>
@@ -387,7 +394,11 @@
               </span>
             </div>
             <div class="flex items-center justify-between mt-0.5">
-              <span class="text-xs text-muted">售价</span>
+              <span class="text-xs text-muted">重量</span>
+              <span class="text-xs">{{ selectedFish.minWeight }} – {{ selectedFish.maxWeight }} 斤</span>
+            </div>
+            <div class="flex items-center justify-between mt-0.5">
+              <span class="text-xs text-muted">基础售价</span>
               <span class="text-xs text-accent">{{ selectedFish.sellPrice }}文</span>
             </div>
             <div class="flex items-center justify-between mt-0.5">
@@ -459,6 +470,8 @@
     description?: string
     quality?: Quality
     quantity?: number
+    weight?: number
+    isNewRecord?: boolean
     success: boolean
     message: string
   } | null>(null)
@@ -677,6 +690,8 @@
         description: catchData.description,
         quality: catchData.quality,
         quantity: catchData.quantity,
+        weight: catchData.weight,
+        isNewRecord: catchData.isNewRecord,
         success: catchData.success,
         message: catchData.message
       }

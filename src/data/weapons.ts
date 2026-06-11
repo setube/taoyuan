@@ -1,4 +1,5 @@
 import type { WeaponDef, EnchantmentDef, WeaponType } from '@/types'
+import { FORGE_ONLY_WEAPON_DEFS } from '@/data/forgeSets'
 
 /** 附魔定义 */
 export const ENCHANTMENTS: Record<string, EnchantmentDef> = {
@@ -437,7 +438,8 @@ export const WEAPONS: Record<string, WeaponDef> = {
     shopPrice: null,
     shopMaterials: [],
     fixedEnchantment: null
-  }
+  },
+  ...FORGE_ONLY_WEAPON_DEFS
 }
 export const SHOP_WEAPONS: WeaponDef[] = Object.values(WEAPONS).filter(w => w.shopPrice !== null)
 

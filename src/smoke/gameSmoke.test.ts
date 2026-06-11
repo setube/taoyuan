@@ -12,6 +12,8 @@ import { useGameStore } from '@/stores/useGameStore'
 import { useSkillStore } from '@/stores/useSkillStore'
 import { useAchievementStore } from '@/stores/useAchievementStore'
 import { useTutorialStore } from '@/stores/useTutorialStore'
+import { useForgeStore } from '@/stores/useForgeStore'
+import { useMiningStore } from '@/stores/useMiningStore'
 import { runTavernEndDay } from '@/composables/tavernSimulate'
 
 describe('游戏 smoke test', () => {
@@ -154,5 +156,27 @@ describe('游戏 smoke test', () => {
     const again = skill.migrateCookingExpFromRecipes(20, true)
     expect(again).toBe(false)
     expect(skill.getSkill('cooking').exp).toBe(100)
+  })
+
+  it('forge 存档 round-trip + Boss 迁移补图纸', () => {
+    const forge = useForgeStore()
+    const mining = useMiningStore()
+
+    forge.attendLesson('lesson_open_furnace')
+    forge.learnBlueprint('bp_shop_copper_ring')
+    mining.defeatedBosses.push('frost_queen')
+
+    const payload = JSON.parse(JSON.stringify({ forge: forge.serialize(), mining: mining.serialize() }))
+    forge.reset()
+    mining.deserialize({ ...mining.serialize(), defeatedBosses: [] })
+
+    forge.deserialize(payload.forge)
+    mining.deserialize(payload.mining)
+    forge.migrateFromDefeatedBosses(mining.defeatedBosses)
+
+    expect(forge.forgePanelUnlocked).toBe(true)
+    expect(forge.lessonsSeen).toContain('lesson_open_furnace')
+    expect(forge.unlockedRecipeIds.length).toBeGreaterThan(0)
+    expect(forge.defeatedBossFloors).toContain(40)
   })
 })

@@ -86,13 +86,21 @@ func buildPlayerContextText(ctx map[string]any) string {
 	// 季节和天数
 	season := stringField(ctx, "season")
 	day := intField(ctx, "day")
+	hour := intField(ctx, "hour")
+	if summary := stringField(ctx, "statusSummary"); summary != "" {
+		sb.WriteString("【实时状态快照】" + summary + "\n")
+	}
 	if season != "" {
 		seasonNames := map[string]string{"spring": "春", "summer": "夏", "autumn": "秋", "winter": "冬"}
 		name := seasonNames[season]
 		if name == "" {
 			name = season
 		}
-		sb.WriteString(fmt.Sprintf("- 季节：%s，第 %d 天\n", name, day))
+		sb.WriteString(fmt.Sprintf("- 季节：%s，第 %d 天", name, day))
+		if hour > 0 {
+			sb.WriteString(fmt.Sprintf("，%d 时", hour))
+		}
+		sb.WriteString("\n")
 	}
 
 	// 玩家信息
@@ -130,19 +138,173 @@ func buildPlayerContextText(ctx map[string]any) string {
 		sb.WriteString("\n")
 	}
 
-	// 建筑等级
-	farmLv := intField(ctx, "farmhouseLevel")
+	// 农场与建筑
+	if farmSize := stringField(ctx, "farmSize"); farmSize != "" {
+		sb.WriteString(fmt.Sprintf("- 农场规模：%s\n", farmSize))
+	}
+	if home, ok := ctx["homeState"].(map[string]any); ok && len(home) > 0 {
+		parts := make([]string, 0, 6)
+		if s := stringField(home, "farmhouse"); s != "" {
+			parts = append(parts, "农舍="+s)
+		}
+		if cellar := stringField(home, "cellarSlots"); cellar != "" {
+			parts = append(parts, "酒窖槽"+cellar)
+		}
+		if gh := stringField(home, "greenhouse"); gh != "" {
+			parts = append(parts, "温室="+gh)
+		}
+		if cave := stringField(home, "cave"); cave != "" {
+			parts = append(parts, "山洞="+cave)
+		}
+		if len(parts) > 0 {
+			sb.WriteString("- 小屋设施：" + strings.Join(parts, "，") + "\n")
+		}
+	}
 	tavernLv := intField(ctx, "tavernLevel")
-	farmNames := map[int]string{0: "茅屋", 1: "砖房", 2: "宅院", 3: "酒窖宅院"}
-	farmName := farmNames[farmLv]
-	if farmName == "" {
-		farmName = fmt.Sprintf("Lv%d", farmLv)
-	}
-	sb.WriteString(fmt.Sprintf("- 农舍：%s", farmName))
 	if tavernLv > 0 {
-		sb.WriteString(fmt.Sprintf("，酒肆 Lv%d", tavernLv))
+		sb.WriteString(fmt.Sprintf("- 酒肆：Lv%d\n", tavernLv))
+	} else {
+		sb.WriteString("- 酒肆：未建造\n")
 	}
-	sb.WriteString("\n")
+	if ranch, ok := ctx["ranchState"].(map[string]any); ok {
+		if buildings, ok := ranch["buildings"].([]any); ok && len(buildings) > 0 {
+			names := make([]string, 0, len(buildings))
+			for _, b := range buildings {
+				if s, ok := b.(string); ok {
+					names = append(names, s)
+				}
+			}
+			if len(names) > 0 {
+				total := intField(ranch, "totalAnimals")
+				sb.WriteString(fmt.Sprintf("- 牧场：%s（共%d只牲畜）\n", strings.Join(names, "、"), total))
+			}
+		}
+		if pet := ranch["pet"]; pet != nil && pet != "" {
+			sb.WriteString(fmt.Sprintf("- 宠物：%v\n", pet))
+		}
+	}
+	if pond := stringField(ctx, "fishPondState"); pond != "" {
+		sb.WriteString(fmt.Sprintf("- 鱼塘：%s\n", pond))
+	}
+	if rule := stringField(ctx, "fishFryRule"); rule != "" {
+		sb.WriteString("- 鱼苗规则：" + rule + "\n")
+	}
+	if pondable := intField(ctx, "pondableFishInBag"); pondable > 0 {
+		sb.WriteString(fmt.Sprintf("- 背包可放入鱼塘的鱼：%d 尾", pondable))
+		if types, ok := ctx["pondableFishTypes"].([]any); ok && len(types) > 0 {
+			names := make([]string, 0, len(types))
+			for _, t := range types {
+				if s, ok := t.(string); ok {
+					names = append(names, s)
+				}
+			}
+			if len(names) > 0 {
+				sb.WriteString("（" + strings.Join(names, "、") + "）")
+			}
+		}
+		sb.WriteString("\n")
+	}
+	if bait := intField(ctx, "fishBaitCount"); bait > 0 {
+		sb.WriteString(fmt.Sprintf("- 普通鱼饵：%d 份（钓鱼/喂鱼用，非购买鱼苗）\n", bait))
+	}
+	if stations := intField(ctx, "breedingStations"); stations > 0 {
+		sb.WriteString(fmt.Sprintf("- 育种台：%d 台\n", stations))
+	}
+	if floor := intField(ctx, "highestMineFloor"); floor > 0 {
+		sb.WriteString(fmt.Sprintf("- 矿洞最高层：%d\n", floor))
+	}
+
+	// 系统亲和与时间线
+	if affinity := intField(ctx, "systemAffinity"); affinity > 0 || intField(ctx, "affinity") > 0 {
+		if affinity <= 0 {
+			affinity = intField(ctx, "affinity")
+		}
+		sb.WriteString(fmt.Sprintf("- 系统亲和度：%d/100（与村民好感度无关，专属定制门槛 20）\n", affinity))
+	}
+	if npcTop, ok := ctx["npcFriendshipTop"].([]any); ok && len(npcTop) > 0 {
+		names := make([]string, 0, len(npcTop))
+		for _, t := range npcTop {
+			if s, ok := t.(string); ok && s != "" {
+				names = append(names, s)
+			}
+		}
+		if len(names) > 0 {
+			sb.WriteString("- 村民好感（与系统亲和无关）：" + strings.Join(names, "、") + "\n")
+		}
+	}
+
+	if persona := stringField(ctx, "personaId"); persona != "" {
+		personaNames := map[string]string{"qingluan": "青鸾", "chaofeng": "嘲风", "taosu": "桃酥", "moyan": "墨言"}
+		if name := personaNames[persona]; name != "" {
+			sb.WriteString(fmt.Sprintf("- 系统人格：%s\n", name))
+		}
+	}
+	if timeline, ok := ctx["timeline"].([]any); ok && len(timeline) > 0 {
+		sb.WriteString("- 近期记忆摘要：")
+		parts := make([]string, 0, len(timeline))
+		for _, t := range timeline {
+			if s, ok := t.(string); ok {
+				parts = append(parts, s)
+			}
+		}
+		sb.WriteString(strings.Join(parts, "；"))
+		sb.WriteString("\n")
+	}
+	if milestones, ok := ctx["memoryMilestones"].(map[string]any); ok && len(milestones) > 0 {
+		sb.WriteString("- 里程碑记忆：")
+		first := true
+		for k, v := range milestones {
+			if v == nil || v == "" || v == 0 {
+				continue
+			}
+			if !first {
+				sb.WriteString("、")
+			}
+			sb.WriteString(fmt.Sprintf("%s=%v", k, v))
+			first = false
+		}
+		if !first {
+			sb.WriteString("\n")
+		}
+	}
+
+	// 系统任务 / 功勋 / 商店（当前存档状态）
+	if boolField(ctx, "systemAwakened") {
+		sb.WriteString("- 系统状态：已觉醒\n")
+	}
+	if _, hasMerit := ctx["systemMerit"]; hasMerit {
+		merit := intField(ctx, "systemMerit")
+		sb.WriteString(fmt.Sprintf("- 当前功勋点：%d\n", merit))
+	}
+	if quests, ok := ctx["systemQuests"].([]any); ok && len(quests) > 0 {
+		sb.WriteString("- 活跃系统任务：\n")
+		for _, q := range quests {
+			if m, ok := q.(map[string]any); ok {
+				title := stringField(m, "title")
+				if title == "" {
+					title = stringField(m, "type")
+				}
+				status := stringField(m, "status")
+				deadline := intField(m, "deadline")
+				reward := intField(m, "reward")
+				sb.WriteString(fmt.Sprintf("  · %s（%s，期限第%d日，奖励%d功勋）\n", title, status, deadline, reward))
+			}
+		}
+	}
+	if buffs, ok := ctx["meritBuffs"].([]any); ok && len(buffs) > 0 {
+		sb.WriteString("- 已激活功勋加成：")
+		names := make([]string, 0, len(buffs))
+		for _, b := range buffs {
+			if s, ok := b.(string); ok && s != "" {
+				names = append(names, s)
+			}
+		}
+		sb.WriteString(strings.Join(names, "、"))
+		sb.WriteString("\n")
+	}
+	if customN := intField(ctx, "customShopCount"); customN > 0 {
+		sb.WriteString(fmt.Sprintf("- 专属定制商品：%d 项\n", customN))
+	}
 
 	// 背包摘要
 	if topItems, ok := ctx["topItems"].([]any); ok && len(topItems) > 0 {
@@ -155,6 +317,27 @@ func buildPlayerContextText(ctx map[string]any) string {
 		}
 		sb.WriteString(strings.Join(itemStrs, "、"))
 		sb.WriteString("\n")
+	}
+
+	// 仓库摘要
+	if boolField(ctx, "warehouseUnlocked") {
+		chests := stringField(ctx, "warehouseChests")
+		if chests != "" {
+			sb.WriteString(fmt.Sprintf("- 仓库：已解锁（%s）\n", chests))
+		}
+		if whItems, ok := ctx["warehouseItems"].([]any); ok && len(whItems) > 0 {
+			itemStrs := make([]string, 0, len(whItems))
+			for _, item := range whItems {
+				if s, ok := item.(string); ok {
+					itemStrs = append(itemStrs, s)
+				}
+			}
+			if len(itemStrs) > 0 {
+				sb.WriteString("- 仓库存货：" + strings.Join(itemStrs, "、") + "\n")
+			}
+		}
+	} else {
+		sb.WriteString("- 仓库：未解锁\n")
 	}
 
 	return sb.String()
@@ -181,12 +364,22 @@ func intField(m map[string]any, key string) int {
 	return 0
 }
 
+func boolField(m map[string]any, key string) bool {
+	if v, ok := m[key]; ok {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+	}
+	return false
+}
+
 // Chat AI 对话（带 session + 历史）
 func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Message   string         `json:"message"`
 		PersonaID string         `json:"personaId"`
 		SessionID string         `json:"sessionId"`
+		VisitorID string         `json:"visitorId"`
 		Context   map[string]any `json:"context"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -201,13 +394,32 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 		req.SessionID = "default"
 	}
 
+	merit := intField(req.Context, "systemMerit")
+	affinity := intField(req.Context, "systemAffinity")
+	if affinity <= 0 {
+		affinity = intField(req.Context, "affinity")
+	}
+	if wish := h.meritWishEvaluate(req.Message, req.PersonaID, merit, affinity, req.Context); wish != nil {
+		if isWish, ok := wish["isWish"].(bool); ok && isWish {
+			wish["type"] = "wish"
+			jsonOK(w, wish)
+			return
+		}
+	}
+
 	// 从数据库恢复对话历史
 	h.ensureHistory(req.SessionID, req.PersonaID)
 
 	// 构建玩家状态文本
 	playerCtx := buildPlayerContextText(req.Context)
+	chatMeta := h.buildChatMeta(r, req.VisitorID, req.PersonaID)
 
 	results := h.idx.Search(req.Message, "", 5)
+	results = augmentWishWellKnowledge(h.idx, req.Message, results)
+	results = augmentFishPondKnowledge(h.idx, req.Message, results)
+	results = augmentLocationKnowledge(h.idx, req.Message, results)
+	results = augmentSystemKnowledge(h.idx, req.Message, results)
+	results = filterKnowledgeResults(results)
 	bestScore := 0
 	if len(results) > 0 {
 		bestScore = results[0].Score
@@ -223,9 +435,9 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 			kbText.WriteString(fmt.Sprintf("- %s：%s\n", r.Entry.Title, r.Entry.Content))
 		}
 		if h.llmClientFast != nil {
-			reply, err := h.chatWithHistory(req.SessionID, req.PersonaID, req.Message, playerCtx, kbText.String(), h.llmClientFast)
+			reply, err := h.chatWithHistory(req.SessionID, req.PersonaID, req.Message, playerCtx, kbText.String(), h.llmClientFast, chatMeta)
 			if err == nil {
-				jsonOK(w, map[string]any{"type": "llm", "message": reply})
+				jsonOK(w, map[string]any{"type": "llm", "message": llm.SanitizeReply(req.PersonaID, reply)})
 				return
 			}
 		}
@@ -246,11 +458,11 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	for _, r := range results {
 		kbText.WriteString(fmt.Sprintf("- %s：%s\n", r.Entry.Title, r.Entry.Content))
 	}
-	h.chatWithHistoryStream(w, req.SessionID, req.PersonaID, req.Message, playerCtx, kbText.String(), h.llmClient)
+	h.chatWithHistoryStream(w, req.SessionID, req.PersonaID, req.Message, playerCtx, kbText.String(), h.llmClient, chatMeta)
 }
 
 // chatWithHistory 带历史的 LLM 调用（非流式）
-func (h *Handler) chatWithHistory(sessionID, personaID, message, playerContext, knowledgeContext string, client *llm.Client) (string, error) {
+func (h *Handler) chatWithHistory(sessionID, personaID, message, playerContext, knowledgeContext string, client *llm.Client, meta *store.ChatMeta) (string, error) {
 	h.sessions.Get(sessionID, personaID) // 确保会话存在
 
 	var messages []llm.Message
@@ -264,25 +476,26 @@ func (h *Handler) chatWithHistory(sessionID, personaID, message, playerContext, 
 	}
 	messages = append(messages, llm.Message{Role: "user", Content: message})
 
-	reply, err := client.Chat(messages, 0.8, 512)
+	reply, err := client.Chat(messages, 0.55, 512)
 	if err != nil {
 		return "", err
 	}
+	reply = llm.SanitizeReply(personaID, reply)
 
 	h.sessions.AddMessage(sessionID, llm.Message{Role: "user", Content: message})
 	h.sessions.AddMessage(sessionID, llm.Message{Role: "assistant", Content: reply})
 
-	// 持久化到数据库
+	// 持久化到数据库（仅在线对话）
 	if h.db != nil {
-		h.db.SaveChatMessage(sessionID, "user", message)
-		h.db.SaveChatMessage(sessionID, "assistant", reply)
+		h.db.SaveChatMessage(sessionID, "user", message, meta)
+		h.db.SaveChatMessage(sessionID, "assistant", reply, meta)
 	}
 
 	return reply, nil
 }
 
 // chatWithHistoryStream 带历史的 LLM 流式调用，直接写 SSE 到 ResponseWriter
-func (h *Handler) chatWithHistoryStream(w http.ResponseWriter, sessionID, personaID, message, playerContext, knowledgeContext string, client *llm.Client) {
+func (h *Handler) chatWithHistoryStream(w http.ResponseWriter, sessionID, personaID, message, playerContext, knowledgeContext string, client *llm.Client, meta *store.ChatMeta) {
 	h.sessions.Get(sessionID, personaID)
 
 	var messages []llm.Message
@@ -296,7 +509,7 @@ func (h *Handler) chatWithHistoryStream(w http.ResponseWriter, sessionID, person
 	}
 	messages = append(messages, llm.Message{Role: "user", Content: message})
 
-	contentChan, done := client.ChatStream(messages, 0.8, 512)
+	contentChan, done := client.ChatStream(messages, 0.55, 512)
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -339,18 +552,28 @@ func (h *Handler) chatWithHistoryStream(w http.ResponseWriter, sessionID, person
 		return
 	}
 
+	finalReply := llm.SanitizeReply(personaID, fullReply.String())
+	if finalReply != fullReply.String() {
+		revision, _ := json.Marshal(map[string]string{
+			"type":    "revision",
+			"content": finalReply,
+		})
+		fmt.Fprintf(w, "data: %s\n\n", revision)
+		flusher.Flush()
+	}
+
 	// 完成标记
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
 
 	// 存入历史
 	h.sessions.AddMessage(sessionID, llm.Message{Role: "user", Content: message})
-	h.sessions.AddMessage(sessionID, llm.Message{Role: "assistant", Content: fullReply.String()})
+	h.sessions.AddMessage(sessionID, llm.Message{Role: "assistant", Content: finalReply})
 
-	// 持久化到数据库
+	// 持久化到数据库（仅在线对话）
 	if h.db != nil {
-		h.db.SaveChatMessage(sessionID, "user", message)
-		h.db.SaveChatMessage(sessionID, "assistant", fullReply.String())
+		h.db.SaveChatMessage(sessionID, "user", message, meta)
+		h.db.SaveChatMessage(sessionID, "assistant", finalReply, meta)
 	}
 }
 

@@ -1,4 +1,4 @@
-/** 华熙小王许愿井口令（每条口令每个存档仅可领取一次） */
+/** 许愿井口令（每条口令每个存档仅可领取一次） */
 export interface WishWellCode {
   secret: string
   reward: number
@@ -6,13 +6,11 @@ export interface WishWellCode {
 }
 
 export const WISH_WELL_CODES: WishWellCode[] = [
-  { secret: '好想华熙小王', reward: 500, flag: 'wishWell_haoxiang' },
-  { secret: '疯狂星期四', reward: 50, flag: 'wishWell_kfc' },
-  { secret: '华熙小王最帅', reward: 1000, flag: 'wishWell_zuishuai' },
-  { secret: '最爱华熙小王', reward: 520, flag: 'wishWell_zuiai' },
-  { secret: '宝宝宝宝', reward: 500, flag: 'wishWell_baobao' },
-  { secret: '1025', reward: 1025, flag: 'wishWell_1025' }
+  { secret: '桃源谷，启动！', reward: 500, flag: 'wishWell_taoyuan_start' },
+  { secret: '我要玩桃源谷', reward: 1000, flag: 'wishWell_want_play' },
+  { secret: '20260610', reward: 500, flag: 'wishWell_20260610' },
+  { secret: '斯巴拉西', reward: 5000, flag: 'wishWell_subarashi' }
 ]
 
-/** 旧版存档兼容：曾用单一标记领取过「好想华熙小王」 */
+/** 旧版存档兼容标记（华熙小王时代口令，已不再可输入） */
 export const WISH_WELL_LEGACY_HAOXIANG_FLAG = 'huaxiWishWellClaimed'

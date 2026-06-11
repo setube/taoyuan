@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import type { HeartEventDef, SkillType, SkillPerk5, SkillPerk10 } from '@/types'
+import type { HeartEventDef, SkillType, SkillPerk5, SkillPerk10, SkillPerk15, SkillPerk20 } from '@/types'
 import type { DiscoveryStep } from '@/types/hiddenNpc'
 import type { SeasonEventDef } from '@/data/events'
 import type { MorningChoiceEvent } from '@/data/farmEvents'
@@ -27,7 +27,7 @@ type FestivalType =
   | 'tea_contest'
   | 'kite_flying'
 const currentFestival = ref<FestivalType | null>(null)
-const pendingPerk = ref<{ skillType: SkillType; level: 5 | 10 } | null>(null)
+const pendingPerk = ref<{ skillType: SkillType; level: 5 | 10 | 15 | 20 } | null>(null)
 
 /** 宠物领养弹窗 */
 const pendingPetAdoption = ref(false)
@@ -44,6 +44,14 @@ export const checkAllPerks = () => {
       pendingPerk.value = { skillType: skill.type, level: 10 }
       return
     }
+    if (skill.level >= 15 && skill.perk10 && !skill.perk15) {
+      pendingPerk.value = { skillType: skill.type, level: 15 }
+      return
+    }
+    if (skill.level >= 20 && skill.perk15 && !skill.perk20) {
+      pendingPerk.value = { skillType: skill.type, level: 20 }
+      return
+    }
   }
 }
 
@@ -51,17 +59,22 @@ export const checkAllPerks = () => {
 _registerPerkChecker(checkAllPerks)
 
 /** 处理天赋选择对话框 */
-export const handlePerkSelect = (perk: SkillPerk5 | SkillPerk10) => {
+export const handlePerkSelect = (perk: SkillPerk5 | SkillPerk10 | SkillPerk15 | SkillPerk20) => {
   if (!pendingPerk.value) return
   const skillStore = useSkillStore()
   const { skillType, level } = pendingPerk.value
   if (level === 5) {
     skillStore.setPerk5(skillType, perk as SkillPerk5)
-  } else {
+  } else if (level === 10) {
     skillStore.setPerk10(skillType, perk as SkillPerk10)
+  } else if (level === 15) {
+    skillStore.setPerk15(skillType, perk as SkillPerk15)
+  } else {
+    skillStore.setPerk20(skillType, perk as SkillPerk20)
   }
   addLog('习得了新专精！')
   pendingPerk.value = null
+  checkAllPerks()
 }
 
 /** 判断是否为隐藏NPC */

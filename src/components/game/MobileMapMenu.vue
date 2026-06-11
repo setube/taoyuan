@@ -97,7 +97,7 @@
 
         <div class="map-path">···</div>
 
-        <button type="button" class="wish-well-btn" @click="showWishWell = true">华熙小王许愿井</button>
+        <button type="button" class="wish-well-btn" @click="showWishWell = true">许愿井</button>
       </div>
     </div>
   </Transition>

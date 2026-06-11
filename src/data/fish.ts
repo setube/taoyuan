@@ -1,4 +1,7 @@
 import type { FishDef, FishingLocation } from '@/types'
+import { FISH_WEIGHTS } from './fishWeights'
+
+type FishDefDraft = Omit<FishDef, 'minWeight' | 'maxWeight'>
 
 /** 钓鱼地点定义 */
 export const FISHING_LOCATIONS: { id: FishingLocation; name: string; description: string }[] = [
@@ -10,8 +13,8 @@ export const FISHING_LOCATIONS: { id: FishingLocation; name: string; description
   { id: 'swamp', name: '沼泽', description: '桃源乡外的湿地，栖息着奇特的水生生物。' }
 ]
 
-/** 所有鱼类定义 (60种) */
-export const FISH: FishDef[] = [
+/** 所有鱼类定义 (61种) */
+const FISH_DRAFT: FishDefDraft[] = [
   // ==================== 溪流 (creek) — 15 种 ====================
   {
     id: 'crucian',
@@ -762,6 +765,11 @@ export const FISH: FishDef[] = [
     miniGameDirChange: 0.08
   }
 ]
+
+export const FISH: FishDef[] = FISH_DRAFT.map(f => ({
+  ...f,
+  ...FISH_WEIGHTS[f.id]!
+}))
 
 /** 根据ID获取鱼 */
 export const getFishById = (id: string): FishDef | undefined => {

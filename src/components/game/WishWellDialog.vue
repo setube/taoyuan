@@ -1,7 +1,7 @@
 <template>
   <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4" @click.self="emit('close')">
     <div class="game-panel max-w-xs w-full">
-      <p class="text-accent text-sm text-center mb-2 tracking-widest">华熙小王许愿井</p>
+      <p class="text-accent text-sm text-center mb-2 tracking-widest">许愿井</p>
       <p class="text-xs text-muted text-center mb-3">请输入你现在最想做什么</p>
       <input
         v-model="wishInput"
@@ -26,7 +26,7 @@
   import { usePlayerStore } from '@/stores/usePlayerStore'
   import { useTutorialStore } from '@/stores/useTutorialStore'
   import { addLog } from '@/composables/useGameLog'
-  import { WISH_WELL_CODES, WISH_WELL_LEGACY_HAOXIANG_FLAG } from '@/data/wishWellCodes'
+  import { WISH_WELL_CODES } from '@/data/wishWellCodes'
   import Button from '@/components/game/Button.vue'
 
   const emit = defineEmits<{ close: [] }>()
@@ -37,11 +37,7 @@
   const feedback = ref('')
   const feedbackSuccess = ref(false)
 
-  const isCodeClaimed = (flag: string, secret: string): boolean => {
-    if (tutorialStore.getFlag(flag)) return true
-    if (secret === '好想华熙小王' && tutorialStore.getFlag(WISH_WELL_LEGACY_HAOXIANG_FLAG)) return true
-    return false
-  }
+  const isCodeClaimed = (flag: string): boolean => tutorialStore.getFlag(flag)
 
   const submitWish = () => {
     const text = wishInput.value.trim()
@@ -58,7 +54,7 @@
       return
     }
 
-    if (isCodeClaimed(code.flag, code.secret)) {
+    if (isCodeClaimed(code.flag)) {
       feedback.value = '这句心愿许愿井已经听过了，每条口令只能生效一次。'
       feedbackSuccess.value = false
       return
@@ -66,11 +62,8 @@
 
     playerStore.earnMoney(code.reward)
     tutorialStore.setFlag(code.flag)
-    if (code.secret === '好想华熙小王') {
-      tutorialStore.setFlag(WISH_WELL_LEGACY_HAOXIANG_FLAG)
-    }
     feedback.value = `井底泛起金光，你获得了 ${code.reward} 金币！`
     feedbackSuccess.value = true
-    addLog(`华熙小王许愿井：「${code.secret}」→ 获得 ${code.reward} 文。`)
+    addLog(`许愿井：「${code.secret}」→ 获得 ${code.reward} 文。`)
   }
 </script>
