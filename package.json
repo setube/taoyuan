@@ -4,7 +4,7 @@
   "qq": "920930589",
   "tapid": "816558",
   "private": true,
-  "version": "3.2.0",
+  "version": "3.2.5",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
