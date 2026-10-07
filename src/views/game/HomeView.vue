@@ -120,7 +120,7 @@
           仓库
         </p>
         <span v-if="warehouseStore.unlocked" class="text-xs text-muted">
-          箱子 {{ warehouseStore.craftedChestCount }}/{{ warehouseStore.maxChests }}
+          总仓 + 箱子 {{ warehouseStore.craftedChestCount }}/{{ warehouseStore.maxChests }}
         </span>
       </div>
 

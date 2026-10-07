@@ -90,12 +90,12 @@
   import { Gift, Handshake, PackageCheck } from 'lucide-vue-next'
   import Button from '@/components/game/Button.vue'
   import { useTradeStore } from '@/stores/useTradeStore'
-  import { useInventoryStore } from '@/stores/useInventoryStore'
   import { useGameStore } from '@/stores/useGameStore'
   import { getItemById } from '@/data/items'
   import { TRADE_REWARDS } from '@/data/trade'
   import { showFloat } from '@/composables/useGameLog'
   import { sfxBuy, sfxCoin } from '@/composables/useAudio'
+  import { getCombinedItemCount } from '@/composables/useCombinedInventory'
   import type { TradeOrder, TradeOrderKind, TradeRewardDef } from '@/types'
 
   type Tab = 'orders' | 'rewards'
@@ -129,7 +129,6 @@
   }
 
   const tradeStore = useTradeStore()
-  const inventoryStore = useInventoryStore()
   const gameStore = useGameStore()
 
   const tab = ref<Tab>('orders')
@@ -150,7 +149,7 @@
     delivered: order.delivered,
     deliverable: tradeStore.canDeliver(order),
     lines: order.lines.map(line => {
-      const held = inventoryStore.getItemCount(line.itemId)
+      const held = getCombinedItemCount(line.itemId)
       return { itemId: line.itemId, name: getItemName(line.itemId), quantity: line.quantity, held, enough: held >= line.quantity }
     })
   })

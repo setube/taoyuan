@@ -50,8 +50,15 @@
       </p>
 
       <!-- 批量操作入口 -->
-      <div class="mb-3">
-        <Button class="w-full md:w-auto" :icon-size="12" :icon="Wrench" @click="showBatchActions = true">一键操作</Button>
+      <div class="mb-3 flex space-x-1.5">
+        <Button class="flex-1 md:flex-none" :icon-size="12" :icon="Wrench" @click="showBatchActions = true">一键操作</Button>
+        <Button
+          v-if="batchUpgradeCount > 0"
+          class="flex-1 md:flex-none"
+          :icon-size="12"
+          :icon="ArrowUp"
+          @click="handleBatchUpgrade"
+        >升级全部 ({{ batchUpgradeCount }}块 {{ batchUpgradeTotalCost }}文)</Button>
       </div>
 
       <!-- 田庄特殊功能 -->
@@ -1475,6 +1482,43 @@
     const plot = (target.greenhouse ? farmStore.greenhousePlots : farmStore.plots)[target.plotId]
     return plot ? farmStore.getPlotUpgradeCost(plot.level) : null
   })
+
+  /** 可一键升级的地块数量及总费用 */
+  const batchUpgradeCount = computed(() => {
+    return farmStore.plots.filter(p => {
+      const cost = farmStore.getPlotUpgradeCost(p.level)
+      return cost !== null && playerStore.money >= cost && p.state !== 'wasteland'
+    }).length
+  })
+
+  const batchUpgradeTotalCost = computed(() => {
+    let total = 0
+    let money = playerStore.money
+    for (const p of farmStore.plots) {
+      if (p.state === 'wasteland') continue
+      const cost = farmStore.getPlotUpgradeCost(p.level)
+      if (cost === null || money < cost) continue
+      total += cost
+      money -= cost
+    }
+    return total
+  })
+
+  const handleBatchUpgrade = () => {
+    let upgraded = 0
+    for (let i = 0; i < farmStore.plots.length; i++) {
+      const p = farmStore.plots[i]!
+      if (p.state === 'wasteland') continue
+      const cost = farmStore.getPlotUpgradeCost(p.level)
+      if (cost === null || playerStore.money < cost) continue
+      farmStore.upgradePlot(i, false)
+      upgraded++
+    }
+    if (upgraded > 0) {
+      sfxBuy()
+      addLog(`一键升级 ${upgraded} 块农田`)
+    }
+  }
 
   const confirmPlotUpgrade = () => {
     const target = plotUpgradeTarget.value

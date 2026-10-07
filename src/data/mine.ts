@@ -103,6 +103,11 @@ export const getTreasureRewards = (floor: number): { items: { itemId: string; qu
     }
   }
 
+  // 狐珠：shadow 区宝箱 5% 概率掉落（狐仙发现线索物品）
+  if (zone === 'shadow' && Math.random() < 0.05) {
+    items.push({ itemId: 'fox_bead', quantity: 1 })
+  }
+
   // 深渊层宝箱极小概率掉落仙桃
   if (zone === 'abyss' && Math.random() < 0.02) {
     items.push({ itemId: 'stamina_fruit', quantity: 1 })

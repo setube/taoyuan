@@ -12,6 +12,7 @@ import {
   getTradeUnitPrice
 } from '@/data/trade'
 import { addLog } from '@/composables/useGameLog'
+import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
 import { useGameStore } from './useGameStore'
 import { useInventoryStore } from './useInventoryStore'
 import { useAnimalStore } from './useAnimalStore'
@@ -97,11 +98,10 @@ export const useTradeStore = defineStore('trade', () => {
     }
   }
 
-  /** 订单当前能否交付（背包持有量，全部品质都算） */
+  /** 订单当前能否交付（背包 + 仓库箱子合计，全部品质都算） */
   const canDeliver = (order: TradeOrder): boolean => {
     if (order.delivered) return false
-    const inventoryStore = useInventoryStore()
-    return order.lines.every(line => inventoryStore.getItemCount(line.itemId) >= line.quantity)
+    return order.lines.every(line => getCombinedItemCount(line.itemId) >= line.quantity)
   }
 
   const findOrder = (orderId: string): TradeOrder | null =>
@@ -113,18 +113,17 @@ export const useTradeStore = defineStore('trade', () => {
     if (weeklyOrder.value?.id === orderId) weeklyOrder.value = { ...weeklyOrder.value, delivered: true }
   }
 
-  /** 从背包扣除订单物品，低品质优先；返回按实际品质加成后的售价总值 */
+  /** 从背包+仓库箱子扣除订单物品，低品质优先；返回按实际品质加成后的售价总值 */
   const takeOrderItems = (order: TradeOrder): number => {
-    const inventoryStore = useInventoryStore()
     let value = 0
     for (const line of order.lines) {
       const unitPrice = getTradeUnitPrice(line.itemId)
       let remaining = line.quantity
       for (const quality of TRADE_QUALITY_ORDER) {
         if (remaining <= 0) break
-        const take = Math.min(remaining, inventoryStore.getItemCount(line.itemId, quality))
+        const take = Math.min(remaining, getCombinedItemCount(line.itemId, quality))
         if (take <= 0) continue
-        inventoryStore.removeItem(line.itemId, take, quality)
+        removeCombinedItem(line.itemId, take, quality)
         value += unitPrice * take * TRADE_QUALITY_MULTIPLIER[quality]
         remaining -= take
       }
