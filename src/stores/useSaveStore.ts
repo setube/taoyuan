@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import CryptoJS from 'crypto-js'
 import { saveAs } from 'file-saver'
+import { useTapTapCloud } from '@/composables/useTapTapCloud'
 import { useGameStore, SEASON_NAMES } from './useGameStore'
 import { usePlayerStore } from './usePlayerStore'
 import { useInventoryStore } from './useInventoryStore'
@@ -77,6 +78,8 @@ export const useSaveStore = defineStore('save', () => {
   /** 当前活跃存档槽位（-1 表示未分配） */
   const activeSlot = ref(-1)
 
+  const { isCloudAvailable, cloudSyncStatus, uploadSave, downloadSave } = useTapTapCloud()
+
   /** 获取所有存档槽位信息 */
   const getSlots = (): SaveSlotInfo[] => {
     const slots: SaveSlotInfo[] = []
@@ -118,7 +121,7 @@ export const useSaveStore = defineStore('save', () => {
     return slot
   }
 
-  /** 保存到指定槽位 */
+  /** 保存到指定槽位，完成后异步上传云端（不阻塞本地存档） */
   const saveToSlot = (slot: number): boolean => {
     if (slot < 0 || slot >= MAX_SLOTS) return false
     try {
@@ -180,8 +183,13 @@ export const useSaveStore = defineStore('save', () => {
         trade: tradeStore.serialize(),
         savedAt: new Date().toISOString()
       }
-      localStorage.setItem(`${SAVE_KEY_PREFIX}${slot}`, encrypt(JSON.stringify(data)))
+      const encrypted = encrypt(JSON.stringify(data))
+      localStorage.setItem(`${SAVE_KEY_PREFIX}${slot}`, encrypted)
       activeSlot.value = slot
+      // 异步上传云端，不阻塞本地存档结果
+      if (isCloudAvailable.value) {
+        uploadSave(slot, encrypted).catch(() => {})
+      }
       return true
     } catch {
       return false
@@ -304,8 +312,29 @@ export const useSaveStore = defineStore('save', () => {
     }
   }
 
+  /** 从云端拉取指定槽位覆盖本地（云端无存档则不操作） */
+  const syncFromCloud = async (slot: number): Promise<boolean> => {
+    if (slot < 0 || slot >= MAX_SLOTS) return false
+    const cloudData = await downloadSave(slot)
+    if (!cloudData) return false
+    const parsed = parseSaveData(cloudData)
+    if (!parsed) return false
+    localStorage.setItem(`${SAVE_KEY_PREFIX}${slot}`, cloudData)
+    return true
+  }
+
+  /** 把本地指定槽位推送到云端 */
+  const syncToCloud = async (slot: number): Promise<boolean> => {
+    if (slot < 0 || slot >= MAX_SLOTS) return false
+    const raw = localStorage.getItem(`${SAVE_KEY_PREFIX}${slot}`)
+    if (!raw) return false
+    return uploadSave(slot, raw)
+  }
+
   return {
     activeSlot,
+    isCloudAvailable,
+    cloudSyncStatus,
     getSlots,
     assignNewSlot,
     saveToSlot,
@@ -313,6 +342,8 @@ export const useSaveStore = defineStore('save', () => {
     loadFromSlot,
     deleteSlot,
     exportSave,
-    importSave
+    importSave,
+    syncFromCloud,
+    syncToCloud
   }
 })

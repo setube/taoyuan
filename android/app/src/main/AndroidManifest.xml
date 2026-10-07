@@ -4,6 +4,12 @@
   <!-- 网络权限 -->
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <!-- TapTap 评价引导权限 -->
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+  <queries>
+    <package android:name="com.taptap" />
+  </queries>
 
   <application
     android:usesCleartextTraffic="true"

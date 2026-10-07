@@ -65,13 +65,51 @@
       </div>
 
       <!-- 导入存档 -->
-      <template v-if="!Capacitor.isNativePlatform()">
-        <Button class="text-center justify-center" :icon="Upload" @click="triggerImport">导入存档</Button>
+      <template v-if="!Capacitor.isNativePlatform()">        <Button class="text-center justify-center" :icon="Upload" @click="triggerImport">导入存档</Button>
         <input ref="fileInputRef" type="file" accept=".tyx" class="hidden" @change="handleImportFile" />
+      </template>
+      <!-- TapTap 登录（仅安卓） -->
+      <template v-if="Capacitor.isNativePlatform()">
+        <Button
+          v-if="!tapLoginStatus.loggedIn"
+          class="text-center justify-center"
+          :icon="UserRound"
+          :disabled="tapLoggingIn"
+          @click="handleTapLogin"
+        >{{ tapLoggingIn ? '登录中...' : 'TapTap 登录' }}</Button>
+        <div v-else class="flex space-x-1 w-full">
+          <div class="btn flex-1 text-sm text-muted flex items-center space-x-1 pointer-events-none">
+            <UserRound :size="12" />
+            <span>{{ tapLoginStatus.name || 'TapTap 用户' }}</span>
+          </div>
+          <Button class="px-2" @click="handleTapLogout">退出</Button>
+        </div>
+        <Button class="text-center justify-center text-muted" :icon="Star" @click="showReviewDialog = true">评价游戏</Button>
       </template>
       <!-- 关于 -->
       <Button class="text-center justify-center text-muted" :icon="Info" @click="showAbout = true">关于游戏</Button>
     </div>
+
+    <!-- 评价游戏弹窗（仅安卓） -->
+    <Transition name="panel-fade">
+      <div
+        v-if="showReviewDialog"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-bg/80"
+        @click.self="showReviewDialog = false"
+      >
+        <div class="game-panel w-full max-w-xs mx-4 text-center relative">
+          <button class="absolute top-2 right-2 text-muted hover:text-text" @click="showReviewDialog = false">
+            <X :size="14" />
+          </button>
+          <p class="text-accent text-sm mb-3">说说你的感受</p>
+          <p class="text-xs text-muted mb-4">桃源乡玩到这里，有什么想法都可以留在 TapTap——夸的骂的都行，认真看。</p>
+          <div class="flex space-x-3 justify-center">
+            <Button @click="showReviewDialog = false">取消</Button>
+            <Button class="px-6" :icon="Star" :icon-size="12" @click="handleRequestReview">去评价</Button>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
     <!-- 关于弹窗 -->
     <Transition name="panel-fade">
@@ -364,7 +402,7 @@
 </template>
 
 <script setup lang="ts">
-  import { Play, FolderOpen, ArrowLeft, Trash2, Download, Upload, Info, Settings, ShieldCheck, X, UserRound } from 'lucide-vue-next'
+  import { Play, FolderOpen, ArrowLeft, Trash2, Download, Upload, Info, Settings, ShieldCheck, X, UserRound, Star } from 'lucide-vue-next'
   import Button from '@/components/game/Button.vue'
   import Divider from '@/components/game/Divider.vue'
   import { ref, computed } from 'vue'
@@ -384,6 +422,8 @@
   import { useTutorialStore } from '@/stores/useTutorialStore'
   import type { FarmMapType, Gender } from '@/types'
   import { Capacitor } from '@capacitor/core'
+  import { useTapTapCloud } from '@/composables/useTapTapCloud'
+  import { onMounted } from 'vue'
 
   /** 是否在 Electron 桌面端 */
   const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.includes('Electron')
@@ -407,10 +447,41 @@
   const inventoryStore = useInventoryStore()
 
   const slots = ref(saveStore.getSlots())
+
+  // TapTap 登录状态（仅安卓端有效）
+  const { checkAvailability, login: tapLogin, logout: tapLogout, getLoginStatus, requestReview: tapRequestReview } = useTapTapCloud()
+  const tapLoginStatus = ref<{ loggedIn: boolean; name?: string }>({ loggedIn: false })
+  const tapLoggingIn = ref(false)
+
+  const handleTapLogin = async () => {
+    tapLoggingIn.value = true
+    const result = await tapLogin()
+    if (result.success) {
+      tapLoginStatus.value = { loggedIn: true, name: result.name }
+    }
+    tapLoggingIn.value = false
+  }
+
+  const handleTapLogout = async () => {
+    await tapLogout()
+    tapLoginStatus.value = { loggedIn: false }
+  }
+
+  const handleRequestReview = async () => {
+    showReviewDialog.value = false
+    await tapRequestReview()
+  }
+
+  onMounted(async () => {
+    if (checkAvailability()) {
+      tapLoginStatus.value = await getLoginStatus()
+    }
+  })
   const showCharCreate = ref(false)
   const showFarmSelect = ref(false)
   const showIdentitySetup = ref(false)
   const showAbout = ref(false)
+  const showReviewDialog = ref(false)
   const aboutTab = ref<'about' | 'author'>('about')
   const slotMenuOpen = ref<number | null>(null)
   const selectedMap = ref<FarmMapType>('standard')

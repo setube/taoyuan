@@ -68,6 +68,11 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
     implementation 'org.nanohttpd:nanohttpd:2.3.1'
+    // TDS SDK — 云存档 + TapTap 登录 + TapTap 评价
+    implementation 'com.taptap.sdk:tap-core:4.10.9'
+    implementation 'com.taptap.sdk:tap-login:4.10.9'
+    implementation 'com.taptap.sdk:tap-cloudsave:4.10.9'
+    implementation 'com.taptap.sdk:tap-review:4.10.9'
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
