@@ -474,11 +474,12 @@
 
   onMounted(async () => {
     if (checkAvailability()) {
-      // 隐私合规：已同意过隐私协议的老用户，补初始化 TDS SDK
       if (localStorage.getItem('taoyuan_privacy_agreed') === '1') {
+        // 已同意隐私协议：先初始化 SDK，再查询登录状态
         await tapInitSdk()
+        tapLoginStatus.value = await getLoginStatus()
       }
-      tapLoginStatus.value = await getLoginStatus()
+      // 未同意：不调用任何 SDK 接口，等用户同意后再初始化
     }
   })
   const showCharCreate = ref(false)
