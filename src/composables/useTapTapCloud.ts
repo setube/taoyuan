@@ -4,6 +4,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core'
 // ── Capacitor Plugin 接口声明 ────────────────────────────────────
 
 interface CloudSavePlugin {
+  initSdk(): Promise<{ success: boolean }>
   uploadSave(options: { slot: number; data: string }): Promise<{ success: boolean }>
   downloadSave(options: { slot: number }): Promise<{ data: string | null }>
   login(): Promise<{ success: boolean; name?: string }>
@@ -67,6 +68,17 @@ const downloadSave = async (slot: number): Promise<string | null> => {
   }
 }
 
+/** 初始化 TDS SDK（隐私合规：用户同意隐私协议后调用） */
+const initSdk = async (): Promise<boolean> => {
+  if (!checkAvailability()) return false
+  try {
+    const result = await CloudSave.initSdk()
+    return result.success
+  } catch {
+    return false
+  }
+}
+
 /** 发起 TapTap 登录 */
 const login = async (): Promise<{ success: boolean; name?: string }> => {
   if (!checkAvailability()) return { success: false }
@@ -113,6 +125,7 @@ export const useTapTapCloud = () => ({
   isCloudAvailable,
   cloudSyncStatus,
   checkAvailability,
+  initSdk,
   uploadSave,
   downloadSave,
   login,

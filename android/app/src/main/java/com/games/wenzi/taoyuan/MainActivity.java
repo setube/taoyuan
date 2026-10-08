@@ -14,17 +14,14 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.BridgeActivity;
-import com.taptap.sdk.core.TapTapSdk;
-import com.taptap.sdk.core.TapTapSdkOptions;
-import com.taptap.sdk.core.TapTapRegion;
 
 import java.util.Map;
 
 public class MainActivity extends BridgeActivity {
 
     private static final String TAG = "MainActivity";
-    private static final String CLIENT_ID = "ig7clxtyydtnq4s7mi";
-    private static final String CLIENT_TOKEN = "4fRyeIxwIfei5YnbrYlIOO3uK8b28krXR4PzWwpb";
+    static final String CLIENT_ID = "ig7clxtyydtnq4s7mi";
+    static final String CLIENT_TOKEN = "4fRyeIxwIfei5YnbrYlIOO3uK8b28krXR4PzWwpb";
 
     private View loadingOverlay;
     private View enterButton;
@@ -39,14 +36,6 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(CloudSavePlugin.class);
 
         super.onCreate(savedInstanceState);
-
-        // 初始化 TDS SDK
-        TapTapSdkOptions options = new TapTapSdkOptions(
-            CLIENT_ID,
-            CLIENT_TOKEN,
-            TapTapRegion.CN
-        );
-        TapTapSdk.init(this, options);
 
         // 沉浸式状态栏
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);

@@ -449,7 +449,7 @@
   const slots = ref(saveStore.getSlots())
 
   // TapTap 登录状态（仅安卓端有效）
-  const { checkAvailability, login: tapLogin, logout: tapLogout, getLoginStatus, requestReview: tapRequestReview } = useTapTapCloud()
+  const { checkAvailability, initSdk: tapInitSdk, login: tapLogin, logout: tapLogout, getLoginStatus, requestReview: tapRequestReview } = useTapTapCloud()
   const tapLoginStatus = ref<{ loggedIn: boolean; name?: string }>({ loggedIn: false })
   const tapLoggingIn = ref(false)
 
@@ -503,6 +503,8 @@
     localStorage.setItem('taoyuan_privacy_agreed', '1')
     showPrivacy.value = false
     showCharCreate.value = true
+    // 隐私合规：用户同意后再初始化 TDS SDK
+    tapInitSdk()
   }
 
   const handlePrivacyDecline = () => {

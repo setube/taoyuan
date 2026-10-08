@@ -7,6 +7,9 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.taptap.sdk.core.TapTapSdk;
+import com.taptap.sdk.core.TapTapSdkOptions;
+import com.taptap.sdk.core.TapTapRegion;
 import com.taptap.sdk.cloudsave.ArchiveData;
 import com.taptap.sdk.cloudsave.ArchiveMetadata;
 import com.taptap.sdk.cloudsave.TapTapCloudSave;
@@ -178,6 +181,18 @@ public class CloudSavePlugin extends Plugin {
             res.put("openId", account.getOpenId());
         }
         call.resolve(res);
+    }
+
+    // ── TDS SDK 初始化（隐私合规：用户同意隐私协议后由前端调用） ───────
+    @PluginMethod
+    public void initSdk(PluginCall call) {
+        TapTapSdkOptions options = new TapTapSdkOptions(
+            MainActivity.CLIENT_ID,
+            MainActivity.CLIENT_TOKEN,
+            TapTapRegion.CN
+        );
+        TapTapSdk.init(getContext(), options);
+        call.resolve(new JSObject().put("success", true));
     }
 
     // ── TapTap 评价引导 ───────────────────────────────────────────
