@@ -20,9 +20,6 @@ import java.util.Map;
 public class MainActivity extends BridgeActivity {
 
     private static final String TAG = "MainActivity";
-    static final String CLIENT_ID = "ig7clxtyydtnq4s7mi";
-    static final String CLIENT_TOKEN = "4fRyeIxwIfei5YnbrYlIOO3uK8b28krXR4PzWwpb";
-
     private View loadingOverlay;
     private View enterButton;
     private final Handler handler = new Handler(Looper.getMainLooper());
