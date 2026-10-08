@@ -32,12 +32,25 @@ public class CloudSavePlugin extends Plugin {
 
     @Override
     public void load() {
+        // 不在此处初始化 TDS SDK 或注册回调，等待用户同意隐私协议后由前端调用 initSdk()
+    }
+
+    // ── TDS SDK 初始化（隐私合规：用户同意隐私协议后由前端调用） ───────
+    @PluginMethod
+    public void initSdk(PluginCall call) {
+        TapTapSdkOptions options = new TapTapSdkOptions(
+            MainActivity.CLIENT_ID,
+            MainActivity.CLIENT_TOKEN,
+            TapTapRegion.CN
+        );
+        TapTapSdk.init(getContext(), options);
         TapTapCloudSave.registerCloudSaveCallback(new TapCloudSaveCallback() {
             @Override
             public void onResult(int resultCode) {
                 // 300001: 需要登录, 300002: 初始化失败
             }
         });
+        call.resolve(new JSObject().put("success", true));
     }
 
     // ── 上传存档 ──────────────────────────────────────────────────

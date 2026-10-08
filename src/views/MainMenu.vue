@@ -474,6 +474,10 @@
 
   onMounted(async () => {
     if (checkAvailability()) {
+      // 隐私合规：已同意过隐私协议的老用户，补初始化 TDS SDK
+      if (localStorage.getItem('taoyuan_privacy_agreed') === '1') {
+        await tapInitSdk()
+      }
       tapLoginStatus.value = await getLoginStatus()
     }
   })
