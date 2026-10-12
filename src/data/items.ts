@@ -1482,7 +1482,7 @@ const FEED_ITEMS: ItemDef[] = [
     name: '精饲料',
     category: 'material',
     description: '精心配制的优质饲料，显著提升动物心情和好感度。',
-    sellPrice: 40,
+    sellPrice: 150,
     edible: false
   },
   {
@@ -1490,7 +1490,7 @@ const FEED_ITEMS: ItemDef[] = [
     name: '滋补饲料',
     category: 'material',
     description: '添加滋补成分的饲料，加速动物产出周期。',
-    sellPrice: 50,
+    sellPrice: 180,
     edible: false
   },
   {
@@ -1498,7 +1498,7 @@ const FEED_ITEMS: ItemDef[] = [
     name: '活力饲料',
     category: 'material',
     description: '含有草药精华的饲料，喂食后必定治愈疾病。',
-    sellPrice: 60,
+    sellPrice: 200,
     edible: false
   }
 ]
@@ -2036,7 +2036,7 @@ export const ITEMS: ItemDef[] = [
     name: '仙人掌果酱',
     category: 'processed',
     description: '酸甜可口的沙漠果酱。',
-    sellPrice: 400,
+    sellPrice: 1800,
     edible: true,
     staminaRestore: 35,
     healthRestore: 15
@@ -2046,7 +2046,7 @@ export const ITEMS: ItemDef[] = [
     name: '仙人掌酒',
     category: 'processed',
     description: '西域特色佳酿。',
-    sellPrice: 800,
+    sellPrice: 2600,
     edible: true,
     staminaRestore: 30,
     healthRestore: 20
@@ -2056,7 +2056,7 @@ export const ITEMS: ItemDef[] = [
     name: '椰枣酒',
     category: 'processed',
     description: '甘醇滋补的枣酿。',
-    sellPrice: 650,
+    sellPrice: 1800,
     edible: true,
     staminaRestore: 25,
     healthRestore: 15

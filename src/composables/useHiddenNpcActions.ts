@@ -10,7 +10,7 @@ export const doOffering = (npcId: string, itemId: string, quality: Quality): boo
   const result = hiddenNpcStore.performOffering(npcId, itemId, quality)
   if (result.success) {
     const gameStore = useGameStore()
-    gameStore.advanceTime(30)
+    gameStore.advanceTime(0.5)
     if (result.affinityChange > 0) {
       showFloat(`+${result.affinityChange}缘分`, 'accent')
     } else if (result.affinityChange < 0) {
@@ -31,7 +31,7 @@ export const doSpecialInteraction = (npcId: string): boolean => {
   const result = hiddenNpcStore.performSpecialInteraction(npcId)
   if (result.success) {
     const gameStore = useGameStore()
-    gameStore.advanceTime(60)
+    gameStore.advanceTime(1)
     showFloat(`+${result.affinityChange}缘分`, 'accent')
     addLog(result.message)
   } else {

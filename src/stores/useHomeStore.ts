@@ -227,11 +227,7 @@ export const useHomeStore = defineStore('home', () => {
     if (index < 0 || index >= cellarSlots.value.length) return null
     const slot = cellarSlots.value[index]!
     cellarSlots.value.splice(index, 1)
-    // 增值铜钱直接入账
-    if (slot.addedValue > 0) {
-      const playerStore = usePlayerStore()
-      playerStore.earnMoney(slot.addedValue)
-    }
+    // 增值反映在物品上，由调用方写入 addedValue 字段并通过出售兑现，不在此处直接给铜钱
     return {
       itemId: slot.itemId,
       quality: slot.originalQuality,

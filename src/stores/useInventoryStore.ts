@@ -217,7 +217,7 @@ export const useInventoryStore = defineStore('inventory', () => {
   }
 
   /** 添加物品到背包 */
-  const addItem = (itemId: string, quantity: number = 1, quality: Quality = 'normal'): boolean => {
+  const addItem = (itemId: string, quantity: number = 1, quality: Quality = 'normal', addedValue?: number): boolean => {
     // 校验物品是否存在
     if (!getItemById(itemId)) return false
     // 自动注册到图鉴
@@ -231,21 +231,30 @@ export const useInventoryStore = defineStore('inventory', () => {
 
     let remaining = quantity
 
-    // 先填充已有的同类栈
-    for (const slot of items.value) {
-      if (remaining <= 0) break
-      if (slot.itemId === itemId && slot.quality === quality && slot.quantity < MAX_STACK) {
-        const canAdd = Math.min(remaining, MAX_STACK - slot.quantity)
-        slot.quantity += canAdd
-        remaining -= canAdd
+    // 带陈酿增值的物品不合并入已有栈（保持增值独立），直接创建新栈
+    if (addedValue && addedValue > 0) {
+      while (remaining > 0 && !isFull.value) {
+        const batch = Math.min(remaining, MAX_STACK)
+        items.value.push({ itemId, quantity: batch, quality, addedValue })
+        remaining -= batch
       }
-    }
+    } else {
+      // 先填充已有的同类栈（无增值）
+      for (const slot of items.value) {
+        if (remaining <= 0) break
+        if (slot.itemId === itemId && slot.quality === quality && !slot.addedValue && slot.quantity < MAX_STACK) {
+          const canAdd = Math.min(remaining, MAX_STACK - slot.quantity)
+          slot.quantity += canAdd
+          remaining -= canAdd
+        }
+      }
 
-    // 剩余部分创建新栈
-    while (remaining > 0 && !isFull.value) {
-      const batch = Math.min(remaining, MAX_STACK)
-      items.value.push({ itemId, quantity: batch, quality })
-      remaining -= batch
+      // 剩余部分创建新栈
+      while (remaining > 0 && !isFull.value) {
+        const batch = Math.min(remaining, MAX_STACK)
+        items.value.push({ itemId, quantity: batch, quality })
+        remaining -= batch
+      }
     }
 
     // 溢出到临时背包

@@ -525,7 +525,7 @@
             已成为陈酿{{ Math.floor(removeAgingConfirmSlot.upgradeCount / 16) }}年，取出将点亮图鉴！
           </p>
           <p v-if="removeAgingConfirmSlot.addedValue > 0" class="text-xs text-accent mb-4">
-            取出时将获得{{ removeAgingConfirmSlot.addedValue }}文增值铜钱。
+            取出后卖出价将提升 +{{ removeAgingConfirmSlot.addedValue }}文/件。
           </p>
           <p v-else class="text-xs text-muted mb-4">尚未增值，满7天可提升价值。</p>
           <div class="flex space-x-3 justify-center">
@@ -888,12 +888,12 @@
     const remainingDays = slotBeforeRemove?.daysAging ?? 0
     const result = homeStore.removeAging(index)
     if (result) {
-      inventoryStore.addItem(result.itemId, 1, result.quality)
+      inventoryStore.addItem(result.itemId, 1, result.quality, result.addedValue > 0 ? result.addedValue : undefined)
       const name = getItemName(result.itemId)
       const totalDays = result.upgradeCount * 7 + remainingDays
       let msg = `从酒窖取出了${name}`
       if (result.addedValue > 0) {
-        msg += `（陈酿${totalDays}天，增值+${result.addedValue}文）`
+        msg += `（陈酿${totalDays}天，卖出价+${result.addedValue}文）`
       }
       addLog(msg + '。')
       // 满1年点亮图鉴

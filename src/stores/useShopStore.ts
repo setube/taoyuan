@@ -326,8 +326,19 @@ export const useShopStore = defineStore('shop', () => {
   const sellItem = (itemId: string, quantity: number = 1, quality: Quality = 'normal'): number => {
     // 限定物品一律不收：误卖会直接卡死进度
     if (isProtectedItem(itemId)) return 0
+    // 卖出前先收集陈酿增值（按将消耗的 slot 计算）
+    const pool = inventoryStore.items
+    let remainingToCount = quantity
+    let totalAddedValue = 0
+    for (let i = pool.length - 1; i >= 0 && remainingToCount > 0; i--) {
+      const slot = pool[i]!
+      if (slot.itemId !== itemId || slot.quality !== quality) continue
+      const take = Math.min(remainingToCount, slot.quantity)
+      totalAddedValue += (slot.addedValue ?? 0) * take
+      remainingToCount -= take
+    }
     if (!inventoryStore.removeItem(itemId, quantity, quality)) return 0
-    const totalPrice = calculateSellPrice(itemId, quantity, quality)
+    const totalPrice = calculateSellPrice(itemId, quantity, quality) + totalAddedValue
     playerStore.earnMoney(totalPrice)
     return totalPrice
   }

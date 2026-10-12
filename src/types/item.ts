@@ -55,6 +55,8 @@ export interface InventoryItem {
   quantity: number
   quality: Quality
   locked?: boolean
+  /** 酒窖陈酿增值（文），出售时按每件叠加此值 */
+  addedValue?: number
 }
 
 /** 工具等级 */

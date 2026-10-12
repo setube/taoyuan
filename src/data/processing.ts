@@ -1753,7 +1753,7 @@ export const PROCESSING_RECIPES: ProcessingRecipeDef[] = [
     outputItemId: 'brocade',
     outputQuantity: 1,
     processingDays: 2,
-    description: '将丝绸织成上等华丽的锦缎。'
+    description: '将瀚海丝绸织成上等华丽的锦缎。'
   },
   {
     id: 'brew_spice_tea',

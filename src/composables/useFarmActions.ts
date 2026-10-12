@@ -522,8 +522,8 @@ export const handleBatchHarvest = () => {
       const intensiveDouble = skillStore.getSkill('farming').perk10 === 'intensive' && Math.random() < 0.2
       const yieldDouble = genetics && !intensiveDouble && Math.random() < (genetics.yield / 100) * 0.3
       const standardDouble = !intensiveDouble && !yieldDouble && gameStore.farmMapType === 'standard' && Math.random() < 0.15
-      // 地块等级：每级额外 +1（同作物同品质）
-      const harvestQty = (intensiveDouble || yieldDouble || standardDouble ? 2 : 1) + result.bonus
+      // 地块等级：直接读 plot.level，避免 harvestPlot 内部按 id 做二次下标查找时可能取到错误地块
+      const harvestQty = (intensiveDouble || yieldDouble || standardDouble ? 2 : 1) + plot.level
       inventoryStore.addItem(cropId, harvestQty, quality)
       achievementStore.discoverItem(cropId)
       achievementStore.recordCropHarvest()
