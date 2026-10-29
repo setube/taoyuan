@@ -1,6 +1,39 @@
 import { useInventoryStore } from '@/stores/useInventoryStore'
 import { useWarehouseStore } from '@/stores/useWarehouseStore'
-import type { Quality } from '@/types'
+import { getItemById } from '@/data/items'
+import { getAddedValue } from '@/composables/useItemStacks'
+import type { InventoryItem, Quality } from '@/types'
+
+/** 背包 + 仓库按物品、品质合计的一条 */
+export interface CombinedStack {
+  itemId: string
+  quality: Quality
+  quantity: number
+}
+
+/** 背包 + 仓库所有箱子按物品、品质合计（背包里有的排在前面） */
+export const getCombinedStacks = (filter: (stack: InventoryItem) => boolean): CombinedStack[] => {
+  const inv = useInventoryStore()
+  const wh = useWarehouseStore()
+  const totals = new Map<string, CombinedStack>()
+  const pools = wh.unlocked ? [inv.items, ...wh.chests.map(c => c.items)] : [inv.items]
+  for (const pool of pools) {
+    for (const stack of pool) {
+      if (!filter(stack)) continue
+      const key = `${stack.itemId}:${stack.quality}`
+      const prev = totals.get(key)
+      totals.set(key, { itemId: stack.itemId, quality: stack.quality, quantity: (prev?.quantity ?? 0) + stack.quantity })
+    }
+  }
+  return [...totals.values()]
+}
+
+/** 可送礼、供奉的物品：背包+仓库合计，种子除外 */
+export const getGiftableStacks = (): CombinedStack[] =>
+  getCombinedStacks(stack => {
+    const def = getItemById(stack.itemId)
+    return !!def && def.category !== 'seed'
+  })
 
 /** 合计背包 + 仓库所有箱子中某物品数量 */
 export const getCombinedItemCount = (itemId: string, quality?: Quality): number => {
@@ -18,59 +51,67 @@ export const getCombinedItemCount = (itemId: string, quality?: Quality): number 
 /** 背包+仓库所有箱子是否合计拥有足够数量 */
 export const hasCombinedItem = (itemId: string, quantity: number = 1): boolean => getCombinedItemCount(itemId) >= quantity
 
-/** 优先从背包消耗，不足部分从仓库箱子消耗（虚空原料箱优先） */
+const QUALITY_ORDER: Quality[] = ['normal', 'fine', 'excellent', 'supreme']
+
+/** 参与合计扣除的箱子：虚空原料箱在前，其余按顺序（仓库未解锁时为空） */
+const getConsumeChests = () => {
+  const wh = useWarehouseStore()
+  if (!wh.unlocked) return []
+  const voidInput = wh.getVoidInputChest()
+  return voidInput ? [voidInput, ...wh.chests.filter(c => c.id !== voidInput.id)] : [...wh.chests]
+}
+
+/** 背包、箱子里该物品出现过的陈酿增值档（含 0），从低到高 */
+const getAddedValueTiers = (itemId: string, chests: { items: InventoryItem[] }[]): number[] => {
+  const values = [useInventoryStore().items, ...chests.map(c => c.items)].flatMap(pool =>
+    pool.filter(s => s.itemId === itemId).map(getAddedValue)
+  )
+  return [...new Set([0, ...values])].sort((a, b) => a - b)
+}
+
+/**
+ * 背包+仓库合计扣除。无陈酿增值的先用，再按增值从低到高；不指定品质时同一增值内从低品质用起。
+ * 同一档内按背包 → 虚空原料箱 → 其余箱子扣，仓库里还有普通的酒时不会先用掉背包里的陈酿酒。
+ */
 export const removeCombinedItem = (itemId: string, quantity: number = 1, quality?: Quality): boolean => {
+  if (getCombinedItemCount(itemId, quality) < quantity) return false
+
   const inv = useInventoryStore()
   const wh = useWarehouseStore()
-
-  // 统计总数
-  const invCount = inv.getItemCount(itemId, quality)
-  let warehouseTotal = 0
-  const chestCounts: { id: string; count: number }[] = []
-  if (wh.unlocked) {
-    // 虚空原料箱排在最前面优先消耗
-    const voidInput = wh.getVoidInputChest()
-    const ordered = voidInput ? [voidInput, ...wh.chests.filter(c => c.id !== voidInput.id)] : [...wh.chests]
-    for (const chest of ordered) {
-      const cnt = wh.getChestItemCount(chest.id, itemId, quality)
-      if (cnt > 0) {
-        chestCounts.push({ id: chest.id, count: cnt })
-        warehouseTotal += cnt
-      }
-    }
-  }
-
-  if (invCount + warehouseTotal < quantity) return false
-
+  const chests = getConsumeChests()
+  const qualities = quality !== undefined ? [quality] : QUALITY_ORDER
   let remaining = quantity
-  // 先从背包消耗
-  const fromInv = Math.min(remaining, invCount)
-  if (fromInv > 0) {
-    inv.removeItem(itemId, fromInv, quality)
-    remaining -= fromInv
-  }
-  // 再从箱子消耗（虚空原料箱已排在前面）
-  for (const cc of chestCounts) {
-    if (remaining <= 0) break
-    const take = Math.min(remaining, cc.count)
-    wh.removeItemFromChest(cc.id, itemId, take, quality)
-    remaining -= take
+  for (const tier of getAddedValueTiers(itemId, chests)) {
+    for (const q of qualities) {
+      const fromInv = Math.min(remaining, inv.getItemCount(itemId, q, tier))
+      if (fromInv > 0) {
+        inv.removeItem(itemId, fromInv, q, tier)
+        remaining -= fromInv
+      }
+      for (const chest of chests) {
+        if (remaining <= 0) return true
+        const take = Math.min(remaining, wh.getChestItemCount(chest.id, itemId, q, tier))
+        if (take > 0) {
+          wh.removeItemFromChest(chest.id, itemId, take, q, tier)
+          remaining -= take
+        }
+      }
+      if (remaining <= 0) return true
+    }
   }
 
   return true
 }
 
-/** 查找背包+仓库所有箱子中某物品的最低品质 */
+/** 背包+仓库里最先会被 removeCombinedItem 用掉的那件的品质（最低增值档里的最低品质） */
 export const getLowestCombinedQuality = (itemId: string): Quality => {
   const inv = useInventoryStore()
   const wh = useWarehouseStore()
-  const order: Quality[] = ['normal', 'fine', 'excellent', 'supreme']
-  for (const q of order) {
-    if (inv.getItemCount(itemId, q) > 0) return q
-    if (wh.unlocked) {
-      for (const chest of wh.chests) {
-        if (wh.getChestItemCount(chest.id, itemId, q) > 0) return q
-      }
+  const chests = getConsumeChests()
+  for (const tier of getAddedValueTiers(itemId, chests)) {
+    for (const q of QUALITY_ORDER) {
+      if (inv.getItemCount(itemId, q, tier) > 0) return q
+      if (chests.some(c => wh.getChestItemCount(c.id, itemId, q, tier) > 0)) return q
     }
   }
   return 'normal'

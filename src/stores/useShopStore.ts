@@ -8,12 +8,18 @@ import { useWalletStore } from './useWalletStore'
 import { getCropsBySeason, getItemById } from '@/data'
 import { isProtectedItem } from '@/data/items'
 import { BAITS, TACKLES, FERTILIZERS } from '@/data/processing'
-import { isTravelingMerchantDay, generateMerchantStock, TRAVELING_MERCHANT_POOL } from '@/data/travelingMerchant'
+import { FRUIT_TREE_DEFS } from '@/data/fruitTrees'
+import { WEATHER_TOTEMS } from '@/data/totems'
+import { FEED_DEFS, HAY_ITEM_ID, HAY_PRICE, getFeedPrice } from '@/data/animals'
+import { HANHAI_SHOP_ITEMS } from '@/data/hanhai'
+import { GUILD_SHOP_ITEMS } from '@/data/guild'
+import { isTravelingMerchantDay, generateMerchantStock, getMerchantPriceFloor, TRAVELING_MERCHANT_POOL } from '@/data/travelingMerchant'
 import { getMarketMultiplier } from '@/data/market'
 import type { MarketCategory } from '@/data/market'
 import type { TravelingMerchantStock } from '@/data/travelingMerchant'
-import type { Quality } from '@/types'
+import type { InventoryItem, Quality } from '@/types'
 import { useHiddenNpcStore } from './useHiddenNpcStore'
+import { normalizeAddedValue, getAddedValue, isSameStack, makeStack, getStackSpace } from '@/composables/useItemStacks'
 
 /** 商铺商品项 */
 export interface ShopItemEntry {
@@ -102,7 +108,7 @@ export const useShopStore = defineStore('shop', () => {
     {
       itemId: 'charcoal',
       name: '木炭',
-      price: 100,
+      price: 170,
       description: '烧制的木炭，冶炼的燃料'
     }
   ])
@@ -136,19 +142,19 @@ export const useShopStore = defineStore('shop', () => {
     {
       itemId: 'premium_feed',
       name: '精饲料',
-      price: 200,
+      price: getFeedPrice('premium_feed'),
       description: '提升动物心情和好感'
     },
     {
       itemId: 'nourishing_feed',
       name: '滋补饲料',
-      price: 250,
+      price: getFeedPrice('nourishing_feed'),
       description: '加速动物产出'
     },
     {
       itemId: 'vitality_feed',
       name: '活力饲料',
-      price: 300,
+      price: getFeedPrice('vitality_feed'),
       description: '喂食必定治愈疾病'
     },
     {
@@ -203,7 +209,7 @@ export const useShopStore = defineStore('shop', () => {
     {
       itemId: 'cloth',
       name: '布匹',
-      price: 1200,
+      price: 1650,
       description: '用羊毛纺织的布匹'
     },
     {
@@ -215,13 +221,13 @@ export const useShopStore = defineStore('shop', () => {
     {
       itemId: 'alpaca_cloth',
       name: '羊驼绒',
-      price: 900,
+      price: 1220,
       description: '极其柔软的羊驼绒布'
     },
     {
       itemId: 'felt',
       name: '毛毡',
-      price: 600,
+      price: 790,
       description: '用兔毛压制的毛毡'
     },
     {
@@ -257,10 +263,49 @@ export const useShopStore = defineStore('shop', () => {
     {
       itemId: 'osmanthus_incense',
       name: '桂花香',
-      price: 800,
+      price: 1940,
       description: '馥郁的桂花香'
     }
   ])
+
+  // === 回收价封顶（防倒买倒卖） ===
+
+  /**
+   * 玩家能拿到的最低买入折扣：钱袋 10% × 装备满强化 46% × 狐眼 5% ≈ 0.4617。
+   * 商店卖的东西，普通品质回收价不超过「标价 × 此值」，任何加成和行情都无法买进卖出套利。
+   */
+  const RESALE_CAP_RATE = 0.46
+
+  /** 固定价格出售的物品 → 普通品质单件回收上限（多处有售取最低） */
+  const resaleCaps = computed(() => {
+    const caps = new Map<string, number>()
+    /** discountable：该处购买是否吃商店折扣（瀚海、公会、畜棚直购不打折） */
+    const addCap = (itemId: string, price: number, discountable: boolean = true) => {
+      if (price <= 0) return
+      const cap = Math.floor(price * (discountable ? RESALE_CAP_RATE : 1))
+      caps.set(itemId, Math.min(caps.get(itemId) ?? cap, cap))
+    }
+    for (const list of [blacksmithItems.value, apothecaryItems.value, fishingShopItems.value, textileItems.value]) {
+      for (const entry of list) addCap(entry.itemId, entry.price)
+    }
+    for (const f of shopFertilizers.value) addCap(f.id, f.price)
+    for (const b of shopBaits.value) addCap(b.id, b.price)
+    for (const t of shopTackles.value) addCap(t.id, t.price)
+    for (const t of FRUIT_TREE_DEFS) addCap(t.saplingId, t.saplingPrice)
+    for (const t of WEATHER_TOTEMS) addCap(t.id, t.price)
+    addCap(HAY_ITEM_ID, HAY_PRICE)
+    for (const f of FEED_DEFS) addCap(f.id, f.price, false)
+    for (const h of HANHAI_SHOP_ITEMS) addCap(h.itemId, h.price, false)
+    for (const g of GUILD_SHOP_ITEMS) if (!g.contributionCost) addCap(g.itemId, g.price, false)
+    return caps
+  })
+
+  /** 普通品质且商店有售时，回收总价不超过封顶 */
+  const applyResaleCap = (itemId: string, quantity: number, quality: Quality, price: number): number => {
+    if (quality !== 'normal') return price
+    const cap = resaleCaps.value.get(itemId)
+    return cap === undefined ? price : Math.min(price, cap * quantity)
+  }
 
   // === 通用购买/出售 ===
 
@@ -269,7 +314,7 @@ export const useShopStore = defineStore('shop', () => {
     if (
       !inventoryStore.isSeedItem(itemId) &&
       inventoryStore.isAllFull &&
-      !inventoryStore.items.some(s => s.itemId === itemId && s.quantity + quantity <= 999)
+      !inventoryStore.items.some(s => s.itemId === itemId && !getAddedValue(s) && s.quantity + quantity <= 999)
     ) {
       return false
     }
@@ -308,37 +353,28 @@ export const useShopStore = defineStore('shop', () => {
     return Math.floor(itemDef.sellPrice * quantity * qualityMultiplier[quality] * bonus * (1 + ringSelBonus) * (1 + spiritSellBonus))
   }
 
-  /** 计算物品售价（不执行出售，用于估价） */
-  const calculateSellPrice = (itemId: string, quantity: number, quality: Quality): number => {
+  /** 计算物品售价（不执行出售，用于估价）。addedValue 为每件陈酿增值，按原值叠加，不受行情影响 */
+  const calculateSellPrice = (itemId: string, quantity: number, quality: Quality, addedValue: number = 0): number => {
     const itemDef = getItemById(itemId)
     if (!itemDef) return 0
     const recentVolume = getRecentShipping()[itemDef.category as MarketCategory] ?? 0
     const marketMultiplier = getMarketMultiplier(itemDef.category, gameStore.year, gameStore.seasonIndex, gameStore.day, recentVolume)
-    return Math.floor(_basePrice(itemId, quantity, quality) * marketMultiplier)
+    const price = Math.floor(_basePrice(itemId, quantity, quality) * marketMultiplier)
+    return applyResaleCap(itemId, quantity, quality, price) + quantity * normalizeAddedValue(addedValue)
   }
 
   /** 计算不含行情的基础售价（用于显示原价） */
-  const calculateBaseSellPrice = (itemId: string, quantity: number, quality: Quality): number => {
-    return _basePrice(itemId, quantity, quality)
+  const calculateBaseSellPrice = (itemId: string, quantity: number, quality: Quality, addedValue: number = 0): number => {
+    return applyResaleCap(itemId, quantity, quality, _basePrice(itemId, quantity, quality)) + quantity * normalizeAddedValue(addedValue)
   }
 
-  /** 出售物品，返回实际售价（0表示失败） */
-  const sellItem = (itemId: string, quantity: number = 1, quality: Quality = 'normal'): number => {
+  /** 出售物品，返回实际售价（0表示失败）。addedValue 指定出售哪一种陈酿增值的栈 */
+  const sellItem = (itemId: string, quantity: number = 1, quality: Quality = 'normal', addedValue: number = 0): number => {
     // 限定物品一律不收：误卖会直接卡死进度
     if (isProtectedItem(itemId)) return 0
-    // 卖出前先收集陈酿增值（按将消耗的 slot 计算）
-    const pool = inventoryStore.items
-    let remainingToCount = quantity
-    let totalAddedValue = 0
-    for (let i = pool.length - 1; i >= 0 && remainingToCount > 0; i--) {
-      const slot = pool[i]!
-      if (slot.itemId !== itemId || slot.quality !== quality) continue
-      const take = Math.min(remainingToCount, slot.quantity)
-      totalAddedValue += (slot.addedValue ?? 0) * take
-      remainingToCount -= take
-    }
-    if (!inventoryStore.removeItem(itemId, quantity, quality)) return 0
-    const totalPrice = calculateSellPrice(itemId, quantity, quality) + totalAddedValue
+    const added = normalizeAddedValue(addedValue)
+    if (!inventoryStore.removeItem(itemId, quantity, quality, added)) return 0
+    const totalPrice = calculateSellPrice(itemId, quantity, quality, added)
     playerStore.earnMoney(totalPrice)
     return totalPrice
   }
@@ -350,10 +386,17 @@ export const useShopStore = defineStore('shop', () => {
 
   const isMerchantHere = computed(() => isTravelingMerchantDay(gameStore.day))
 
+  /** 旅商售价下限：回收已封顶的物品按封顶反推（约等于商店原价），其余按出售价的安全倍数 */
+  const merchantPriceFloor = (itemId: string, sellPrice: number): number => {
+    const floor = getMerchantPriceFloor(sellPrice)
+    const cap = resaleCaps.value.get(itemId)
+    return cap === undefined ? floor : Math.min(floor, Math.ceil(cap / RESALE_CAP_RATE))
+  }
+
   const refreshMerchantStock = () => {
     const key = `${gameStore.year}_${gameStore.seasonIndex}_${gameStore.day}`
     if (travelingStockKey.value === key) return
-    travelingStock.value = generateMerchantStock(gameStore.year, gameStore.seasonIndex, gameStore.day, gameStore.season)
+    travelingStock.value = generateMerchantStock(gameStore.year, gameStore.seasonIndex, gameStore.day, gameStore.season, merchantPriceFloor)
     // 仙缘能力：狐运（hu_xian_3）旅行商人多1件稀有品
     if (useHiddenNpcStore().isAbilityActive('hu_xian_3')) {
       const existingIds = new Set(travelingStock.value.map(s => s.itemId))
@@ -362,7 +405,7 @@ export const useShopStore = defineStore('shop', () => {
         const pick = available[Math.floor(Math.random() * available.length)]!
         const def = getItemById(pick.itemId)
         let price = pick.basePrice
-        if (def && def.sellPrice > 0) price = Math.max(price, def.sellPrice * 2)
+        if (def && def.sellPrice > 0) price = Math.max(price, merchantPriceFloor(pick.itemId, def.sellPrice))
         travelingStock.value.push({
           itemId: pick.itemId,
           name: pick.name,
@@ -380,7 +423,7 @@ export const useShopStore = defineStore('shop', () => {
     if (
       !inventoryStore.isSeedItem(itemId) &&
       inventoryStore.isAllFull &&
-      !inventoryStore.items.some(s => s.itemId === itemId && s.quantity < 999)
+      !inventoryStore.items.some(s => s.itemId === itemId && !getAddedValue(s) && s.quantity < 999)
     ) {
       return false
     }
@@ -396,42 +439,35 @@ export const useShopStore = defineStore('shop', () => {
 
   // === 出货箱 ===
 
-  /** 出货箱中的物品 */
-  const shippingBox = ref<{ itemId: string; quantity: number; quality: Quality }[]>([])
+  /** 出货箱中的物品（addedValue：每件陈酿增值） */
+  const shippingBox = ref<InventoryItem[]>([])
 
   /** 添加物品到出货箱 */
-  const addToShippingBox = (itemId: string, quantity: number, quality: Quality): boolean => {
+  const addToShippingBox = (itemId: string, quantity: number, quality: Quality, addedValue: number = 0): boolean => {
     // 出货箱等同于隔夜出售，同样要挡住限定物品
     if (isProtectedItem(itemId)) return false
-    if (!inventoryStore.removeItem(itemId, quantity, quality)) return false
-    const existing = shippingBox.value.find(s => s.itemId === itemId && s.quality === quality)
+    const added = normalizeAddedValue(addedValue)
+    if (!inventoryStore.removeItem(itemId, quantity, quality, added)) return false
+    const existing = shippingBox.value.find(s => isSameStack(s, itemId, quality, added))
     if (existing) {
       existing.quantity += quantity
     } else {
-      shippingBox.value.push({ itemId, quantity, quality })
+      shippingBox.value.push(makeStack(itemId, quantity, quality, added))
     }
     return true
   }
 
   /** 从出货箱取回物品 */
-  const removeFromShippingBox = (itemId: string, quantity: number, quality: Quality): boolean => {
-    const idx = shippingBox.value.findIndex(s => s.itemId === itemId && s.quality === quality)
+  const removeFromShippingBox = (itemId: string, quantity: number, quality: Quality, addedValue: number = 0): boolean => {
+    const added = normalizeAddedValue(addedValue)
+    const idx = shippingBox.value.findIndex(s => isSameStack(s, itemId, quality, added))
     if (idx === -1) return false
     const entry = shippingBox.value[idx]!
     if (entry.quantity < quantity) return false
     // 先计算背包可用空间，避免 addItem 部分添加的副作用（种子回种子袋，不受格数限制）
-    const MAX_STACK = 999
-    let space = 0
-    if (inventoryStore.isSeedItem(itemId)) {
-      space = quantity
-    } else {
-      for (const s of inventoryStore.items) {
-        if (s.itemId === itemId && s.quality === quality && s.quantity < MAX_STACK) {
-          space += MAX_STACK - s.quantity
-        }
-      }
-      space += (inventoryStore.capacity - inventoryStore.items.length) * MAX_STACK
-    }
+    const space = inventoryStore.isSeedItem(itemId)
+      ? quantity
+      : getStackSpace(inventoryStore.items, inventoryStore.capacity, itemId, quality, added)
     const toTransfer = Math.min(quantity, space)
     if (toTransfer <= 0) return false
     // 先从出货箱移除，再添加到背包
@@ -439,7 +475,7 @@ export const useShopStore = defineStore('shop', () => {
     if (entry.quantity <= 0) {
       shippingBox.value.splice(idx, 1)
     }
-    inventoryStore.addItem(itemId, toTransfer, quality)
+    inventoryStore.addItem(itemId, toTransfer, quality, added)
     return true
   }
 
@@ -451,7 +487,7 @@ export const useShopStore = defineStore('shop', () => {
       ...(shippingHistory.value[dayKey] ?? {})
     }
     for (const entry of shippingBox.value) {
-      total += calculateSellPrice(entry.itemId, entry.quantity, entry.quality)
+      total += calculateSellPrice(entry.itemId, entry.quantity, entry.quality, getAddedValue(entry))
       // 记录出货收集
       if (!shippedItems.value.includes(entry.itemId)) {
         shippedItems.value.push(entry.itemId)
@@ -553,6 +589,7 @@ export const useShopStore = defineStore('shop', () => {
     calculateBaseSellPrice,
     // 旅行商人
     travelingStock,
+    travelingStockKey,
     isMerchantHere,
     refreshMerchantStock,
     buyFromTraveler,
@@ -564,6 +601,7 @@ export const useShopStore = defineStore('shop', () => {
     // 出货收集
     shippedItems,
     // 行情供需
+    shippingHistory,
     getRecentShipping,
     // 序列化
     serialize,

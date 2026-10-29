@@ -22,7 +22,7 @@ import { useTutorialStore } from '@/stores/useTutorialStore'
 import { useSettingsStore } from '@/stores/useSettingsStore'
 import { useHiddenNpcStore } from '@/stores/useHiddenNpcStore'
 import { useMiningStore } from '@/stores/useMiningStore'
-import { getItemById, getTodayEvent, getNpcById, getCropById, getForageItems } from '@/data'
+import { getItemById, getTodayEvent, getNpcById, getCropById, getForageItems, formatFeedUsage } from '@/data'
 import { getFertilizerById } from '@/data/processing'
 import { FISH } from '@/data/fish'
 import { RECIPES } from '@/data/recipes'
@@ -558,11 +558,17 @@ export const handleEndDay = () => {
     addLog(`巨型${gc.cropName}出现了！3×3的作物合体成了巨型作物！`)
   }
 
-  // 雇工喂食结算（必须在 animalStore.dailyUpdate 之前，确保喂食状态生效）
-  // 每天仅消耗一次草料：此处喂食用于过夜检查，dailyUpdate 后用 markAllFed 标记新一天
-  const helperFeedResult = npcStore.processDailyHelpers(['feed'])
-  for (const msg of helperFeedResult.messages) addLog(msg)
-  const helperFeedSuccess = helperFeedResult.allFed
+  // 喂食雇工每天早上按默认饲料喂、早上结工钱（见下方晨间工作）；
+  // 这里只补喂当天还没喂的牲畜（如新买的）。必须在 animalStore.dailyUpdate 之前，确保喂食状态生效
+  const feedHelper = npcStore.hiredHelpers.find(h => h.task === 'feed')
+  let helperFeedSuccess = false
+  if (feedHelper) {
+    const result = animalStore.feedAll()
+    if (result.fedCount > 0) {
+      addLog(`${getNpcById(feedHelper.npcId)?.name ?? '雇工'}补喂了${result.fedCount}只牲畜（${formatFeedUsage(result.used)}）。`)
+    }
+    helperFeedSuccess = result.noFeedCount === 0
+  }
 
   const spouse = npcStore.getSpouse()
   let spouseFedSuccess = false
@@ -570,13 +576,12 @@ export const handleEndDay = () => {
     const bonusChanceEve = spouse.friendship >= 2500 ? 0.1 : 0
     if (Math.random() < 0.4 + bonusChanceEve) {
       const result = animalStore.feedAll()
+      const spouseNameEve = getNpcById(spouse.npcId)?.name ?? '配偶'
       if (result.fedCount > 0) {
-        const spouseDefEve = getNpcById(spouse.npcId)
-        addLog(`${spouseDefEve?.name ?? '配偶'}帮你喂了所有牲畜。`)
+        addLog(`${spouseNameEve}帮你喂了${result.fedCount}只牲畜（${formatFeedUsage(result.used)}）。`)
         spouseFedSuccess = result.noFeedCount === 0
       } else if (result.noFeedCount > 0) {
-        const spouseDefEve = getNpcById(spouse.npcId)
-        addLog(`${spouseDefEve?.name ?? '配偶'}想帮你喂牲畜，但草料不足。`)
+        addLog(`${spouseNameEve}想帮你喂牲畜，但饲料不足。`)
       }
     }
   }
@@ -625,7 +630,7 @@ export const handleEndDay = () => {
       case 'da_niu':
         if (Math.random() < 0.3 + bonusChance2) {
           const result2 = animalStore.feedAll()
-          if (result2.fedCount > 0) addLog(`${zhijiName}帮你喂了所有牲畜。`)
+          if (result2.fedCount > 0) addLog(`${zhijiName}帮你喂了${result2.fedCount}只牲畜（${formatFeedUsage(result2.used)}）。`)
         }
         break
       case 'mo_bai':
@@ -761,14 +766,16 @@ export const handleEndDay = () => {
     addLog(`${animalResult.healed.join('、')}吃饱后恢复了健康。`)
   }
 
-  // 晨间标记：dailyUpdate 已重置 wasFed，若有喂食雇工或配偶喂食成功则标记新一天已喂食（不再消耗草料）
-  const hasFeedHelper = npcStore.hiredHelpers.some(h => h.task === 'feed')
-  if (hasFeedHelper || spouseFedSuccess) {
-    animalStore.markAllFed()
+  // 晨间喂食（dailyUpdate 已重置 wasFed）：喂食雇工在下方晨间工作里喂；没有雇工时，昨晚喂过的配偶接着喂
+  if (spouse && spouseFedSuccess && !npcStore.hiredHelpers.some(h => h.task === 'feed')) {
+    const result = animalStore.feedAll()
+    if (result.fedCount > 0) {
+      addLog(`${getNpcById(spouse.npcId)?.name ?? '配偶'}一早喂了${result.fedCount}只牲畜（${formatFeedUsage(result.used)}）。`)
+    }
   }
 
-  // 晨间工作：雇工浇水/收获/除草/收加工品
-  const helperMorningResult = npcStore.processDailyHelpers(['water', 'harvest', 'weed', 'collect'])
+  // 晨间工作：雇工喂食/浇水/收获/除草/收加工品
+  const helperMorningResult = npcStore.processDailyHelpers(['feed', 'water', 'harvest', 'weed', 'collect'])
   for (const msg of helperMorningResult.messages) addLog(msg)
 
   // 晨间工作：配偶浇水/做饭/收获

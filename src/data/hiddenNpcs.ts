@@ -144,6 +144,7 @@ export const HIDDEN_NPCS: HiddenNpcDef[] = [
       { type: 'weather_control', chance: 0.3 },
       { type: 'fish_attraction', chance: 0.5 }
     ],
+    bondHorseBreed: 'divine',
     abilities: [
       {
         id: 'long_ling_1',

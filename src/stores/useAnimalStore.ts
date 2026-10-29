@@ -10,9 +10,11 @@ import {
   INCUBATION_MAP,
   PREMIUM_FEED_ID,
   NOURISHING_FEED_ID,
-  VITALITY_FEED_ID
+  VITALITY_FEED_ID,
+  FEED_DEFS
 } from '@/data'
 import {
+  HORSE_BREEDS,
   getHorseBreed,
   getHorseBondFactor,
   HORSE_BOND_TIME_BONUS,
@@ -110,17 +112,62 @@ export const useAnimalStore = defineStore('animal', () => {
     return horseBreedDef.value.grazeBonusChance + bond * HORSE_BOND_GRAZE_BONUS
   }
 
-  /** 升级马匹品种（稀有渠道获得更好的马） */
-  const setHorseBreed = (breed: HorseBreed): { success: boolean; message: string } => {
-    const horse = getHorse.value
-    if (!horse) return { success: false, message: '你还没有马。' }
-    const def = getHorseBreed(breed)
-    if (horse.horseBreed === breed) return { success: false, message: `${horse.name}已经是${def.name}了。` }
-    horse.horseBreed = breed
-    return {
-      success: true,
-      message: `${horse.name}成为了${def.name}！${def.description}`
+  /** 已获得的马匹品种（卖马、兑换新品种都不会丢，可随时切换） */
+  const unlockedHorseBreeds = ref<HorseBreed[]>(['common'])
+
+  /** 品种档次（HORSE_BREEDS 按档次从低到高排列） */
+  const getBreedRank = (breed: HorseBreed | undefined): number => HORSE_BREEDS.findIndex(b => b.id === (breed ?? 'common'))
+
+  /** 已获得品种中档次最高的（新买的马默认用它） */
+  const bestUnlockedBreed = computed<HorseBreed>(() => {
+    const owned = HORSE_BREEDS.filter(b => unlockedHorseBreeds.value.includes(b.id))
+    return owned[owned.length - 1]?.id ?? 'common'
+  })
+
+  /** 记入已获得品种（去重、按档次排序，普通马始终在列） */
+  const addUnlockedBreeds = (breeds: (HorseBreed | undefined)[]) => {
+    const owned = new Set<HorseBreed>(['common', ...unlockedHorseBreeds.value])
+    for (const breed of breeds) {
+      if (breed && HORSE_BREEDS.some(b => b.id === breed)) owned.add(breed)
     }
+    unlockedHorseBreeds.value = HORSE_BREEDS.filter(b => owned.has(b.id)).map(b => b.id)
+  }
+
+  /** 获得新品种（公会/瀚海兑换）：记入已获得品种，比现在的马好就直接换上 */
+  const unlockHorseBreed = (breed: HorseBreed): { success: boolean; message: string } => {
+    const def = getHorseBreed(breed)
+    if (unlockedHorseBreeds.value.includes(breed)) return { success: false, message: `已拥有${def.name}。` }
+    addUnlockedBreeds([breed])
+    const horse = getHorse.value
+    if (horse && getBreedRank(breed) > getBreedRank(horse.horseBreed)) {
+      horse.horseBreed = breed
+      return { success: true, message: `${horse.name}成为了${def.name}！` }
+    }
+    return { success: true, message: `获得${def.name}。` }
+  }
+
+  /** 切换马匹品种（只能在已获得的品种间切换） */
+  const switchHorseBreed = (breed: HorseBreed): { success: boolean; message: string } => {
+    const horse = getHorse.value
+    if (!horse) return { success: false, message: '没有马。' }
+    if (!unlockedHorseBreeds.value.includes(breed)) return { success: false, message: '未获得该品种。' }
+    if ((horse.horseBreed ?? 'common') === breed) return { success: false, message: `已是${getHorseBreed(breed).name}。` }
+    horse.horseBreed = breed
+    return { success: true, message: `${horse.name}换成了${getHorseBreed(breed).name}。` }
+  }
+
+  /**
+   * 读档补记：旧存档没有品种记录，按当前马匹与兑换记录还原。
+   * 补回的品种比现在的马好就换上，返回提示；存档里已有的品种不动，不改玩家自己选的。
+   */
+  const restoreHorseUnlocks = (exchangedBreeds: HorseBreed[]): string | null => {
+    const before = new Set(unlockedHorseBreeds.value)
+    addUnlockedBreeds([getHorse.value?.horseBreed, ...exchangedBreeds])
+    const best = [...unlockedHorseBreeds.value].reverse().find(b => !before.has(b))
+    const horse = getHorse.value
+    if (!horse || !best || getBreedRank(best) <= getBreedRank(horse.horseBreed)) return null
+    horse.horseBreed = best
+    return `${horse.name}成为了${getHorseBreed(best).name}！`
   }
 
   /** 建造畜舍 */
@@ -206,28 +253,51 @@ export const useAnimalStore = defineStore('animal', () => {
       wasPetted: false,
       hunger: 0,
       sick: false,
-      sickDays: 0
+      sickDays: 0,
+      // 新买的马用已获得的最好品种
+      ...(animalType === 'horse' ? { horseBreed: bestUnlockedBreed.value } : {})
     })
     return true
   }
 
-  /** 喂食所有动物（消耗指定饲料，马也需要喂食；从背包+仓库箱子取饲料） */
-  const feedAll = (feedId: string = HAY_ITEM_ID): { fedCount: number; noFeedCount: number } => {
+  /** 默认饲料：一键喂食、雇工、配偶、知己都按它喂 */
+  const preferredFeed = ref<string>(HAY_ITEM_ID)
+
+  /** 设定默认饲料 */
+  const setPreferredFeed = (feedId: string) => {
+    if (FEED_DEFS.some(f => f.id === feedId)) preferredFeed.value = feedId
+  }
+
+  /**
+   * 喂食所有未喂的动物（马也需要喂食；从背包+仓库箱子取饲料）。
+   * 默认用设定的饲料，不足时补干草；used 为各饲料实际用量。
+   */
+  const feedAll = (feedId: string = preferredFeed.value): { fedCount: number; noFeedCount: number; used: Record<string, number> } => {
     let fedCount = 0
     let noFeedCount = 0
+    const used: Record<string, number> = {}
+    const feedOrder = feedId === HAY_ITEM_ID ? [HAY_ITEM_ID] : [feedId, HAY_ITEM_ID]
     const unfed = animals.value.filter(a => !a.wasFed)
 
     for (const animal of unfed) {
-      if (removeCombinedItem(feedId, 1)) {
-        animal.wasFed = true
-        animal.fedWith = feedId
-        animal.hunger = 0
-        fedCount++
-      } else {
-        noFeedCount++
+      let fedWith: string | null = null
+      for (const id of feedOrder) {
+        if (removeCombinedItem(id, 1)) {
+          fedWith = id
+          break
+        }
       }
+      if (!fedWith) {
+        noFeedCount++
+        continue
+      }
+      animal.wasFed = true
+      animal.fedWith = fedWith
+      animal.hunger = 0
+      used[fedWith] = (used[fedWith] ?? 0) + 1
+      fedCount++
     }
-    return { fedCount, noFeedCount }
+    return { fedCount, noFeedCount, used }
   }
 
   /** 喂食单只动物 */
@@ -239,17 +309,6 @@ export const useAnimalStore = defineStore('animal', () => {
     animal.fedWith = feedId
     animal.hunger = 0
     return true
-  }
-
-  /** 标记所有动物为已喂食（不消耗饲料，用于晨间雇工/配偶预喂食） */
-  const markAllFed = () => {
-    for (const animal of animals.value) {
-      if (!animal.wasFed) {
-        animal.wasFed = true
-        animal.fedWith = HAY_ITEM_ID
-        animal.hunger = 0
-      }
-    }
   }
 
   /** 抚摸动物 */
@@ -913,7 +972,9 @@ export const useAnimalStore = defineStore('animal', () => {
       barnIncubating: barnIncubating.value,
       pet: pet.value,
       grazedToday: grazedToday.value,
-      autoPetterBuildings: autoPetterBuildings.value
+      autoPetterBuildings: autoPetterBuildings.value,
+      preferredFeed: preferredFeed.value,
+      unlockedHorseBreeds: unlockedHorseBreeds.value
     }
   }
 
@@ -944,6 +1005,9 @@ export const useAnimalStore = defineStore('animal', () => {
     pet.value = data.pet ?? null
     grazedToday.value = data.grazedToday ?? false
     autoPetterBuildings.value = data.autoPetterBuildings ?? []
+    preferredFeed.value = FEED_DEFS.some(f => f.id === data.preferredFeed) ? data.preferredFeed : HAY_ITEM_ID
+    unlockedHorseBreeds.value = ['common']
+    addUnlockedBreeds([...(Array.isArray(data.unlockedHorseBreeds) ? data.unlockedHorseBreeds : []), getHorse.value?.horseBreed])
   }
 
   return {
@@ -964,7 +1028,13 @@ export const useAnimalStore = defineStore('animal', () => {
     getHorseTravelTimeMultiplier,
     getHorseTravelStaminaMultiplier,
     getHorseGrazeBonusChance,
-    setHorseBreed,
+    unlockedHorseBreeds,
+    bestUnlockedBreed,
+    unlockHorseBreed,
+    switchHorseBreed,
+    restoreHorseUnlocks,
+    preferredFeed,
+    setPreferredFeed,
     buildBuilding,
     upgradeBuilding,
     buyAnimal,
@@ -973,7 +1043,6 @@ export const useAnimalStore = defineStore('animal', () => {
     healAllSick,
     feedAll,
     feedAnimal,
-    markAllFed,
     petAnimal,
     petAllAnimals,
     startIncubation,

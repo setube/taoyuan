@@ -1025,10 +1025,21 @@
   // === 工站批量操作 ===
 
   const handleCollectAll = (machineType?: MachineType) => {
+    // 收取前按槽位汇总实际产出数量（含设备等级），收取后槽位会被重置
+    const totals = new Map<string, number>()
+    for (const slot of processingStore.machines) {
+      if (!slot.ready || !slot.recipeId || (machineType && slot.machineType !== machineType)) continue
+      const outputId = getProcessingRecipeById(slot.recipeId)?.outputItemId
+      if (!outputId) continue
+      totals.set(outputId, (totals.get(outputId) ?? 0) + processingStore.getSlotOutputQuantity(slot))
+    }
     const count = processingStore.collectAllReady(machineType)
     if (count > 0) {
       sfxClick()
-      addLog(`收取了${count}份加工成品。`)
+      const summary = Array.from(totals.entries())
+        .map(([id, qty]) => `${getItemName(id)}×${qty}`)
+        .join('、')
+      addLog(`收取了：${summary}。`)
     }
   }
 

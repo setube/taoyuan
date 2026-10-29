@@ -712,7 +712,7 @@ export const TRADE_EXCHANGE_ITEMS: TradeExchangeItemDef[] = [
     itemId: 'trade_steppe_horse',
     name: '草原马',
     pointsCost: 400,
-    description: '瀚海良驹。拥有马厩时兑换可将你的马升级为草原马（赶路更快更省力）。',
+    description: '瀚海良驹。获得草原马品种：赶路更快更省力。',
     totalLimit: 1,
     isHorseUpgrade: 'steppe'
   },

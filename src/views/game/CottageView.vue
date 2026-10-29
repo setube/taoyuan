@@ -360,9 +360,9 @@
           <div class="flex flex-col space-y-1">
             <div
               v-for="item in ageableInInventory"
-              :key="item.itemId + item.quality"
+              :key="getStackKey(item)"
               class="flex items-center justify-between border border-accent/20 rounded-xs px-3 py-1.5 cursor-pointer hover:bg-accent/5"
-              @click="handleStartAgingFromModal(item.itemId, item.quality)"
+              @click="handleStartAgingFromModal(item.itemId, item.quality, item.addedValue)"
             >
               <span
                 class="text-xs"
@@ -373,6 +373,7 @@
                 }"
               >
                 {{ getItemName(item.itemId) }}
+                <span v-if="item.addedValue" class="text-[10px] text-accent">陈酿+{{ item.addedValue }}</span>
               </span>
               <span class="text-xs text-muted">&times;{{ item.quantity }}</span>
             </div>
@@ -417,7 +418,7 @@
               <span class="text-xs text-muted">&times;{{ item.quantity }}</span>
             </div>
           </div>
-          <div v-if="spouseGiftableItems.length === 0" class="py-4 text-center text-xs text-muted">背包中没有可赠送的物品</div>
+          <div v-if="spouseGiftableItems.length === 0" class="py-4 text-center text-xs text-muted">暂无物品</div>
         </div>
       </div>
     </Transition>
@@ -524,11 +525,8 @@
           <p v-if="removeAgingConfirmSlot.upgradeCount >= 16" class="text-xs text-success mb-2">
             已成为陈酿{{ Math.floor(removeAgingConfirmSlot.upgradeCount / 16) }}年，取出将点亮图鉴！
           </p>
-          <p v-if="removeAgingConfirmSlot.addedValue > 0" class="text-xs text-accent mb-4">
-            取出后卖出价将提升 +{{ removeAgingConfirmSlot.addedValue }}文/件。
-          </p>
-          <p v-else class="text-xs text-muted mb-4">尚未增值，满7天可提升价值。</p>
-          <div class="flex space-x-3 justify-center">
+          <p v-if="removeAgingConfirmSlot.addedValue <= 0" class="text-xs text-muted mb-2">尚未增值，满7天可提升价值。</p>
+          <div class="flex space-x-3 justify-center mt-2">
             <Button @click="removeAgingConfirmIdx = null">取消</Button>
             <Button @click="handleRemoveAging(removeAgingConfirmIdx!)">确认取出</Button>
           </div>
@@ -594,12 +592,13 @@
   import { ArrowUp, Calendar, Gift, Hammer, Home, Heart, MessageCircle, UserPlus, Users, Wine, X } from 'lucide-vue-next'
   import { useCookingStore } from '@/stores/useCookingStore'
   import { useGameStore } from '@/stores/useGameStore'
-  import { useHomeStore } from '@/stores/useHomeStore'
+  import { useHomeStore, AGEABLE_ITEMS } from '@/stores/useHomeStore'
   import { useInventoryStore } from '@/stores/useInventoryStore'
   import { useNpcStore } from '@/stores/useNpcStore'
   import { useAchievementStore } from '@/stores/useAchievementStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
-  import { getCombinedItemCount } from '@/composables/useCombinedInventory'
+  import { getCombinedItemCount, getGiftableStacks } from '@/composables/useCombinedInventory'
+  import { getStackKey } from '@/composables/useItemStacks'
   import { getItemById, getNpcById } from '@/data'
   import { ACTION_TIME_COSTS } from '@/data/timeConstants'
   import type { Quality, ChildStage, PregnancyStage, FarmHelperTask } from '@/types'
@@ -717,11 +716,9 @@
     hated: 3
   }
 
+  /** 可送的物品：背包+仓库合计（种子不参与送礼） */
   const spouseGiftableItems = computed(() => {
-    const filtered = inventoryStore.items.filter(i => {
-      const def = getItemById(i.itemId)
-      return def && def.category !== 'seed'
-    })
+    const filtered = getGiftableStacks()
     if (!spouseDef.value) return filtered
     return [...filtered].sort((a, b) => GIFT_PREF_ORDER[getSpouseGiftPref(a.itemId)] - GIFT_PREF_ORDER[getSpouseGiftPref(b.itemId)])
   })
@@ -782,8 +779,6 @@
     advanced: '高级接生',
     luxury: '豪华接生'
   }
-
-  const AGEABLE_ITEMS = ['watermelon_wine', 'osmanthus_wine', 'peach_wine', 'jujube_wine', 'corn_wine', 'rice_vinegar']
 
   const currentBenefit = computed(() => {
     switch (homeStore.farmhouseLevel) {
@@ -866,8 +861,8 @@
     addLog(result.message)
   }
 
-  const handleStartAgingFromModal = (itemId: string, quality: Quality) => {
-    if (homeStore.startAging(itemId, quality)) {
+  const handleStartAgingFromModal = (itemId: string, quality: Quality, addedValue: number = 0) => {
+    if (homeStore.startAging(itemId, quality, addedValue)) {
       const name = getItemName(itemId)
       addLog(`将${name}放入酒窖陈酿。`)
       const tr = gameStore.advanceTime(ACTION_TIME_COSTS.aging)
@@ -885,15 +880,24 @@
   const handleRemoveAging = (index: number) => {
     // 取出前先记录剩余天数
     const slotBeforeRemove = homeStore.cellarSlots[index]
+    // 放不下就不取，免得陈酿酒连同增值丢失
+    if (
+      slotBeforeRemove &&
+      !inventoryStore.canReceiveItem(slotBeforeRemove.itemId, slotBeforeRemove.originalQuality, slotBeforeRemove.addedValue)
+    ) {
+      addLog('背包已满')
+      removeAgingConfirmIdx.value = null
+      return
+    }
     const remainingDays = slotBeforeRemove?.daysAging ?? 0
     const result = homeStore.removeAging(index)
     if (result) {
-      inventoryStore.addItem(result.itemId, 1, result.quality, result.addedValue > 0 ? result.addedValue : undefined)
+      inventoryStore.addItem(result.itemId, 1, result.quality, result.addedValue)
       const name = getItemName(result.itemId)
       const totalDays = result.upgradeCount * 7 + remainingDays
       let msg = `从酒窖取出了${name}`
       if (result.addedValue > 0) {
-        msg += `（陈酿${totalDays}天，卖出价+${result.addedValue}文）`
+        msg += `（陈酿${totalDays}天，售价+${result.addedValue}文）`
       }
       addLog(msg + '。')
       // 满1年点亮图鉴

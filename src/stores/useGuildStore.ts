@@ -249,9 +249,11 @@ export const useGuildStore = defineStore('guild', () => {
     // 根据装备类型添加到对应栏位
     let addSuccess = true
     if (item.horseUpgrade) {
-      // 马匹升级：不是进背包，而是把现有的马换成更好的品种。
-      // 失败（没有马等）时走下方统一的退款分支。
-      addSuccess = useAnimalStore().setHorseBreed(item.horseUpgrade).success
+      // 马匹品种：记入已获得品种（卖马、换品种不丢），比现有的马好就直接换上。
+      // 已拥有该品种时走下方统一的退款分支。
+      const result = useAnimalStore().unlockHorseBreed(item.horseUpgrade)
+      addSuccess = result.success
+      if (result.success) addLog(result.message)
     } else if (item.equipType === 'weapon') {
       addSuccess = inventoryStore.addWeapon(item.itemId, null)
     } else if (item.equipType === 'ring') {
@@ -344,6 +346,12 @@ export const useGuildStore = defineStore('guild', () => {
     contributionPoints,
     guildExp,
     guildLevel,
+    // 购买记录也要导出：$reset 只重置导出的状态，开新游戏不能沿用上一个存档的限购
+    dailyPurchases,
+    lastResetDay,
+    weeklyPurchases,
+    lastResetWeek,
+    totalPurchases,
     recordKill,
     recordEncounter,
     getKillCount,

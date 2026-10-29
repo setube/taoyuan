@@ -156,21 +156,13 @@
           <div class="flex flex-col space-y-2">
             <!-- 背包扩容 -->
             <div
-              v-if="inventoryStore.capacity < 60"
+              v-if="inventoryStore.capacity < inventoryStore.MAX_CAPACITY"
               class="flex items-center justify-between border border-accent/20 rounded-xs px-3 py-2 cursor-pointer hover:bg-accent/5"
-              @click="
-                openBuyModal(
-                  '背包扩容',
-                  `当前${inventoryStore.capacity}格 → ${inventoryStore.capacity + 4}格`,
-                  discounted(bagPrice),
-                  handleBuyBag,
-                  () => playerStore.money >= discounted(bagPrice)
-                )
-              "
+              @click="openBagModal"
             >
               <div>
                 <p class="text-sm">背包扩容</p>
-                <p class="text-muted text-xs">当前{{ inventoryStore.capacity }}格 → {{ inventoryStore.capacity + 4 }}格</p>
+                <p class="text-muted text-xs">当前{{ inventoryStore.capacity }}格 → {{ nextBagCapacity }}格</p>
               </div>
               <span class="text-xs text-accent whitespace-nowrap">{{ discounted(bagPrice) }}文</span>
             </div>
@@ -740,14 +732,17 @@
             v-for="item in sellableItems"
             :key="item.originalIndex"
             class="flex items-center justify-between border border-accent/20 rounded-xs px-3 py-2 cursor-pointer hover:bg-accent/5"
-            @click="openSellModal(item.itemId, item.quality, item.originalIndex)"
+            @click="openSellModal(item.itemId, item.quality, item.originalIndex, item.addedValue)"
           >
             <div>
               <span class="text-sm" :class="qualityTextClass(item.quality)">{{ item.def?.name }}</span>
+              <span v-if="item.addedValue" class="text-[10px] text-accent ml-1">陈酿+{{ item.addedValue }}</span>
               <span class="text-muted text-xs ml-1">×{{ item.quantity }}</span>
             </div>
             <div class="flex items-center space-x-1">
-              <span class="text-xs text-accent whitespace-nowrap">{{ shopStore.calculateSellPrice(item.itemId, 1, item.quality) }}文</span>
+              <span class="text-xs text-accent whitespace-nowrap">
+                {{ shopStore.calculateSellPrice(item.itemId, 1, item.quality, item.addedValue) }}文
+              </span>
               <span v-if="getItemTrend(item.itemId) === 'rising' || getItemTrend(item.itemId) === 'boom'" class="text-[10px] text-success">
                 ↑{{ Math.round((getItemMultiplier(item.itemId) - 1) * 100) }}%
               </span>
@@ -933,6 +928,10 @@
               <span class="text-xs text-muted">品质</span>
               <span class="text-xs" :class="qualityTextClass(sellModalItem.quality)">{{ QUALITY_NAMES[sellModalItem.quality] }}</span>
             </div>
+            <div v-if="sellModalData!.addedValue" class="flex items-center justify-between mt-0.5">
+              <span class="text-xs text-muted">陈酿</span>
+              <span class="text-xs text-accent">+{{ sellModalData!.addedValue }}文</span>
+            </div>
             <div class="flex items-center justify-between mt-0.5">
               <span class="text-xs text-muted">售价</span>
               <span class="text-xs flex items-center space-x-1">
@@ -940,9 +939,9 @@
                   v-if="getItemTrend(sellModalData!.itemId) && getItemTrend(sellModalData!.itemId) !== 'stable'"
                   class="line-through text-muted/40"
                 >
-                  {{ shopStore.calculateBaseSellPrice(sellModalData!.itemId, 1, sellModalData!.quality) }}文
+                  {{ shopStore.calculateBaseSellPrice(sellModalData!.itemId, 1, sellModalData!.quality, sellModalData!.addedValue) }}文
                 </span>
-                <span class="text-accent">{{ shopStore.calculateSellPrice(sellModalData!.itemId, 1, sellModalData!.quality) }}文</span>
+                <span class="text-accent">{{ sellUnitPrice }}文</span>
               </span>
             </div>
             <div
@@ -1052,6 +1051,7 @@
   import { sfxBuy } from '@/composables/useAudio'
   import { showFloat } from '@/composables/useGameLog'
   import { handleBuySeed, handleSellItem, handleSellItemAll, handleSellAll, QUALITY_NAMES } from '@/composables/useFarmActions'
+  import { isSameStack } from '@/composables/useItemStacks'
   import { getDailyMarketInfo, MARKET_CATEGORY_NAMES, TREND_NAMES } from '@/data/market'
   import type { MarketTrend } from '@/data/market'
   import { useTutorialStore } from '@/stores/useTutorialStore'
@@ -1151,6 +1151,8 @@
     itemId: string
     quality: Quality
     inventoryIndex: number
+    /** 每件陈酿增值 */
+    addedValue: number
   }
 
   const shopModal = ref<BuyModalState | SellModalState | null>(null)
@@ -1165,12 +1167,15 @@
     return shopModal.value
   })
 
+  /** 弹窗对应的背包栈：物品、品质、陈酿增值都一致 */
+  const findSellStack = (data: SellModalState) => inventoryStore.items.find(i => isSameStack(i, data.itemId, data.quality, data.addedValue))
+
   const sellModalItem = computed(() => {
     const data = sellModalData.value
     if (!data) return null
     const item = inventoryStore.items[data.inventoryIndex]
-    if (item && item.itemId === data.itemId && item.quality === data.quality) return item
-    return inventoryStore.items.find(i => i.itemId === data.itemId && i.quality === data.quality) ?? null
+    if (item && isSameStack(item, data.itemId, data.quality, data.addedValue)) return item
+    return findSellStack(data) ?? null
   })
 
   const sellModalDef = computed(() => {
@@ -1262,11 +1267,13 @@
   const sellUnitPrice = computed(() => {
     const data = sellModalData.value
     if (!data) return 0
-    return shopStore.calculateSellPrice(data.itemId, 1, data.quality)
+    return shopStore.calculateSellPrice(data.itemId, 1, data.quality, data.addedValue)
   })
 
   const sellTotalPrice = computed(() => {
-    return sellUnitPrice.value * sellQuantity.value
+    const data = sellModalData.value
+    if (!data) return 0
+    return shopStore.calculateSellPrice(data.itemId, sellQuantity.value, data.quality, data.addedValue)
   })
 
   const maxSellQuantity = computed(() => {
@@ -1288,9 +1295,9 @@
     if (!isNaN(val)) setSellQuantity(val)
   }
 
-  const openSellModal = (itemId: string, quality: Quality, inventoryIndex: number) => {
+  const openSellModal = (itemId: string, quality: Quality, inventoryIndex: number, addedValue: number = 0) => {
     sellQuantity.value = 1
-    shopModal.value = { type: 'sell', itemId, quality, inventoryIndex }
+    shopModal.value = { type: 'sell', itemId, quality, inventoryIndex, addedValue }
   }
 
   const openWeaponModal = (w: WeaponDef) => {
@@ -1333,12 +1340,12 @@
     const modal = shopModal.value
     if (!modal || modal.type !== 'sell') return
     if (count === 1) {
-      handleSellItem(modal.itemId, modal.quality)
+      handleSellItem(modal.itemId, modal.quality, modal.addedValue)
     } else {
-      handleSellItemAll(modal.itemId, count, modal.quality)
+      handleSellItemAll(modal.itemId, count, modal.quality, modal.addedValue)
     }
     // 物品消耗完则关闭弹窗，否则修正出售数量
-    const remaining = inventoryStore.items.find(i => i.itemId === modal.itemId && i.quality === modal.quality)
+    const remaining = findSellStack(modal)
     if (!remaining) {
       shopModal.value = null
     } else if (sellQuantity.value > remaining.quantity) {
@@ -1404,6 +1411,20 @@
     return 500 + level * 500
   })
 
+  /** 扩容后的背包格数 */
+  const nextBagCapacity = computed(() => Math.min(inventoryStore.MAX_CAPACITY, inventoryStore.capacity + 4))
+
+  /** 背包扩容弹窗（买完一级刷新为下一级，避免显示旧格数和旧价格） */
+  const openBagModal = () => {
+    openBuyModal(
+      '背包扩容',
+      `当前${inventoryStore.capacity}格 → ${nextBagCapacity.value}格`,
+      discounted(bagPrice.value),
+      handleBuyBag,
+      () => playerStore.money >= discounted(bagPrice.value)
+    )
+  }
+
   const farmExpandInfo = computed(() => {
     const prices: Record<number, { newSize: number; price: number }> = {
       4: { newSize: 6, price: 2000 },
@@ -1423,6 +1444,8 @@
     }
     if (inventoryStore.expandCapacity()) {
       addLog(`背包扩容至${inventoryStore.capacity}格！(-${actualPrice}文)`)
+      if (inventoryStore.capacity < inventoryStore.MAX_CAPACITY) openBagModal()
+      else shopModal.value = null
     } else {
       playerStore.earnMoney(actualPrice)
       addLog('背包已满级。')

@@ -260,33 +260,45 @@ export const PREMIUM_FEED_ID = 'premium_feed'
 export const NOURISHING_FEED_ID = 'nourishing_feed'
 export const VITALITY_FEED_ID = 'vitality_feed'
 
-/** 所有饲料定义（UI 遍历用） */
+/**
+ * 所有饲料定义（UI 遍历用，药铺与畜棚共用同一份标价）。
+ * 标价约为回收价的 2.3 倍：满折扣买入价仍高于回收价，避免倒买倒卖。
+ */
 export const FEED_DEFS: {
   id: string
   name: string
   price: number
   description: string
 }[] = [
-  { id: 'hay', name: '干草', price: 50, description: '基础饲料' },
+  { id: 'hay', name: '干草', price: HAY_PRICE, description: '基础饲料' },
   {
     id: 'premium_feed',
     name: '精饲料',
-    price: 200,
+    price: 620,
     description: '心情+60，好感度翻倍'
   },
   {
     id: 'nourishing_feed',
     name: '滋补饲料',
-    price: 250,
+    price: 550,
     description: '产出天数-1'
   },
   {
     id: 'vitality_feed',
     name: '活力饲料',
-    price: 300,
+    price: 460,
     description: '100%治愈疾病'
   }
 ]
+
+/** 饲料标价 */
+export const getFeedPrice = (id: string): number => FEED_DEFS.find(f => f.id === id)?.price ?? 0
+
+/** 饲料用量文本，如「精饲料×3、干草×2」 */
+export const formatFeedUsage = (used: Record<string, number>): string =>
+  FEED_DEFS.filter(f => (used[f.id] ?? 0) > 0)
+    .map(f => `${f.name}×${used[f.id]}`)
+    .join('、')
 
 export const getAnimalDef = (type: string): AnimalDef | undefined => {
   return ANIMAL_DEFS.find(d => d.type === type)

@@ -25,9 +25,6 @@ const DAYS_PER_SEASON = 28
 const DAYS_PER_YEAR = 112
 const DAYS_PER_WEEK = 7
 
-/** 背包单格堆叠上限，与 useInventoryStore 保持一致 */
-const INVENTORY_MAX_STACK = 999
-
 /** 存档里的订单是否还能用（物品定义被删掉的订单直接丢弃） */
 const isValidOrder = (order: TradeOrder | null | undefined): order is TradeOrder =>
   !!order && Array.isArray(order.lines) && order.lines.length > 0 && order.lines.every(line => !!getItemById(line.itemId))
@@ -169,13 +166,7 @@ export const useTradeStore = defineStore('trade', () => {
     getWeeklyRemaining(reward) > 0 && getTotalRemaining(reward) > 0 && points.value >= reward.cost
 
   /** 背包（含临时背包）能否再放 1 个普通品质的该物品；种子进种子袋，不占格 */
-  const canReceiveItem = (itemId: string): boolean => {
-    const inventoryStore = useInventoryStore()
-    if (inventoryStore.isSeedItem(itemId) || !inventoryStore.isAllFull) return true
-    return [...inventoryStore.items, ...inventoryStore.tempItems].some(
-      slot => slot.itemId === itemId && slot.quality === 'normal' && slot.quantity < INVENTORY_MAX_STACK
-    )
-  }
+  const canReceiveItem = (itemId: string): boolean => useInventoryStore().canReceiveItem(itemId)
 
   /** 发放兑换品：装备进装备栏，其余进背包 */
   const grantReward = (reward: TradeRewardDef): boolean => {

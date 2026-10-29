@@ -9,13 +9,28 @@
     </div>
 
     <!-- 每日例行操作放在最上面，免得为了喂食放牧来回翻屏 -->
-    <div v-if="animalStore.animals.length > 0" class="flex flex-wrap mb-3">
-      <Button class="mr-1 mb-1" :icon="Wheat" :icon-size="12" :disabled="unfedCount === 0" @click="unfedCount > 0 && handleFeedAll()">
-        {{ unfedCount > 0 ? `喂食全部（${unfedCount}只）` : '都已喂过' }}
-      </Button>
-      <Button class="mr-1 mb-1" :icon="Sun" :icon-size="12" :disabled="!canGrazeOrFeed" @click="canGrazeOrFeed && handleGraze()">
-        {{ grazeButtonLabel }}
-      </Button>
+    <div v-if="animalStore.animals.length > 0" class="mb-3">
+      <div class="flex flex-wrap">
+        <Button class="mr-1 mb-1" :icon="Wheat" :icon-size="12" :disabled="unfedCount === 0" @click="unfedCount > 0 && handleFeedAll()">
+          {{ unfedCount > 0 ? `喂食全部（${unfedCount}只）` : '都已喂过' }}
+        </Button>
+        <Button class="mr-1 mb-1" :icon="Sun" :icon-size="12" :disabled="!canGrazeOrFeed" @click="canGrazeOrFeed && handleGraze()">
+          {{ grazeButtonLabel }}
+        </Button>
+      </div>
+      <!-- 默认饲料：一键喂食、雇工、配偶都按它喂，不足补干草 -->
+      <div class="flex flex-wrap items-center">
+        <span class="text-[10px] text-muted mr-1 mb-1">饲料</span>
+        <Button
+          v-for="feed in feedCounts"
+          :key="feed.id"
+          class="btn-compact mr-1 mb-1"
+          :class="{ '!bg-accent !text-bg': selectedFeed === feed.id }"
+          @click="selectedFeed = feed.id"
+        >
+          {{ feed.name }} {{ feed.count }}
+        </Button>
+      </div>
     </div>
 
     <p v-if="tutorialHint" class="text-[10px] text-muted/50 mb-2">
@@ -347,6 +362,19 @@
               {{ Math.round(animalStore.getHorseGrazeBonusChance() * 100) }}%
             </p>
             <p class="text-[10px] text-muted/50">喂食抚摸提升好感，好感越高赶路越省力、放牧带回的产物越多。</p>
+            <!-- 已获得的品种可随时切换（卖马、兑换新品种都不会丢） -->
+            <div v-if="unlockedBreedDefs.length > 1" class="flex flex-wrap items-center pt-0.5">
+              <span class="text-[10px] text-muted mr-1 mb-1">品种</span>
+              <Button
+                v-for="breed in unlockedBreedDefs"
+                :key="breed.id"
+                class="btn-compact mr-1 mb-1"
+                :class="{ '!bg-accent !text-bg': animalStore.horseBreedDef.id === breed.id }"
+                @click="handleSwitchBreed(breed.id)"
+              >
+                {{ breed.name }}
+              </Button>
+            </div>
             <div class="flex items-center space-x-1">
               <span class="text-[10px] text-muted w-6">好感</span>
               <div class="flex-1 h-1.5 bg-bg rounded-xs border border-accent/10">
@@ -395,7 +423,6 @@
               治疗
             </Button>
           </div>
-          <p class="text-xs text-success mt-1">骑马出行，旅行时间减少30%。</p>
         </div>
         <div v-else>
           <div
@@ -416,17 +443,17 @@
               )
             "
           >
-            <span class="text-xs">马</span>
+            <span class="text-xs">马 · {{ bestBreedDef.name }}</span>
             <span class="text-xs text-accent whitespace-nowrap">5000文</span>
           </div>
-          <p class="text-xs text-muted mt-1">拥有马匹可减少30%旅行时间。</p>
+          <p class="text-xs text-muted mt-1">拥有马匹可减少{{ horseTravelReduction }}%旅行时间。</p>
         </div>
       </template>
       <template v-else>
         <p class="text-xs text-muted">
           需要：{{ stableDef?.materialCost.map(m => `${getItemName(m.itemId)}×${m.quantity}`).join('、') ?? '' }}
         </p>
-        <p class="text-xs text-muted mt-1">拥有马匹可减少30%旅行时间。</p>
+        <p class="text-xs text-muted mt-1">拥有马匹可减少{{ horseTravelReduction }}%旅行时间。</p>
       </template>
     </div>
 
@@ -552,7 +579,7 @@
             <p v-if="buyModal.productName && buyModal.productName !== '无'" class="text-muted">
               产出：{{ buyModal.productName }}（每{{ buyModal.produceDays }}天）
             </p>
-            <p v-else class="text-muted">旅行时间减少30%</p>
+            <p v-else class="text-muted">旅行时间减少{{ horseTravelReduction }}%</p>
             <p>价格：{{ buyModal.cost }}文</p>
           </div>
           <Button class="w-full" :icon="ShoppingCart" :disabled="!buyModal.canBuy()" @click="handleBuyFromModal">购买</Button>
@@ -664,11 +691,13 @@
   import { useInventoryStore } from '@/stores/useInventoryStore'
   import { usePlayerStore } from '@/stores/usePlayerStore'
   import { ANIMAL_BUILDINGS, ANIMAL_DEFS, HAY_ITEM_ID, getItemById, getBuildingUpgrade, INCUBATION_MAP, FEED_DEFS } from '@/data'
-  import { BUILDING_CAPACITY_PER_LEVEL } from '@/data/animals'
+  import { BUILDING_CAPACITY_PER_LEVEL, formatFeedUsage } from '@/data/animals'
+  import { HORSE_BREEDS, getHorseBreed, type HorseBreed } from '@/data/horses'
   import { PET_ABILITIES, PET_PETTING_FRIENDSHIP, getPetFetchChance, getCatPestLimit, isPetAbilityUnlocked } from '@/data/pets'
   import { ACTION_TIME_COSTS } from '@/data/timeConstants'
   import type { AnimalBuildingType, AnimalType, AnimalDef, PetAbilityDef, PetAbilityId, PetState } from '@/types'
   import { addLog } from '@/composables/useGameLog'
+  import { getCombinedItemCount } from '@/composables/useCombinedInventory'
   import { handleEndDay } from '@/composables/useEndDay'
   import { useTutorialStore } from '@/stores/useTutorialStore'
 
@@ -755,14 +784,17 @@
   /** 马厩建筑定义 */
   const stableDef = computed(() => ANIMAL_BUILDINGS.find(b => b.type === 'stable'))
 
-  /** 当前选择的饲料类型 */
-  const selectedFeed = ref<string>(HAY_ITEM_ID)
+  /** 默认饲料（随存档保存，雇工、配偶代喂也用它） */
+  const selectedFeed = computed({
+    get: () => animalStore.preferredFeed,
+    set: (feedId: string) => animalStore.setPreferredFeed(feedId)
+  })
 
-  /** 各类饲料库存数量 */
+  /** 各类饲料库存数量（背包+仓库，喂食两边都会扣） */
   const feedCounts = computed(() =>
     FEED_DEFS.map(f => ({
       ...f,
-      count: inventoryStore.getItemCount(f.id)
+      count: getCombinedItemCount(f.id)
     }))
   )
 
@@ -770,7 +802,19 @@
   const selectedFeedName = computed(() => FEED_DEFS.find(f => f.id === selectedFeed.value)?.name ?? '干草')
 
   /** 当前选中饲料的库存 */
-  const selectedFeedCount = computed(() => inventoryStore.getItemCount(selectedFeed.value))
+  const selectedFeedCount = computed(() => feedCounts.value.find(f => f.id === selectedFeed.value)?.count ?? 0)
+
+  /** 默认饲料不足时补干草，两样都没有才喂不了 */
+  const hasUsableFeed = computed(() => selectedFeedCount.value > 0 || getCombinedItemCount(HAY_ITEM_ID) > 0)
+
+  /** 已获得的马匹品种 */
+  const unlockedBreedDefs = computed(() => HORSE_BREEDS.filter(b => animalStore.unlockedHorseBreeds.includes(b.id)))
+
+  /** 新买的马用的品种 */
+  const bestBreedDef = computed(() => getHorseBreed(animalStore.bestUnlockedBreed))
+
+  /** 新买的马减少的旅行时间（%） */
+  const horseTravelReduction = computed(() => Math.round((1 - bestBreedDef.value.travelTimeMultiplier) * 100))
 
   /** 当前选中饲料的价格 */
   const selectedFeedPrice = computed(() => FEED_DEFS.find(f => f.id === selectedFeed.value)?.price ?? 50)
@@ -903,7 +947,7 @@
     if (unfedCount.value === 0) return false
     // 冬天只有牦牛能放牧，没牦牛就别自动喂了
     if (gameStore.season === 'winter' && !animalStore.animals.some(a => a.type === 'yak')) return false
-    return selectedFeedCount.value > 0
+    return hasUsableFeed.value
   })
 
   const grazeButtonLabel = computed(() => {
@@ -1105,13 +1149,12 @@
   }
 
   const handleFeedAll = () => {
-    const result = animalStore.feedAll(selectedFeed.value)
-    const feedName = selectedFeedName.value
+    const result = animalStore.feedAll()
     if (result.fedCount > 0) {
-      addLog(`用${feedName}喂食了${result.fedCount}只动物。`)
+      addLog(`喂食了${result.fedCount}只动物（${formatFeedUsage(result.used)}）。`)
     }
     if (result.noFeedCount > 0) {
-      addLog(`${feedName}不足，${result.noFeedCount}只动物未能喂食。`)
+      addLog(`饲料不足，${result.noFeedCount}只动物未喂。`)
     }
     if (result.fedCount === 0 && result.noFeedCount === 0) {
       addLog('所有动物今天都已喂过了。')
@@ -1158,6 +1201,11 @@
       if (tr.message) addLog(tr.message)
       if (tr.passedOut) handleEndDay()
     }
+  }
+
+  const handleSwitchBreed = (breed: HorseBreed) => {
+    const result = animalStore.switchHorseBreed(breed)
+    if (result.success) addLog(result.message)
   }
 
   const handleHealAnimal = (animalId: string, animalName: string) => {

@@ -132,6 +132,8 @@ export interface HiddenNpcDef {
   courtshipDialogues: string[]
   /** 结缘每日奖励（可多个） */
   bondBonuses: BondBonusType[]
+  /** 结缘时赠予的马匹品种 */
+  bondHorseBreed?: 'steppe' | 'cloud' | 'divine'
   /** 缘分能力树 */
   abilities: AffinityAbility[]
   /** 求缘物品制作材料 */

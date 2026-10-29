@@ -24,8 +24,14 @@
   import { ref, onMounted } from 'vue'
   import { Capacitor } from '@capacitor/core'
   import { App as CapApp } from '@capacitor/app'
+  import { useGameStore, SEASON_NAMES } from '@/stores/useGameStore'
+  import { _registerDayLabelGetter } from '@/composables/useGameLog'
 
   const showExitConfirm = ref(false)
+
+  // 日志的天数标签：启动时就注册，主菜单里写的日志（新游戏、读档）也带日期
+  const gameStore = useGameStore()
+  _registerDayLabelGetter(() => `第${gameStore.year}年 ${SEASON_NAMES[gameStore.season]} 第${gameStore.day}天`)
 
   const exitApp = () => {
     CapApp.exitApp()

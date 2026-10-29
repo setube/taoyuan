@@ -15,6 +15,7 @@ import {
   getRecipesForMachine,
   getProcessingRecipeById
 } from '@/data/processing'
+import { getItemById } from '@/data/items'
 import { useInventoryStore } from './useInventoryStore'
 import { usePlayerStore } from './usePlayerStore'
 import { useSkillStore } from './useSkillStore'
@@ -496,12 +497,17 @@ export const useProcessingStore = defineStore('processing', () => {
   // === 每日更新 ===
 
   const dailyUpdate = () => {
-    /** 自动收取汇总：配方名 → 实际产出数量（含设备等级加成） */
+    /** 自动收取汇总：产物名 → 实际产出数量（含设备等级加成） */
     const collected = new Map<string, number>()
     const addCollected = (name: string, quantity: number) => {
       collected.set(name, (collected.get(name) ?? 0) + quantity)
     }
-    const readyNames: string[] = []
+    /** 待手动收取汇总：产物名 → 收取时的实际产出数量（含设备等级加成） */
+    const ready = new Map<string, number>()
+    const addReady = (name: string, quantity: number) => {
+      ready.set(name, (ready.get(name) ?? 0) + quantity)
+    }
+    const outputName = (recipe: ProcessingRecipeDef): string => getItemById(recipe.outputItemId)?.name ?? recipe.name
     const warehouseStore = useWarehouseStore()
     for (const slot of machines.value) {
       if (!slot.recipeId || slot.ready) continue
@@ -519,7 +525,7 @@ export const useProcessingStore = defineStore('processing', () => {
             // 自动收取：无需原料的机器（蜂箱/蚯蚓箱）或标记了 autoCollect 的机器（熔炉）
             const outputQuantity = getOutputQuantity(recipe, slot)
             deliverOutput(recipe.outputItemId, outputQuantity, slot.inputQuality ?? 'normal')
-            addCollected(recipe.name, outputQuantity)
+            addCollected(outputName(recipe), outputQuantity)
             // 无需原料的机器自动重启，有原料的机器回到空闲
             if (recipe.inputItemId === null) {
               slot.daysProcessed = 0
@@ -540,7 +546,7 @@ export const useProcessingStore = defineStore('processing', () => {
               // 自动收取当前产物（按设备等级结算）
               const outputQuantity = getOutputQuantity(recipe, slot)
               deliverOutput(recipe.outputItemId, outputQuantity, slot.inputQuality ?? 'normal')
-              addCollected(recipe.name, outputQuantity)
+              addCollected(outputName(recipe), outputQuantity)
 
               // 种子制造机额外触发育种种子生成
               if (slot.machineType === 'seed_maker' && slot.inputItemId) {
@@ -554,10 +560,10 @@ export const useProcessingStore = defineStore('processing', () => {
               // 尝试从虚空原料箱取材料开始下一轮
               const available = warehouseStore.getChestItemCount(voidInput.id, recipe.inputItemId)
               if (available >= recipe.inputQuantity) {
-                // 查找最低品质
+                // 按最低品质产出；扣料不限品质，从低品质扣够数量
                 const qOrder: Quality[] = ['normal', 'fine', 'excellent', 'supreme']
                 const newQuality = qOrder.find(q => warehouseStore.getChestItemCount(voidInput.id, recipe.inputItemId!, q) > 0) ?? 'normal'
-                warehouseStore.removeItemFromChest(voidInput.id, recipe.inputItemId, recipe.inputQuantity, newQuality)
+                warehouseStore.removeItemFromChest(voidInput.id, recipe.inputItemId, recipe.inputQuantity)
                 slot.daysProcessed = 0
                 slot.inputQuality = newQuality
                 slot.ready = false
@@ -573,7 +579,7 @@ export const useProcessingStore = defineStore('processing', () => {
             } else {
               // 无虚空原料箱，保持原行为：标记为完成等待手动收取
               slot.ready = true
-              readyNames.push(recipe.name)
+              addReady(outputName(recipe), getOutputQuantity(recipe, slot))
             }
           }
         } else {
@@ -581,22 +587,13 @@ export const useProcessingStore = defineStore('processing', () => {
         }
       }
     }
-    if (collected.size > 0) {
-      const summary = Array.from(collected.entries())
-        .map(([name, count]) => (count > 1 ? `${name}x${count}` : name))
+    /** 汇总文案：名称×实际产出数量 */
+    const formatSummary = (entries: Map<string, number>): string =>
+      Array.from(entries.entries())
+        .map(([name, count]) => (count > 1 ? `${name}×${count}` : name))
         .join('、')
-      addLog(`工坊自动收取了：${summary}。`)
-    }
-    if (readyNames.length > 0) {
-      const counts = new Map<string, number>()
-      for (const name of readyNames) {
-        counts.set(name, (counts.get(name) ?? 0) + 1)
-      }
-      const summary = Array.from(counts.entries())
-        .map(([name, count]) => (count > 1 ? `${name}x${count}` : name))
-        .join('、')
-      addLog(`加工完成：${summary}，去工坊收取吧。`)
-    }
+    if (collected.size > 0) addLog(`工坊自动收取了：${formatSummary(collected)}。`)
+    if (ready.size > 0) addLog(`加工完成：${formatSummary(ready)}。`)
   }
 
   // === 工坊升级 ===

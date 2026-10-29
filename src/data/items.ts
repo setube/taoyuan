@@ -309,7 +309,7 @@ const MISC_ITEMS: ItemDef[] = [
     name: '水质改良剂',
     category: 'material',
     description: '改善鱼塘水质，降低鱼生病概率。',
-    sellPrice: 50,
+    sellPrice: 40,
     edible: false
   }
 ]
@@ -738,7 +738,7 @@ const TACKLE_ITEMS: ItemDef[] = TACKLES.map(t => ({
   name: t.name,
   category: 'tackle' as const,
   description: t.description,
-  sellPrice: t.shopPrice ? Math.floor(t.shopPrice * 0.5) : 50,
+  sellPrice: t.shopPrice ? Math.floor(t.shopPrice * 0.4) : 50,
   edible: false
 }))
 
@@ -963,7 +963,7 @@ const SAPLING_ITEMS: ItemDef[] = FRUIT_TREE_DEFS.map(t => ({
   name: `${t.name}苗`,
   category: 'sapling' as const,
   description: `种下后${t.growthDays}天可成熟，${t.fruitSeason === 'spring' ? '春' : t.fruitSeason === 'summer' ? '夏' : t.fruitSeason === 'autumn' ? '秋' : '冬'}季产出${t.fruitName}。`,
-  sellPrice: Math.floor(t.saplingPrice / 2),
+  sellPrice: Math.floor(t.saplingPrice * 0.4),
   edible: false
 }))
 
@@ -1038,7 +1038,7 @@ const CRAB_POT_ITEMS: ItemDef[] = [
     name: '蟹笼',
     category: 'machine',
     description: '放置在钓鱼地点，每日自动捕获水产（需鱼饵）。',
-    sellPrice: 750,
+    sellPrice: 600,
     edible: false
   },
   {

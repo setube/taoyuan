@@ -159,8 +159,8 @@ export const useFishPondStore = defineStore('fishPond', () => {
   const feedFish = (): boolean => {
     if (!pond.value.built || pond.value.fedToday) return false
     if (pond.value.fish.length === 0) return false
-    const inventoryStore = useInventoryStore()
-    if (!inventoryStore.removeItem('fish_feed', 1)) return false
+    // 背包、仓库里的鱼饲料都能用（雇工喂鱼同样走这里）
+    if (!removeCombinedItem('fish_feed', 1)) return false
     pond.value.fedToday = true
     pond.value.waterQuality = clamp(pond.value.waterQuality + FEED_WATER_RESTORE, 0, 100)
     return true

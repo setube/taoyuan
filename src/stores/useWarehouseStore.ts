@@ -3,10 +3,18 @@ import { defineStore } from 'pinia'
 import type { InventoryItem, Quality, Chest, ChestTier, VoidChestRole } from '@/types'
 import { getItemById, CHEST_DEFS, ITEM_CATEGORY_NAMES } from '@/data/items'
 import { useInventoryStore } from './useInventoryStore'
+import {
+  normalizeAddedValue,
+  getAddedValue,
+  putIntoStacks,
+  takeFromStacks,
+  countStacks,
+  getStackSpace,
+  mergeStacks
+} from '@/composables/useItemStacks'
 
 const INITIAL_MAX_CHESTS = 3
 const MAX_CHESTS_CAP = 10
-const MAX_STACK = 999
 const UNLOCK_COST = 50000
 /** 每次扩建仓库为总仓追加的格数 */
 const MAIN_CHEST_CAPACITY_PER_EXPAND = 30
@@ -113,108 +121,67 @@ export const useWarehouseStore = defineStore('warehouse', () => {
 
   // ---- 物品操作 ----
 
-  /** 直接往箱子加物品（内部/自动路由用） */
-  const addItemToChest = (chestId: string, itemId: string, quantity: number = 1, quality: Quality = 'normal'): boolean => {
+  /** 直接往箱子加物品（内部/自动路由用，addedValue：每件陈酿增值） */
+  const addItemToChest = (
+    chestId: string,
+    itemId: string,
+    quantity: number = 1,
+    quality: Quality = 'normal',
+    addedValue: number = 0
+  ): boolean => {
     const chest = chests.value.find(c => c.id === chestId)
     if (!chest) return false
-    const cap = getChestCapacity(chestId)
-    let remaining = quantity
-
-    for (const slot of chest.items) {
-      if (remaining <= 0) break
-      if (slot.itemId === itemId && slot.quality === quality && slot.quantity < MAX_STACK) {
-        const canAdd = Math.min(remaining, MAX_STACK - slot.quantity)
-        slot.quantity += canAdd
-        remaining -= canAdd
-      }
-    }
-
-    while (remaining > 0 && chest.items.length < cap) {
-      const batch = Math.min(remaining, MAX_STACK)
-      chest.items.push({ itemId, quantity: batch, quality })
-      remaining -= batch
-    }
-
-    return remaining <= 0
+    return putIntoStacks(chest.items, getChestCapacity(chestId), itemId, quantity, quality, normalizeAddedValue(addedValue)) <= 0
   }
 
-  /** 直接从箱子移除物品 */
-  const removeItemFromChest = (chestId: string, itemId: string, quantity: number = 1, quality?: Quality): boolean => {
+  /** 直接从箱子移除物品（addedValue 不传时优先消耗无陈酿增值的） */
+  const removeItemFromChest = (chestId: string, itemId: string, quantity: number = 1, quality?: Quality, addedValue?: number): boolean => {
     const chest = chests.value.find(c => c.id === chestId)
     if (!chest) return false
-
-    const matchQuality = (i: { itemId: string; quality: Quality }) =>
-      i.itemId === itemId && (quality === undefined || i.quality === quality)
-    const total = chest.items.filter(matchQuality).reduce((sum, i) => sum + i.quantity, 0)
-    if (total < quantity) return false
-
-    const qualityOrder: Quality[] = ['normal', 'fine', 'excellent', 'supreme']
-    let remaining = quantity
-    for (const q of quality !== undefined ? [quality] : qualityOrder) {
-      for (let i = chest.items.length - 1; i >= 0 && remaining > 0; i--) {
-        const slot = chest.items[i]!
-        if (slot.itemId !== itemId || slot.quality !== q) continue
-        const take = Math.min(remaining, slot.quantity)
-        slot.quantity -= take
-        remaining -= take
-        if (slot.quantity <= 0) {
-          chest.items.splice(i, 1)
-        }
-      }
-    }
-    return true
+    return takeFromStacks(chest.items, itemId, quantity, quality, addedValue === undefined ? undefined : normalizeAddedValue(addedValue))
   }
 
   /** 查询箱子内物品数量 */
-  const getChestItemCount = (chestId: string, itemId: string, quality?: Quality): number => {
+  const getChestItemCount = (chestId: string, itemId: string, quality?: Quality, addedValue?: number): number => {
     const chest = chests.value.find(c => c.id === chestId)
     if (!chest) return 0
-    return chest.items
-      .filter(i => i.itemId === itemId && (quality === undefined || i.quality === quality))
-      .reduce((sum, i) => sum + i.quantity, 0)
+    return countStacks(chest.items, itemId, quality, addedValue === undefined ? undefined : normalizeAddedValue(addedValue))
   }
 
   // ---- 存取操作（背包 ↔ 箱子）----
 
   /** 从背包存入箱子，返回实际存入数量（0 = 失败） */
-  const depositToChest = (chestId: string, itemId: string, quantity: number, quality: Quality): number => {
+  const depositToChest = (chestId: string, itemId: string, quantity: number, quality: Quality, addedValue: number = 0): number => {
     const inv = useInventoryStore()
     const chest = chests.value.find(c => c.id === chestId)
     if (!chest) return 0
+    const added = normalizeAddedValue(addedValue)
 
     // 计算箱子可容纳数量
-    const cap = getChestCapacity(chestId)
-    let canStore = 0
-    for (const slot of chest.items) {
-      if (slot.itemId === itemId && slot.quality === quality && slot.quantity < MAX_STACK) {
-        canStore += MAX_STACK - slot.quantity
-      }
-    }
-    const freeSlots = cap - chest.items.length
-    canStore += freeSlots * MAX_STACK
-
+    const canStore = getStackSpace(chest.items, getChestCapacity(chestId), itemId, quality, added)
     const actual = Math.min(quantity, canStore)
     if (actual <= 0) return 0
 
-    if (!inv.removeItem(itemId, actual, quality)) return 0
-    addItemToChest(chestId, itemId, actual, quality)
+    if (!inv.removeItem(itemId, actual, quality, added)) return 0
+    addItemToChest(chestId, itemId, actual, quality, added)
     return actual
   }
 
-  /** 从箱子取出到背包 */
-  const withdrawFromChest = (chestId: string, itemId: string, quantity: number, quality: Quality): boolean => {
+  /** 从箱子取出到背包，返回实际取出数量（0 = 失败）；背包和临时背包放得下多少取多少 */
+  const withdrawFromChest = (chestId: string, itemId: string, quantity: number, quality: Quality, addedValue: number = 0): number => {
     const inv = useInventoryStore()
     const chest = chests.value.find(c => c.id === chestId)
-    if (!chest) return false
+    if (!chest) return 0
+    const added = normalizeAddedValue(addedValue)
 
-    const available = getChestItemCount(chestId, itemId, quality)
-    const actual = Math.min(quantity, available)
-    if (actual <= 0) return false
+    const available = getChestItemCount(chestId, itemId, quality, added)
+    const actual = Math.min(quantity, available, inv.getReceivableQuantity(itemId, quality, added))
+    if (actual <= 0) return 0
 
-    // 先从箱子移除，再加入背包（addItem 会溢出到临时背包，避免物品复制）
-    removeItemFromChest(chestId, itemId, actual, quality)
-    inv.addItem(itemId, actual, quality)
-    return true
+    // 先从箱子移除，再加入背包（数量已按可放空间截断，不会溢出丢失）
+    removeItemFromChest(chestId, itemId, actual, quality, added)
+    inv.addItem(itemId, actual, quality, added)
+    return actual
   }
 
   // ---- 仓库扩容 ----
@@ -308,35 +275,12 @@ export const useWarehouseStore = defineStore('warehouse', () => {
     supreme: 3
   }
 
-  /** 一键整理箱子（按分类→物品ID→品质排序，合并同类栈） */
+  /** 一键整理箱子（按分类→物品ID→品质→陈酿增值排序，合并同类栈） */
   const sortChest = (chestId: string) => {
     const chest = getChest(chestId)
     if (!chest || chest.items.length === 0) return
-    // 合并同类栈
-    const merged: InventoryItem[] = []
-    for (const item of chest.items) {
-      const existing = merged.find(m => m.itemId === item.itemId && m.quality === item.quality)
-      if (existing) {
-        existing.quantity += item.quantity
-      } else {
-        merged.push({ ...item })
-      }
-    }
-    // 拆分超过 MAX_STACK 的栈
-    const split: InventoryItem[] = []
-    for (const item of merged) {
-      let remaining = item.quantity
-      while (remaining > 0) {
-        const batch = Math.min(remaining, MAX_STACK)
-        split.push({
-          itemId: item.itemId,
-          quantity: batch,
-          quality: item.quality
-        })
-        remaining -= batch
-      }
-    }
-    // 按分类 → 物品ID → 品质排序
+    // 合并同栈并拆分超过 MAX_STACK 的栈（陈酿增值不同的不合并）
+    const split = mergeStacks(chest.items)
     split.sort((a, b) => {
       const defA = getItemById(a.itemId)
       const defB = getItemById(b.itemId)
@@ -344,7 +288,8 @@ export const useWarehouseStore = defineStore('warehouse', () => {
       const catB = CATEGORY_ORDER[defB?.category ?? 'misc'] ?? 20
       if (catA !== catB) return catA - catB
       if (a.itemId !== b.itemId) return a.itemId.localeCompare(b.itemId)
-      return (qualityOrder[a.quality] ?? 0) - (qualityOrder[b.quality] ?? 0)
+      if (a.quality !== b.quality) return (qualityOrder[a.quality] ?? 0) - (qualityOrder[b.quality] ?? 0)
+      return getAddedValue(a) - getAddedValue(b)
     })
     chest.items = split
   }
@@ -366,12 +311,12 @@ export const useWarehouseStore = defineStore('warehouse', () => {
         if (!def || def.category === 'seed' || def.protected) return false
         return all || known.has(i.itemId)
       })
-      .map(i => ({ itemId: i.itemId, quality: i.quality, quantity: i.quantity }))
+      .map(i => ({ itemId: i.itemId, quality: i.quality, quantity: i.quantity, addedValue: getAddedValue(i) }))
 
     let kinds = 0
     let total = 0
     for (const item of snapshot) {
-      const stored = depositToChest(main.id, item.itemId, item.quantity, item.quality)
+      const stored = depositToChest(main.id, item.itemId, item.quantity, item.quality, item.addedValue)
       if (stored > 0) {
         kinds++
         total += stored

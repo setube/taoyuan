@@ -387,19 +387,21 @@
                   chestItemDetail = {
                     itemId: item.itemId,
                     quality: item.quality,
-                    quantity: item.quantity
+                    quantity: item.quantity,
+                    addedValue: item.addedValue ?? 0
                   }
                 "
               >
                 <span class="text-xs truncate mr-2 cursor-pointer hover:underline" :class="qualityTextClass(item.quality)">
                   {{ getItemName(item.itemId) }}
                   <span v-if="item.quality !== 'normal'" class="text-[10px]">[{{ QUALITY_LABEL[item.quality] }}]</span>
+                  <span v-if="item.addedValue" class="text-[10px] text-accent">陈酿+{{ item.addedValue }}</span>
                   <span class="text-xs text-muted">&times;{{ item.quantity }}</span>
                 </span>
                 <div class="flex items-center space-x-1.5">
                   <Button
                     class="py-0 px-1"
-                    @click.stop="openChestQtyModal('withdraw', openChestId!, item.itemId, item.quality, item.quantity)"
+                    @click.stop="openChestQtyModal('withdraw', openChestId!, item.itemId, item.quality, item.quantity, item.addedValue)"
                   >
                     取出
                   </Button>
@@ -455,14 +457,15 @@
           </div>
           <div class="flex flex-col space-y-1 max-h-60 overflow-y-auto">
             <div
-              v-for="item in depositableItems"
-              :key="item.itemId + item.quality"
+              v-for="(item, idx) in depositableItems"
+              :key="'deposit-' + idx"
               class="flex items-center justify-between border border-accent/20 rounded-xs px-3 py-1.5 cursor-pointer hover:bg-accent/5"
-              @click="openChestQtyModal('deposit', openChestId!, item.itemId, item.quality, item.quantity)"
+              @click="openChestQtyModal('deposit', openChestId!, item.itemId, item.quality, item.quantity, item.addedValue)"
             >
               <span class="text-xs truncate mr-2" :class="qualityTextClass(item.quality)">
                 {{ getItemName(item.itemId) }}
                 <span v-if="item.quality !== 'normal'" class="text-[10px]">({{ QUALITY_LABEL[item.quality] }})</span>
+                <span v-if="item.addedValue" class="text-[10px] text-accent">陈酿+{{ item.addedValue }}</span>
               </span>
               <span class="text-xs text-muted">&times;{{ item.quantity }}</span>
             </div>
@@ -488,6 +491,7 @@
           <p class="text-xs mb-2" :class="qualityTextClass(chestQtyModal.quality)">
             {{ getItemName(chestQtyModal.itemId) }}
             <span v-if="chestQtyModal.quality !== 'normal'" class="text-[10px]">({{ QUALITY_LABEL[chestQtyModal.quality] }})</span>
+            <span v-if="chestQtyModal.addedValue" class="text-[10px] text-accent">陈酿+{{ chestQtyModal.addedValue }}</span>
           </p>
           <div class="border border-accent/10 rounded-xs p-2 mb-2">
             <div class="flex items-center justify-between mb-1.5">
@@ -587,6 +591,10 @@
             <div v-if="chestItemDef.sellPrice" class="flex items-center justify-between mt-0.5">
               <span class="text-xs text-muted">售价</span>
               <span class="text-xs text-accent">{{ chestItemDef.sellPrice }}文</span>
+            </div>
+            <div v-if="chestItemDetail.addedValue" class="flex items-center justify-between mt-0.5">
+              <span class="text-xs text-muted">陈酿</span>
+              <span class="text-xs text-accent">+{{ chestItemDetail.addedValue }}文</span>
             </div>
             <div v-if="chestItemDef.staminaRestore" class="flex items-center justify-between mt-0.5">
               <span class="text-xs text-muted">恢复</span>
@@ -788,6 +796,7 @@
     itemId: string
     quality: Quality
     quantity: number
+    addedValue: number
   } | null>(null)
   const chestItemDef = computed(() => {
     if (!chestItemDetail.value) return null
@@ -921,9 +930,19 @@
     if (!chest) return
     const info = dismantleChestInfo.value
     if (!info) return
+    // 箱内物品和返还材料都要放得下，否则不拆
+    if (
+      !inventoryStore.canReceiveAll([
+        ...chest.items,
+        ...info.refund.map(m => ({ itemId: m.itemId, quantity: m.quantity, quality: 'normal' as const }))
+      ])
+    ) {
+      addLog('背包已满')
+      return
+    }
     // 箱内物品返还背包
     for (const item of [...chest.items]) {
-      inventoryStore.addItem(item.itemId, item.quantity, item.quality)
+      inventoryStore.addItem(item.itemId, item.quantity, item.quality, item.addedValue)
     }
     chest.items.length = 0
     // 拆除箱子
@@ -968,18 +987,27 @@
     chestId: string
     itemId: string
     quality: Quality
+    /** 每件陈酿增值 */
+    addedValue: number
     max: number
   }
   const chestQtyModal = ref<ChestQtyModalData | null>(null)
   const chestQty = ref(1)
 
-  const openChestQtyModal = (mode: 'withdraw' | 'deposit', chestId: string, itemId: string, quality: Quality, max: number) => {
+  const openChestQtyModal = (
+    mode: 'withdraw' | 'deposit',
+    chestId: string,
+    itemId: string,
+    quality: Quality,
+    max: number,
+    addedValue: number = 0
+  ) => {
     if (max <= 1) {
-      if (mode === 'withdraw') executeChestWithdraw(chestId, itemId, quality, 1)
-      else executeChestDeposit(chestId, itemId, quality, 1)
+      if (mode === 'withdraw') executeChestWithdraw(chestId, itemId, quality, 1, addedValue)
+      else executeChestDeposit(chestId, itemId, quality, 1, addedValue)
       return
     }
-    chestQtyModal.value = { mode, chestId, itemId, quality, max }
+    chestQtyModal.value = { mode, chestId, itemId, quality, addedValue, max }
     chestQty.value = max
   }
 
@@ -993,16 +1021,17 @@
     if (!isNaN(val)) setChestQty(val)
   }
 
-  const executeChestWithdraw = (chestId: string, itemId: string, quality: Quality, qty: number) => {
-    if (!warehouseStore.withdrawFromChest(chestId, itemId, qty, quality)) {
+  const executeChestWithdraw = (chestId: string, itemId: string, quality: Quality, qty: number, addedValue: number = 0) => {
+    const actualQty = warehouseStore.withdrawFromChest(chestId, itemId, qty, quality, addedValue)
+    if (actualQty <= 0) {
       addLog('背包已满，无法取出。')
       return
     }
-    addLog(`取出了${getItemName(itemId)}×${qty}。`)
+    addLog(`取出了${getItemName(itemId)}×${actualQty}。`)
   }
 
-  const executeChestDeposit = (chestId: string, itemId: string, quality: Quality, qty: number) => {
-    const actualQty = warehouseStore.depositToChest(chestId, itemId, qty, quality)
+  const executeChestDeposit = (chestId: string, itemId: string, quality: Quality, qty: number, addedValue: number = 0) => {
+    const actualQty = warehouseStore.depositToChest(chestId, itemId, qty, quality, addedValue)
     if (actualQty <= 0) {
       addLog('箱子已满，无法存入。')
       return
@@ -1015,9 +1044,9 @@
 
   const confirmChestQty = () => {
     if (!chestQtyModal.value) return
-    const { mode, chestId, itemId, quality } = chestQtyModal.value
-    if (mode === 'withdraw') executeChestWithdraw(chestId, itemId, quality, chestQty.value)
-    else executeChestDeposit(chestId, itemId, quality, chestQty.value)
+    const { mode, chestId, itemId, quality, addedValue } = chestQtyModal.value
+    if (mode === 'withdraw') executeChestWithdraw(chestId, itemId, quality, chestQty.value, addedValue)
+    else executeChestDeposit(chestId, itemId, quality, chestQty.value, addedValue)
     chestQtyModal.value = null
   }
 
@@ -1028,12 +1057,13 @@
     const snapshot = duplicateDepositItems.value.map(i => ({
       itemId: i.itemId,
       quality: i.quality,
-      quantity: i.quantity
+      quantity: i.quantity,
+      addedValue: i.addedValue ?? 0
     }))
     let totalDeposited = 0
     let kindCount = 0
     for (const item of snapshot) {
-      const actual = warehouseStore.depositToChest(chestId, item.itemId, item.quantity, item.quality)
+      const actual = warehouseStore.depositToChest(chestId, item.itemId, item.quantity, item.quality, item.addedValue)
       if (actual > 0) {
         totalDeposited += actual
         kindCount++

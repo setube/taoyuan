@@ -636,10 +636,10 @@ export const useHanhaiStore = defineStore('hanhai', () => {
       addLog(`用${exchangeDef.pointsCost}积分兑换了${exchangeDef.name}，获得西域香料×5。`)
       return { success: true, message: '获得西域香料×5！' }
     }
-    // 马匹升级：把现有的马换成更好的品种
+    // 马匹品种：记入已获得品种（卖马、换品种不丢），比现有的马好就直接换上
     if (exchangeDef.isHorseUpgrade) {
       const animalStore = useAnimalStore()
-      const result = animalStore.setHorseBreed(exchangeDef.isHorseUpgrade)
+      const result = animalStore.unlockHorseBreed(exchangeDef.isHorseUpgrade)
       if (!result.success) {
         // 条件不满足则退还积分与次数
         tradePoints.value += exchangeDef.pointsCost

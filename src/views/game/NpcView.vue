@@ -375,9 +375,9 @@
                   </span>
                   <span
                     class="text-[10px] flex items-center space-x-1"
-                    :class="inventoryStore.hasItem('silk_ribbon') ? 'text-success' : 'text-muted/50'"
+                    :class="hasCombinedItem('silk_ribbon') ? 'text-success' : 'text-muted/50'"
                   >
-                    <CircleCheck v-if="inventoryStore.hasItem('silk_ribbon')" :size="10" />
+                    <CircleCheck v-if="hasCombinedItem('silk_ribbon')" :size="10" />
                     <Circle v-else :size="10" />
                     <span>持有丝帕</span>
                     <span class="text-muted/40">— 绸缎庄有售</span>
@@ -405,9 +405,9 @@
                 </span>
                 <span
                   class="text-[10px] flex items-center space-x-0.5"
-                  :class="inventoryStore.hasItem('jade_ring') ? 'text-success' : 'text-muted/50'"
+                  :class="hasCombinedItem('jade_ring') ? 'text-success' : 'text-muted/50'"
                 >
-                  <CircleCheck v-if="inventoryStore.hasItem('jade_ring')" :size="10" />
+                  <CircleCheck v-if="hasCombinedItem('jade_ring')" :size="10" />
                   <Circle v-else :size="10" />
                   持有翡翠戒指
                   <span class="text-muted/40">— 绸缎庄有售</span>
@@ -455,9 +455,9 @@
                 </span>
                 <span
                   class="text-[10px] flex items-center space-x-0.5"
-                  :class="inventoryStore.hasItem('zhiji_jade') ? 'text-success' : 'text-muted/50'"
+                  :class="hasCombinedItem('zhiji_jade') ? 'text-success' : 'text-muted/50'"
                 >
-                  <CircleCheck v-if="inventoryStore.hasItem('zhiji_jade')" :size="10" />
+                  <CircleCheck v-if="hasCombinedItem('zhiji_jade')" :size="10" />
                   <Circle v-else :size="10" />
                   持有知己玉佩
                   <span class="text-muted/40">— 绸缎庄有售</span>
@@ -496,7 +496,7 @@
           <!-- 送礼 -->
           <div v-if="selectedInteractive">
             <p class="text-xs text-muted mb-2">
-              送礼（选择背包中的物品）
+              送礼
               <span v-if="npcStore.isBirthday(selectedNpc!)" class="text-danger">— 生日加成中!</span>
             </p>
             <!-- 生日礼有独立额度，先判断能不能送，再分别说明原因 -->
@@ -525,7 +525,7 @@
               </div>
               <div v-if="giftableItems.length === 0" class="flex flex-col items-center justify-center py-6 text-muted">
                 <Package :size="32" class="mb-2" />
-                <p class="text-xs">背包为空</p>
+                <p class="text-xs">暂无物品</p>
               </div>
             </template>
             <template v-else>
@@ -624,6 +624,7 @@
   import { addLog } from '@/composables/useGameLog'
   import { triggerHeartEvent } from '@/composables/useDialogs'
   import { handleEndDay } from '@/composables/useEndDay'
+  import { getGiftableStacks, hasCombinedItem } from '@/composables/useCombinedInventory'
   import type { FriendshipLevel, Quality } from '@/types'
   import Button from '@/components/game/Button.vue'
   import HiddenNpcModal from '@/components/game/HiddenNpcModal.vue'
@@ -671,7 +672,7 @@
   const activeGiftItem = computed(() => {
     if (!activeGiftKey.value) return null
     const [itemId, quality] = activeGiftKey.value.split(':')
-    return inventoryStore.items.find(i => i.itemId === itemId && i.quality === quality) ?? null
+    return giftableItems.value.find(i => i.itemId === itemId && i.quality === quality) ?? null
   })
 
   const activeGiftDef = computed(() => {
@@ -809,11 +810,9 @@
     return npcStore.getGiftStatusText(selectedNpc.value)
   })
 
+  /** 可送的物品：背包+仓库按物品、品质合计（种子不参与送礼） */
   const giftableItems = computed(() => {
-    const filtered = inventoryStore.items.filter(i => {
-      const def = getItemById(i.itemId)
-      return def && def.category !== 'seed'
-    })
+    const filtered = getGiftableStacks()
     if (!selectedNpcDef.value) return filtered
     return [...filtered].sort((a, b) => GIFT_PREF_ORDER[getGiftPreference(a.itemId)] - GIFT_PREF_ORDER[getGiftPreference(b.itemId)])
   })
@@ -826,7 +825,7 @@
     if (selectedNpcState.value?.married) return false
     if (npcStore.npcStates.some(s => s.married)) return false
     if ((selectedNpcState.value?.friendship ?? 0) < 2000) return false
-    if (!inventoryStore.hasItem('silk_ribbon')) return false
+    if (!hasCombinedItem('silk_ribbon')) return false
     return true
   })
 
@@ -839,7 +838,7 @@
     if (npcStore.npcStates.some(s => s.married)) return false
     if (npcStore.weddingCountdown > 0) return false
     if ((selectedNpcState.value?.friendship ?? 0) < 2500) return false
-    if (!inventoryStore.hasItem('jade_ring')) return false
+    if (!hasCombinedItem('jade_ring')) return false
     return true
   })
 
@@ -850,7 +849,7 @@
     if (selectedNpcState.value?.zhiji || selectedNpcState.value?.dating || selectedNpcState.value?.married) return false
     if (npcStore.npcStates.some(s => s.zhiji)) return false
     if ((selectedNpcState.value?.friendship ?? 0) < 2000) return false
-    if (!inventoryStore.hasItem('zhiji_jade')) return false
+    if (!hasCombinedItem('zhiji_jade')) return false
     return true
   })
 

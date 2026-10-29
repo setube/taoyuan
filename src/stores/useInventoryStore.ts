@@ -42,11 +42,21 @@ import {
   formatEnhanceName
 } from '@/data/enhance'
 import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
+import {
+  normalizeAddedValue,
+  getAddedValue,
+  isSameStack,
+  putIntoStacks,
+  takeFromStacks,
+  countStacks,
+  mergeStacks,
+  getStackSpace
+} from '@/composables/useItemStacks'
 import { usePlayerStore } from './usePlayerStore'
 import { useAchievementStore } from './useAchievementStore'
 
 const INITIAL_CAPACITY = 24
-const MAX_CAPACITY = 60
+const MAX_CAPACITY = 100
 const MAX_STACK = 999
 const TEMP_CAPACITY = 10
 
@@ -216,8 +226,8 @@ export const useInventoryStore = defineStore('inventory', () => {
     }
   }
 
-  /** 添加物品到背包 */
-  const addItem = (itemId: string, quantity: number = 1, quality: Quality = 'normal', addedValue?: number): boolean => {
+  /** 添加物品到背包（addedValue：每件陈酿增值，增值相同才合并） */
+  const addItem = (itemId: string, quantity: number = 1, quality: Quality = 'normal', addedValue: number = 0): boolean => {
     // 校验物品是否存在
     if (!getItemById(itemId)) return false
     // 自动注册到图鉴
@@ -229,50 +239,10 @@ export const useInventoryStore = defineStore('inventory', () => {
       return true
     }
 
-    let remaining = quantity
-
-    // 带陈酿增值的物品不合并入已有栈（保持增值独立），直接创建新栈
-    if (addedValue && addedValue > 0) {
-      while (remaining > 0 && !isFull.value) {
-        const batch = Math.min(remaining, MAX_STACK)
-        items.value.push({ itemId, quantity: batch, quality, addedValue })
-        remaining -= batch
-      }
-    } else {
-      // 先填充已有的同类栈（无增值）
-      for (const slot of items.value) {
-        if (remaining <= 0) break
-        if (slot.itemId === itemId && slot.quality === quality && !slot.addedValue && slot.quantity < MAX_STACK) {
-          const canAdd = Math.min(remaining, MAX_STACK - slot.quantity)
-          slot.quantity += canAdd
-          remaining -= canAdd
-        }
-      }
-
-      // 剩余部分创建新栈
-      while (remaining > 0 && !isFull.value) {
-        const batch = Math.min(remaining, MAX_STACK)
-        items.value.push({ itemId, quantity: batch, quality })
-        remaining -= batch
-      }
-    }
-
-    // 溢出到临时背包
-    if (remaining > 0) {
-      for (const slot of tempItems.value) {
-        if (remaining <= 0) break
-        if (slot.itemId === itemId && slot.quality === quality && slot.quantity < MAX_STACK) {
-          const canAdd = Math.min(remaining, MAX_STACK - slot.quantity)
-          slot.quantity += canAdd
-          remaining -= canAdd
-        }
-      }
-      while (remaining > 0 && !isTempFull.value) {
-        const batch = Math.min(remaining, MAX_STACK)
-        tempItems.value.push({ itemId, quantity: batch, quality })
-        remaining -= batch
-      }
-    }
+    const added = normalizeAddedValue(addedValue)
+    // 先放主背包，放不下的溢出到临时背包
+    let remaining = putIntoStacks(items.value, capacity.value, itemId, quantity, quality, added)
+    if (remaining > 0) remaining = putIntoStacks(tempItems.value, TEMP_CAPACITY, itemId, remaining, quality, added)
 
     if (remaining > 0) {
       const name = getItemById(itemId)?.name ?? itemId
@@ -288,40 +258,46 @@ export const useInventoryStore = defineStore('inventory', () => {
     return remaining <= 0
   }
 
-  /** 移除物品（支持跨栈删除）。quality 不传时优先消耗低品质 */
-  const removeItem = (itemId: string, quantity: number = 1, quality?: Quality): boolean => {
+  /** 背包（含临时背包）还能放多少；种子进种子袋，不限 */
+  const getReceivableQuantity = (itemId: string, quality: Quality = 'normal', addedValue: number = 0): number => {
+    if (isSeedItem(itemId)) return Infinity
+    const added = normalizeAddedValue(addedValue)
+    return (
+      getStackSpace(items.value, capacity.value, itemId, quality, added) +
+      getStackSpace(tempItems.value, TEMP_CAPACITY, itemId, quality, added)
+    )
+  }
+
+  /** 背包（含临时背包）能否再放 1 件 */
+  const canReceiveItem = (itemId: string, quality: Quality = 'normal', addedValue: number = 0): boolean =>
+    getReceivableQuantity(itemId, quality, addedValue) >= 1
+
+  /** 一批物品能否全部放进背包（含临时背包），只试算不改动 */
+  const canReceiveAll = (stacks: InventoryItem[]): boolean => {
+    const main = items.value.map(s => ({ ...s }))
+    const temp = tempItems.value.map(s => ({ ...s }))
+    return stacks.every(s => {
+      if (isSeedItem(s.itemId)) return true
+      const added = getAddedValue(s)
+      const left = putIntoStacks(main, capacity.value, s.itemId, s.quantity, s.quality, added)
+      return putIntoStacks(temp, TEMP_CAPACITY, s.itemId, left, s.quality, added) <= 0
+    })
+  }
+
+  /**
+   * 移除物品（支持跨栈删除）。
+   * quality 不传时优先消耗低品质；addedValue 不传时优先消耗无陈酿增值的。
+   */
+  const removeItem = (itemId: string, quantity: number = 1, quality?: Quality, addedValue?: number): boolean => {
     // 种子从种子袋扣除
     const pool = isSeedItem(itemId) ? seedItems : items
-    // 先检查总数是否足够
-    const matchQuality = (i: { itemId: string; quality: Quality }) =>
-      i.itemId === itemId && (quality === undefined || i.quality === quality)
-    const total = pool.value.filter(matchQuality).reduce((sum, i) => sum + i.quantity, 0)
-    if (total < quantity) return false
-
-    // 不指定品质时按 normal → fine → excellent → supreme 顺序消耗
-    const qualityOrder: Quality[] = ['normal', 'fine', 'excellent', 'supreme']
-    let remaining = quantity
-    for (const q of quality !== undefined ? [quality] : qualityOrder) {
-      for (let i = pool.value.length - 1; i >= 0 && remaining > 0; i--) {
-        const slot = pool.value[i]!
-        if (slot.itemId !== itemId || slot.quality !== q) continue
-        const take = Math.min(remaining, slot.quantity)
-        slot.quantity -= take
-        remaining -= take
-        if (slot.quantity <= 0) {
-          pool.value.splice(i, 1)
-        }
-      }
-    }
-    return true
+    return takeFromStacks(pool.value, itemId, quantity, quality, addedValue === undefined ? undefined : normalizeAddedValue(addedValue))
   }
 
   /** 查询物品数量（种子自动查种子袋） */
-  const getItemCount = (itemId: string, quality?: Quality): number => {
+  const getItemCount = (itemId: string, quality?: Quality, addedValue?: number): number => {
     const pool = isSeedItem(itemId) ? seedItems : items
-    return pool.value
-      .filter(i => i.itemId === itemId && (quality === undefined || i.quality === quality))
-      .reduce((sum, i) => sum + i.quantity, 0)
+    return countStacks(pool.value, itemId, quality, addedValue === undefined ? undefined : normalizeAddedValue(addedValue))
   }
 
   /** 检查是否拥有足够数量 */
@@ -355,40 +331,15 @@ export const useInventoryStore = defineStore('inventory', () => {
   }
 
   /** 切换物品锁定状态 */
-  const toggleLock = (itemId: string, quality: Quality) => {
-    const slot = items.value.find(i => i.itemId === itemId && i.quality === quality)
+  const toggleLock = (itemId: string, quality: Quality, addedValue: number = 0) => {
+    const slot = items.value.find(i => isSameStack(i, itemId, quality, normalizeAddedValue(addedValue)))
     if (slot) slot.locked = !slot.locked
   }
 
-  /** 一键整理背包（按分类→物品ID→品质排序，合并同类栈） */
+  /** 一键整理背包（按分类→物品ID→品质→陈酿增值排序，合并同类栈） */
   const sortItems = () => {
-    // 先合并同类栈（任一栈锁定则合并后保持锁定）
-    const merged: InventoryItem[] = []
-    for (const item of items.value) {
-      const existing = merged.find(m => m.itemId === item.itemId && m.quality === item.quality)
-      if (existing) {
-        existing.quantity += item.quantity
-        if (item.locked) existing.locked = true
-      } else {
-        merged.push({ ...item })
-      }
-    }
-    // 拆分超过 MAX_STACK 的栈（保留锁定状态）
-    const split: InventoryItem[] = []
-    for (const item of merged) {
-      let remaining = item.quantity
-      while (remaining > 0) {
-        const batch = Math.min(remaining, MAX_STACK)
-        split.push({
-          itemId: item.itemId,
-          quantity: batch,
-          quality: item.quality,
-          locked: item.locked
-        })
-        remaining -= batch
-      }
-    }
-    // 按分类 → 物品ID → 品质排序
+    // 合并同栈（任一栈锁定则合并后保持锁定，陈酿增值不同的不合并）
+    const split = mergeStacks(items.value)
     const qualityOrder: Record<string, number> = {
       normal: 0,
       fine: 1,
@@ -402,7 +353,8 @@ export const useInventoryStore = defineStore('inventory', () => {
       const catB = CATEGORY_ORDER[defB?.category ?? 'misc'] ?? 20
       if (catA !== catB) return catA - catB
       if (a.itemId !== b.itemId) return a.itemId.localeCompare(b.itemId)
-      return (qualityOrder[a.quality] ?? 0) - (qualityOrder[b.quality] ?? 0)
+      if (a.quality !== b.quality) return (qualityOrder[a.quality] ?? 0) - (qualityOrder[b.quality] ?? 0)
+      return getAddedValue(a) - getAddedValue(b)
     })
     items.value = split
     sortSeedBag()
@@ -445,7 +397,7 @@ export const useInventoryStore = defineStore('inventory', () => {
   /** 扩容背包 */
   const expandCapacity = (): boolean => {
     if (capacity.value >= MAX_CAPACITY) return false
-    capacity.value += 4
+    capacity.value = Math.min(MAX_CAPACITY, capacity.value + 4)
     return true
   }
 
@@ -459,23 +411,14 @@ export const useInventoryStore = defineStore('inventory', () => {
   const moveFromTemp = (index: number): boolean => {
     if (index < 0 || index >= tempItems.value.length) return false
     const tempSlot = tempItems.value[index]!
-    const { itemId, quality } = tempSlot
-    let remaining = tempSlot.quantity
-
-    for (const slot of items.value) {
-      if (remaining <= 0) break
-      if (slot.itemId === itemId && slot.quality === quality && slot.quantity < MAX_STACK) {
-        const canAdd = Math.min(remaining, MAX_STACK - slot.quantity)
-        slot.quantity += canAdd
-        remaining -= canAdd
-      }
-    }
-    while (remaining > 0 && !isFull.value) {
-      const batch = Math.min(remaining, MAX_STACK)
-      items.value.push({ itemId, quantity: batch, quality })
-      remaining -= batch
-    }
-
+    const remaining = putIntoStacks(
+      items.value,
+      capacity.value,
+      tempSlot.itemId,
+      tempSlot.quantity,
+      tempSlot.quality,
+      getAddedValue(tempSlot)
+    )
     if (remaining <= 0) {
       tempItems.value.splice(index, 1)
       return true
@@ -1292,6 +1235,9 @@ export const useInventoryStore = defineStore('inventory', () => {
     isTempFull,
     isAllFull,
     addItem,
+    getReceivableQuantity,
+    canReceiveItem,
+    canReceiveAll,
     removeItem,
     getItemCount,
     hasItem,

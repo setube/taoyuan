@@ -9,6 +9,8 @@ import { useNpcStore } from './useNpcStore'
 import { useQuestStore } from './useQuestStore'
 import { useInventoryStore } from './useInventoryStore'
 import { usePlayerStore } from './usePlayerStore'
+import { useAnimalStore } from './useAnimalStore'
+import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
 import router from '@/router'
 import type { HiddenNpcState, DiscoveryCondition, DiscoveryStep, AffinityLevel, BondBonusType } from '@/types/hiddenNpc'
 import type { Quality, HeartEventDef } from '@/types'
@@ -198,11 +200,11 @@ export const useHiddenNpcStore = defineStore('hiddenNpc', () => {
         affinityChange: 0
       }
 
-    const inventoryStore = useInventoryStore()
-    if (!inventoryStore.removeItem(itemId, 1, quality)) {
+    // 背包、仓库里的都能供奉
+    if (!removeCombinedItem(itemId, 1, quality)) {
       return {
         success: false,
-        message: '背包中没有此物品。',
+        message: '没有此物品。',
         affinityChange: 0
       }
     }
@@ -326,8 +328,7 @@ export const useHiddenNpcStore = defineStore('hiddenNpc', () => {
       return { success: false, message: '已与其他仙灵有缘分羁绊。' }
     }
 
-    const inventoryStore = useInventoryStore()
-    if (!inventoryStore.removeItem(def.courtshipItemId, 1)) {
+    if (!removeCombinedItem(def.courtshipItemId, 1)) {
       return { success: false, message: `需要「${def.courtshipItemId}」。` }
     }
 
@@ -347,13 +348,16 @@ export const useHiddenNpcStore = defineStore('hiddenNpc', () => {
         message: `缘分不足（需要${def.bondThreshold}）。`
       }
 
-    const inventoryStore = useInventoryStore()
-    if (!inventoryStore.removeItem(def.bondItemId, 1)) {
+    if (!removeCombinedItem(def.bondItemId, 1)) {
       return { success: false, message: `需要「${def.bondItemId}」。` }
     }
 
     state.bonded = true
-    return { success: true, message: `你与${def.name}结下了永世仙缘。` }
+    const bondMessage = `你与${def.name}结下了永世仙缘。`
+    if (!def.bondHorseBreed) return { success: true, message: bondMessage }
+    // 结缘赠马：记入已获得品种（已拥有则不重复给）
+    const horse = useAnimalStore().unlockHorseBreed(def.bondHorseBreed)
+    return { success: true, message: horse.success ? `${bondMessage}${horse.message}` : bondMessage }
   }
 
   const dissolveBond = (npcId: string): { success: boolean; message: string } => {
@@ -381,18 +385,19 @@ export const useHiddenNpcStore = defineStore('hiddenNpc', () => {
     const costs = type === 'courtship' ? def.courtshipCraftCost : def.bondCraftCost
     const outputItemId = type === 'courtship' ? def.courtshipItemId : def.bondItemId
 
-    const inventoryStore = useInventoryStore()
-
-    // 检查材料
+    // 检查材料（背包+仓库）
     for (const cost of costs) {
-      if (inventoryStore.getItemCount(cost.itemId) < cost.quantity) {
+      if (getCombinedItemCount(cost.itemId) < cost.quantity) {
         return { success: false, message: '材料不足。' }
       }
     }
+    // 材料可能全在仓库，扣完背包也不会腾出格子：放不下就不做
+    const inventoryStore = useInventoryStore()
+    if (!inventoryStore.canReceiveItem(outputItemId)) return { success: false, message: '背包已满' }
 
     // 扣除材料
     for (const cost of costs) {
-      inventoryStore.removeItem(cost.itemId, cost.quantity)
+      removeCombinedItem(cost.itemId, cost.quantity)
     }
 
     // 添加产物

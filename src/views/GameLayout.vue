@@ -235,18 +235,20 @@
                       voidItemDetail = {
                         itemId: item.itemId,
                         quality: item.quality,
-                        quantity: item.quantity
+                        quantity: item.quantity,
+                        addedValue: item.addedValue ?? 0
                       }
                     "
                   >
                     <span class="text-[10px] truncate mr-2 cursor-pointer hover:underline" :class="voidQualityClass(item.quality)">
                       {{ getItemName(item.itemId) }}
+                      <span v-if="item.addedValue" class="text-[10px] text-accent">陈酿+{{ item.addedValue }}</span>
                       <span class="text-[10px] text-muted">&times;{{ item.quantity }}</span>
                     </span>
                     <div class="flex items-center space-x-1">
                       <Button
                         class="py-0 px-1 text-[10px]"
-                        @click.stop="openVoidQtyModal('withdraw', vc.id, item.itemId, item.quality, item.quantity)"
+                        @click.stop="openVoidQtyModal('withdraw', vc.id, item.itemId, item.quality, item.quantity, item.addedValue)"
                       >
                         取出
                       </Button>
@@ -302,14 +304,15 @@
           </div>
           <div class="flex flex-col space-y-1 max-h-60 overflow-y-auto">
             <div
-              v-for="item in voidDepositableItems"
-              :key="item.itemId + item.quality"
+              v-for="(item, idx) in voidDepositableItems"
+              :key="'void-deposit-' + idx"
               class="flex items-center justify-between border border-accent/20 rounded-xs px-3 py-1.5 cursor-pointer hover:bg-accent/5"
-              @click="openVoidQtyModal('deposit', voidDepositChestId!, item.itemId, item.quality, item.quantity)"
+              @click="openVoidQtyModal('deposit', voidDepositChestId!, item.itemId, item.quality, item.quantity, item.addedValue)"
             >
               <span class="text-xs truncate mr-2" :class="voidQualityClass(item.quality)">
                 {{ getItemName(item.itemId) }}
                 <span v-if="item.quality !== 'normal'" class="text-[10px]">({{ VOID_QUALITY_LABEL[item.quality] }})</span>
+                <span v-if="item.addedValue" class="text-[10px] text-accent">陈酿+{{ item.addedValue }}</span>
               </span>
               <span class="text-xs text-muted">&times;{{ item.quantity }}</span>
             </div>
@@ -335,6 +338,7 @@
           <p class="text-xs mb-2" :class="voidQualityClass(voidQtyModal.quality)">
             {{ getItemName(voidQtyModal.itemId) }}
             <span v-if="voidQtyModal.quality !== 'normal'" class="text-[10px]">({{ VOID_QUALITY_LABEL[voidQtyModal.quality] }})</span>
+            <span v-if="voidQtyModal.addedValue" class="text-[10px] text-accent">陈酿+{{ voidQtyModal.addedValue }}</span>
           </p>
           <div class="border border-accent/10 rounded-xs p-2 mb-2">
             <div class="flex items-center justify-between mb-1.5">
@@ -399,6 +403,10 @@
             <div v-if="voidItemDef.sellPrice" class="flex items-center justify-between mt-0.5">
               <span class="text-xs text-muted">售价</span>
               <span class="text-xs text-accent">{{ voidItemDef.sellPrice }}文</span>
+            </div>
+            <div v-if="voidItemDetail.addedValue" class="flex items-center justify-between mt-0.5">
+              <span class="text-xs text-muted">陈酿</span>
+              <span class="text-xs text-accent">+{{ voidItemDetail.addedValue }}文</span>
             </div>
             <div v-if="voidItemDef.staminaRestore" class="flex items-center justify-between mt-0.5">
               <span class="text-xs text-muted">恢复</span>
@@ -563,7 +571,7 @@
   import { useDialogs } from '@/composables/useDialogs'
   import type { MorningChoiceEvent } from '@/data/farmEvents'
   import { handleEndDay, lastPassOutNotice } from '@/composables/useEndDay'
-  import { addLog, showFloat, logHistory, clearAllLogs, clearDayLogs, _registerDayLabelGetter } from '@/composables/useGameLog'
+  import { addLog, showFloat, logHistory, clearAllLogs, clearDayLogs } from '@/composables/useGameLog'
   import { useSaveStore } from '@/stores/useSaveStore'
   import {
     LATE_NIGHT_RECOVERY_MAX,
@@ -686,9 +694,6 @@
   watch(showLogModal, v => {
     if (!v) clearLogTarget.value = undefined
   })
-
-  // 注册天数标签获取器
-  _registerDayLabelGetter(() => `第${gameStore.year}年 ${SEASON_NAMES[gameStore.season]} 第${gameStore.day}天`)
 
   /** 按天分组的日志（最新天在前，每天内也倒序） */
   const groupedLogs = computed(() => {
@@ -1029,12 +1034,13 @@
     const snapshot = voidDuplicateDepositItems.value.map(i => ({
       itemId: i.itemId,
       quality: i.quality,
-      quantity: i.quantity
+      quantity: i.quantity,
+      addedValue: i.addedValue ?? 0
     }))
     let totalDeposited = 0
     let kindCount = 0
     for (const item of snapshot) {
-      const actual = warehouseStore.depositToChest(chestId, item.itemId, item.quantity, item.quality)
+      const actual = warehouseStore.depositToChest(chestId, item.itemId, item.quantity, item.quality, item.addedValue)
       if (actual > 0) {
         totalDeposited += actual
         kindCount++
@@ -1052,6 +1058,7 @@
     itemId: string
     quality: Quality
     quantity: number
+    addedValue: number
   } | null>(null)
   const voidItemDef = computed(() => {
     if (!voidItemDetail.value) return null
@@ -1064,19 +1071,28 @@
     chestId: string
     itemId: string
     quality: Quality
+    /** 每件陈酿增值 */
+    addedValue: number
     max: number
   }
   const voidQtyModal = ref<VoidQtyModalData | null>(null)
   const voidQty = ref(1)
 
-  const openVoidQtyModal = (mode: 'withdraw' | 'deposit', chestId: string, itemId: string, quality: Quality, max: number) => {
+  const openVoidQtyModal = (
+    mode: 'withdraw' | 'deposit',
+    chestId: string,
+    itemId: string,
+    quality: Quality,
+    max: number,
+    addedValue: number = 0
+  ) => {
     if (max <= 1) {
       // 数量为1时直接执行，不弹窗
-      if (mode === 'withdraw') executeVoidWithdraw(chestId, itemId, quality, 1)
-      else executeVoidDeposit(chestId, itemId, quality, 1)
+      if (mode === 'withdraw') executeVoidWithdraw(chestId, itemId, quality, 1, addedValue)
+      else executeVoidDeposit(chestId, itemId, quality, 1, addedValue)
       return
     }
-    voidQtyModal.value = { mode, chestId, itemId, quality, max }
+    voidQtyModal.value = { mode, chestId, itemId, quality, addedValue, max }
     voidQty.value = max
   }
 
@@ -1090,16 +1106,17 @@
     if (!isNaN(val)) setVoidQty(val)
   }
 
-  const executeVoidWithdraw = (chestId: string, itemId: string, quality: Quality, qty: number) => {
-    if (!warehouseStore.withdrawFromChest(chestId, itemId, qty, quality)) {
+  const executeVoidWithdraw = (chestId: string, itemId: string, quality: Quality, qty: number, addedValue: number = 0) => {
+    const actualQty = warehouseStore.withdrawFromChest(chestId, itemId, qty, quality, addedValue)
+    if (actualQty <= 0) {
       addLog('背包已满，无法取出。')
       return
     }
-    addLog(`从虚空箱取出了${getItemName(itemId)}×${qty}。`)
+    addLog(`从虚空箱取出了${getItemName(itemId)}×${actualQty}。`)
   }
 
-  const executeVoidDeposit = (chestId: string, itemId: string, quality: Quality, qty: number) => {
-    const actualQty = warehouseStore.depositToChest(chestId, itemId, qty, quality)
+  const executeVoidDeposit = (chestId: string, itemId: string, quality: Quality, qty: number, addedValue: number = 0) => {
+    const actualQty = warehouseStore.depositToChest(chestId, itemId, qty, quality, addedValue)
     if (actualQty <= 0) {
       addLog('虚空箱已满，无法存入。')
       return
@@ -1112,9 +1129,9 @@
 
   const confirmVoidQty = () => {
     if (!voidQtyModal.value) return
-    const { mode, chestId, itemId, quality } = voidQtyModal.value
-    if (mode === 'withdraw') executeVoidWithdraw(chestId, itemId, quality, voidQty.value)
-    else executeVoidDeposit(chestId, itemId, quality, voidQty.value)
+    const { mode, chestId, itemId, quality, addedValue } = voidQtyModal.value
+    if (mode === 'withdraw') executeVoidWithdraw(chestId, itemId, quality, voidQty.value, addedValue)
+    else executeVoidDeposit(chestId, itemId, quality, voidQty.value, addedValue)
     voidQtyModal.value = null
   }
 

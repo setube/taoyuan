@@ -12,9 +12,10 @@ import type {
   FarmHelperTask,
   HiredHelper
 } from '@/types'
-import { NPCS, getNpcById, getHeartEventsForNpc, RECIPES } from '@/data'
+import { NPCS, getNpcById, getHeartEventsForNpc, RECIPES, formatFeedUsage } from '@/data'
 import { WEATHER_TIPS, getFortuneTip, getLivingTip, getRecipeTipMessage, NO_RECIPE_TIP, TIP_NPC_IDS } from '@/data/npcTips'
 import { getItemById } from '@/data/items'
+import { getProcessingRecipeById } from '@/data/processing'
 import { buildChatterPool } from '@/data/npcChatter'
 import {
   CHILD_GIFT_CHANCE,
@@ -26,6 +27,7 @@ import {
   pickMilestone
 } from '@/data/childGrowth'
 import { useInventoryStore } from './useInventoryStore'
+import { removeCombinedItem } from '@/composables/useCombinedInventory'
 import { useGameStore } from './useGameStore'
 import { usePlayerStore } from './usePlayerStore'
 import { useCookingStore } from './useCookingStore'
@@ -195,14 +197,13 @@ export const useNpcStore = defineStore('npc', () => {
   }
 
   /** 每日雇工结算（useEndDay调用） */
-  const processDailyHelpers = (taskFilter?: FarmHelperTask[]): { messages: string[]; dismissedNpcs: string[]; allFed: boolean } => {
+  const processDailyHelpers = (taskFilter?: FarmHelperTask[]): { messages: string[]; dismissedNpcs: string[] } => {
     const playerStore = usePlayerStore()
     const farmStore = useFarmStore()
     const animalStore = useAnimalStore()
     const inventoryStore = useInventoryStore()
     const messages: string[] = []
     const dismissed: string[] = []
-    let allFed = false
 
     for (const helper of [...hiredHelpers.value]) {
       // 按任务类型过滤
@@ -246,18 +247,18 @@ export const useNpcStore = defineStore('npc', () => {
           break
         }
         case 'feed': {
+          // 早上按默认饲料喂（不足补干草，背包、仓库都会用）
           const result = animalStore.feedAll()
           const fishPondStore = useFishPondStore()
           const fedFish = fishPondStore.pond.built && !fishPondStore.pond.fedToday ? fishPondStore.feedFish() : false
-          allFed = result.noFeedCount === 0 && result.fedCount > 0
-          if (result.fedCount > 0 && fedFish) {
-            messages.push(`${name}帮你喂了${result.fedCount}只牲畜和鱼塘的鱼。(-${helper.dailyWage}文)`)
-          } else if (result.fedCount > 0) {
-            messages.push(`${name}帮你喂了${result.fedCount}只牲畜。(-${helper.dailyWage}文)`)
-          } else if (fedFish) {
-            messages.push(`${name}帮你喂了鱼塘的鱼。(-${helper.dailyWage}文)`)
-          } else if (result.noFeedCount > 0) {
-            messages.push(`${name}发现草料不足，${result.noFeedCount}只牲畜未能喂食。(-${helper.dailyWage}文)`)
+          const done: string[] = []
+          if (result.fedCount > 0) done.push(`${result.fedCount}只牲畜（${formatFeedUsage(result.used)}）`)
+          if (fedFish) done.push('鱼塘的鱼')
+          const shortage = result.noFeedCount > 0 ? `饲料不足，${result.noFeedCount}只牲畜未喂。` : ''
+          if (done.length > 0) {
+            messages.push(`${name}帮你喂了${done.join('和')}。${shortage}(-${helper.dailyWage}文)`)
+          } else if (shortage) {
+            messages.push(`${name}发现${shortage}(-${helper.dailyWage}文)`)
           } else {
             messages.push(`${name}今天没什么需要喂的。(-${helper.dailyWage}文)`)
           }
@@ -304,9 +305,19 @@ export const useNpcStore = defineStore('npc', () => {
         case 'collect': {
           // 收取加工坊里已完成的产物，省去玩家逐个点收
           const processingStore = useProcessingStore()
+          // 收取前按产物汇总实际数量（含设备等级），收取后槽位会被重置
+          const totals = new Map<string, number>()
+          for (const slot of processingStore.machines) {
+            const outputId = slot.ready && slot.recipeId ? getProcessingRecipeById(slot.recipeId)?.outputItemId : undefined
+            if (!outputId) continue
+            const outputName = getItemById(outputId)?.name ?? outputId
+            totals.set(outputName, (totals.get(outputName) ?? 0) + processingStore.getSlotOutputQuantity(slot))
+          }
           const collected = processingStore.collectAllReady()
-          if (collected > 0) messages.push(`${name}帮你从加工坊收了${collected}份成品。(-${helper.dailyWage}文)`)
-          else messages.push(`${name}去加工坊转了一圈，今天没有做好的东西。(-${helper.dailyWage}文)`)
+          if (collected > 0) {
+            const detail = [...totals.entries()].map(([n, c]) => `${n}×${c}`).join('、')
+            messages.push(`${name}帮你从加工坊收了${detail}。(-${helper.dailyWage}文)`)
+          } else messages.push(`${name}去加工坊转了一圈，今天没有做好的东西。(-${helper.dailyWage}文)`)
           break
         }
         case 'weed': {
@@ -334,7 +345,7 @@ export const useNpcStore = defineStore('npc', () => {
         }
       }
     }
-    return { messages, dismissedNpcs: dismissed, allFed }
+    return { messages, dismissedNpcs: dismissed }
   }
 
   /** 子女名字池（按性别） */
@@ -573,8 +584,8 @@ export const useNpcStore = defineStore('npc', () => {
       if (state.giftsThisWeek >= 2) return null
     }
 
-    const inventoryStore = useInventoryStore()
-    if (!inventoryStore.removeItem(itemId, 1, quality)) return null
+    // 背包、仓库里的都能送
+    if (!removeCombinedItem(itemId, 1, quality)) return null
 
     if (isBirthdayGift) {
       state.birthdayGiftGiven = true
@@ -636,8 +647,7 @@ export const useNpcStore = defineStore('npc', () => {
     if (npcStates.value.some(s => s.married)) return { success: false, message: '你已经结婚了。' }
     if (state.friendship < 2000) return { success: false, message: '好感度不足（需要8心/2000）。' }
 
-    const inventoryStore = useInventoryStore()
-    if (!inventoryStore.removeItem('silk_ribbon')) {
+    if (!removeCombinedItem('silk_ribbon')) {
       return { success: false, message: '需要一条丝帕。' }
     }
 
@@ -675,8 +685,7 @@ export const useNpcStore = defineStore('npc', () => {
 
     if (state.friendship < 2500) return { success: false, message: '好感度不足（需要10心/2500）。' }
 
-    const inventoryStore = useInventoryStore()
-    if (!inventoryStore.removeItem('jade_ring')) {
+    if (!removeCombinedItem('jade_ring')) {
       return { success: false, message: '需要一枚翡翠戒指。' }
     }
 
@@ -718,8 +727,7 @@ export const useNpcStore = defineStore('npc', () => {
     if (npcStates.value.some(s => s.zhiji)) return { success: false, message: '你已经有知己了。' }
     if (state.friendship < 2000) return { success: false, message: '好感度不足（需要8心/2000）。' }
 
-    const inventoryStore = useInventoryStore()
-    if (!inventoryStore.removeItem('zhiji_jade')) {
+    if (!removeCombinedItem('zhiji_jade')) {
       return { success: false, message: '需要一块知己玉佩。' }
     }
 

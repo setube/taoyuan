@@ -29,6 +29,11 @@ import { useFishPondStore } from './useFishPondStore'
 import { useTutorialStore } from './useTutorialStore'
 import { useHiddenNpcStore } from './useHiddenNpcStore'
 import { useTradeStore } from './useTradeStore'
+import { GUILD_SHOP_ITEMS } from '@/data/guild'
+import { TRADE_EXCHANGE_ITEMS } from '@/data/hanhai'
+import { HIDDEN_NPCS } from '@/data/hiddenNpcs'
+import { resetAllStoresForNewGame } from '@/composables/useResetGame'
+import { addLog } from '@/composables/useGameLog'
 
 const SAVE_KEY_PREFIX = 'taoyuanxiang_save_'
 const MAX_SLOTS = 3
@@ -195,12 +200,16 @@ export const useSaveStore = defineStore('save', () => {
 
   /** 从指定槽位加载 */
   const loadFromSlot = (slot: number): boolean => {
+    let resetDone = false
     try {
       const raw = localStorage.getItem(`${SAVE_KEY_PREFIX}${slot}`)
       if (!raw) return false
 
       const data = parseSaveData(raw)
       if (!data) return false
+      // 先回到初始状态：旧存档缺的分段不能沿用上一个读过的存档
+      resetAllStoresForNewGame()
+      resetDone = true
       const gameStore = useGameStore()
       const playerStore = usePlayerStore()
       const inventoryStore = useInventoryStore()
@@ -257,9 +266,23 @@ export const useSaveStore = defineStore('save', () => {
       if (data.hiddenNpc) hiddenNpcStore.deserialize(data.hiddenNpc)
       // 旧存档没有商会数据：传 undefined 让商会回到初始状态，避免沿用上一个存档的积分
       tradeStore.deserialize(data.trade)
+      // 马匹品种：旧存档没有已获得品种的记录，按公会、瀚海的兑换记录与仙灵结缘补回
+      const horseMessage = animalStore.restoreHorseUnlocks([
+        ...GUILD_SHOP_ITEMS.flatMap(i => (i.horseUpgrade && guildStore.getTotalRemaining(i.itemId, 1) < 1 ? [i.horseUpgrade] : [])),
+        ...TRADE_EXCHANGE_ITEMS.flatMap(e =>
+          e.isHorseUpgrade && (hanhaiStore.totalExchangePurchases[e.itemId] ?? 0) > 0 ? [e.isHorseUpgrade] : []
+        ),
+        ...HIDDEN_NPCS.flatMap(d => (d.bondHorseBreed && hiddenNpcStore.getHiddenNpcState(d.id)?.bonded ? [d.bondHorseBreed] : []))
+      ])
+      if (horseMessage) addLog(horseMessage)
       activeSlot.value = slot
       return true
     } catch {
+      // 读到一半出错：清掉残缺状态并断开槽位，免得自动存档把它写进上一个存档
+      if (resetDone) {
+        resetAllStoresForNewGame()
+        activeSlot.value = -1
+      }
       return false
     }
   }

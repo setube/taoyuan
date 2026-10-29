@@ -279,12 +279,12 @@ export const handleBuySeed = (seedId: string) => {
   }
 }
 
-/** 通过商店出售物品 */
-export const handleSellItem = (itemId: string, quality: Quality) => {
+/** 通过商店出售物品（addedValue：要卖的那一栈的陈酿增值） */
+export const handleSellItem = (itemId: string, quality: Quality, addedValue: number = 0) => {
   const shopStore = useShopStore()
   const itemDef = getItemById(itemId)
   if (!itemDef) return
-  const earned = shopStore.sellItem(itemId, 1, quality)
+  const earned = shopStore.sellItem(itemId, 1, quality, addedValue)
   if (earned > 0) {
     sfxCoin()
     showFloat(`+${earned}文`, 'accent')
@@ -293,11 +293,11 @@ export const handleSellItem = (itemId: string, quality: Quality) => {
 }
 
 /** 出售指定物品的全部数量 */
-export const handleSellItemAll = (itemId: string, quantity: number, quality: Quality) => {
+export const handleSellItemAll = (itemId: string, quantity: number, quality: Quality, addedValue: number = 0) => {
   const shopStore = useShopStore()
   const itemDef = getItemById(itemId)
   if (!itemDef || quantity <= 0) return
-  const earned = shopStore.sellItem(itemId, quantity, quality)
+  const earned = shopStore.sellItem(itemId, quantity, quality, addedValue)
   if (earned > 0) {
     sfxCoin()
     showFloat(`+${earned}文`, 'accent')
@@ -321,10 +321,11 @@ export const handleSellAll = (filterCategories?: ItemCategory[]) => {
     .map(inv => ({
       itemId: inv.itemId,
       quantity: inv.quantity,
-      quality: inv.quality
+      quality: inv.quality,
+      addedValue: inv.addedValue ?? 0
     }))
   for (const item of sellable) {
-    const earned = shopStore.sellItem(item.itemId, item.quantity, item.quality)
+    const earned = shopStore.sellItem(item.itemId, item.quantity, item.quality, item.addedValue)
     if (earned > 0) {
       totalEarned += earned
       totalCount += item.quantity

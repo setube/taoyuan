@@ -564,7 +564,7 @@
                   v-for="(entry, idx) in shopStore.shippingBox"
                   :key="idx"
                   class="flex items-center justify-between border border-accent/20 rounded-xs px-2 py-1 cursor-pointer hover:bg-accent/5"
-                  @click="handleRemoveFromBox(entry.itemId, entry.quantity, entry.quality)"
+                  @click="handleRemoveFromBox(entry.itemId, entry.quantity, entry.quality, entry.addedValue)"
                 >
                   <div class="min-w-0">
                     <span
@@ -577,10 +577,11 @@
                     >
                       {{ getItemName(entry.itemId) }}
                     </span>
+                    <span v-if="entry.addedValue" class="text-[10px] text-accent ml-1">陈酿+{{ entry.addedValue }}</span>
                     <span class="text-muted text-xs ml-1">×{{ entry.quantity }}</span>
                   </div>
                   <span class="text-xs text-accent whitespace-nowrap ml-2">
-                    ≈{{ shopStore.calculateSellPrice(entry.itemId, entry.quantity, entry.quality) }}文
+                    ≈{{ shopStore.calculateSellPrice(entry.itemId, entry.quantity, entry.quality, entry.addedValue) }}文
                   </span>
                 </div>
               </div>
@@ -597,7 +598,7 @@
               <div class="flex flex-col space-y-1 overflow-auto max-h-48">
                 <div
                   v-for="item in shippableItems"
-                  :key="item.itemId + item.quality"
+                  :key="item.originalIndex"
                   class="flex items-center justify-between border border-accent/10 rounded-xs px-2 py-1 mr-1"
                 >
                   <div class="min-w-0 flex items-center space-x-1">
@@ -611,12 +612,15 @@
                     >
                       {{ item.def?.name }}
                     </span>
+                    <span v-if="item.addedValue" class="text-[10px] text-accent">陈酿+{{ item.addedValue }}</span>
                     <span class="text-muted text-xs">×{{ item.quantity }}</span>
                     <span v-if="shopStore.shippedItems.includes(item.itemId)" class="text-[10px] text-success/60">[已出货]</span>
                   </div>
                   <div class="flex space-x-1">
-                    <Button @click="handleAddToBox(item.itemId, 1, item.quality)">放入1</Button>
-                    <Button v-if="item.quantity > 1" @click="handleAddToBox(item.itemId, item.quantity, item.quality)">全部</Button>
+                    <Button @click="handleAddToBox(item.itemId, 1, item.quality, item.addedValue)">放入1</Button>
+                    <Button v-if="item.quantity > 1" @click="handleAddToBox(item.itemId, item.quantity, item.quality, item.addedValue)">
+                      全部
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -1375,7 +1379,7 @@
 
   const shippableItems = computed(() => {
     return inventoryStore.items
-      .map(inv => ({ ...inv, def: getItemById(inv.itemId) }))
+      .map((inv, index) => ({ ...inv, def: getItemById(inv.itemId), originalIndex: index }))
       .filter(
         item =>
           item.def &&
@@ -1387,18 +1391,21 @@
   })
 
   const shippingBoxTotal = computed(() => {
-    return shopStore.shippingBox.reduce((sum, entry) => sum + shopStore.calculateSellPrice(entry.itemId, entry.quantity, entry.quality), 0)
+    return shopStore.shippingBox.reduce(
+      (sum, entry) => sum + shopStore.calculateSellPrice(entry.itemId, entry.quantity, entry.quality, entry.addedValue),
+      0
+    )
   })
 
-  const handleAddToBox = (itemId: string, quantity: number, quality: Quality) => {
-    if (shopStore.addToShippingBox(itemId, quantity, quality)) {
+  const handleAddToBox = (itemId: string, quantity: number, quality: Quality, addedValue: number = 0) => {
+    if (shopStore.addToShippingBox(itemId, quantity, quality, addedValue)) {
       const name = getItemName(itemId)
       addLog(`将${name}×${quantity}放入了出货箱。`)
     }
   }
 
-  const handleRemoveFromBox = (itemId: string, quantity: number, quality: Quality) => {
-    if (shopStore.removeFromShippingBox(itemId, quantity, quality)) {
+  const handleRemoveFromBox = (itemId: string, quantity: number, quality: Quality, addedValue: number = 0) => {
+    if (shopStore.removeFromShippingBox(itemId, quantity, quality, addedValue)) {
       const name = getItemName(itemId)
       addLog(`从出货箱取出了${name}×${quantity}。`)
     }

@@ -74,10 +74,10 @@ export interface LogEntry {
 /** 全部日志历史 */
 export const logHistory = ref<LogEntry[]>([])
 
-/** 天数标签获取器 — 由 GameLayout 注册以避免循环导入 */
+/** 天数标签获取器 — 由 App 启动时注册以避免循环导入 */
 let _dayLabelGetter: (() => string) | null = null
 
-/** 注册天数标签获取器（GameLayout 初始化时调用） */
+/** 注册天数标签获取器（App 初始化时调用） */
 export const _registerDayLabelGetter = (fn: () => string) => {
   _dayLabelGetter = fn
 }

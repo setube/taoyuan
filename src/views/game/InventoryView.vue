@@ -31,11 +31,7 @@
       </Button>
     </div>
 
-    <!-- 背包扩容引导：格子紧张时直接告诉玩家去哪儿升级 -->
-    <p v-if="tab === 'items' && showCapacityHint" class="text-[10px] text-accent/70 mb-2">
-      背包快满了。可在「桃源商圈 → 万物铺」花铜钱扩容（当前
-      {{ inventoryStore.capacity }} 格，最多 60 格）。
-    </p>
+    <p v-if="tab === 'items' && showCapacityHint" class="text-[10px] text-accent/70 mb-2">背包将满</p>
 
     <!-- 种子袋页：种子独立存放，不占背包格 -->
     <template v-if="tab === 'seeds'">
@@ -48,7 +44,7 @@
           v-for="(item, idx) in inventoryStore.seedItems"
           :key="'seed-' + idx"
           class="border border-accent/20 rounded-xs p-1.5 text-center cursor-pointer hover:bg-accent/5 transition-colors"
-          @click="activeItemKey = item.itemId + ':' + item.quality"
+          @click="activeItemKey = getStackKey(item)"
         >
           <div
             class="text-xs truncate"
@@ -89,9 +85,10 @@
           v-for="(item, idx) in filteredItems"
           :key="idx"
           class="border border-accent/20 rounded-xs p-1.5 text-center cursor-pointer hover:bg-accent/5 transition-colors relative"
-          @click="activeItemKey = item.itemId + ':' + item.quality"
+          @click="activeItemKey = getStackKey(item)"
         >
           <Lock v-if="item.locked" :size="10" class="absolute top-0.5 left-0.5 text-accent/60" />
+          <span v-if="item.addedValue" class="absolute top-0 right-0.5 text-[10px] text-accent">陈</span>
           <div
             class="text-xs truncate"
             :class="{
@@ -131,9 +128,10 @@
           <div
             v-for="(item, idx) in inventoryStore.tempItems"
             :key="'temp-' + idx"
-            class="border border-danger/30 rounded-xs p-1.5 text-center cursor-pointer hover:bg-danger/5 transition-colors"
+            class="border border-danger/30 rounded-xs p-1.5 text-center cursor-pointer hover:bg-danger/5 transition-colors relative"
             @click="activeTempIdx = idx"
           >
+            <span v-if="item.addedValue" class="absolute top-0 right-0.5 text-[10px] text-accent">陈</span>
             <div
               class="text-xs truncate"
               :class="{
@@ -500,6 +498,10 @@
                 {{ QUALITY_NAMES[activeTempItem.quality] }}
               </span>
             </div>
+            <div v-if="activeTempItem.addedValue" class="flex items-center justify-between mt-0.5">
+              <span class="text-xs text-muted">陈酿</span>
+              <span class="text-xs text-accent">+{{ activeTempItem.addedValue }}文</span>
+            </div>
           </div>
           <div class="flex flex-col space-y-1.5">
             <Button
@@ -564,6 +566,10 @@
               <span class="text-xs text-muted">售价</span>
               <span class="text-xs text-accent">{{ activeItemDef.sellPrice }}文</span>
             </div>
+            <div v-if="activeItem.addedValue" class="flex items-center justify-between mt-0.5">
+              <span class="text-xs text-muted">陈酿</span>
+              <span class="text-xs text-accent">+{{ activeItem.addedValue }}文</span>
+            </div>
             <div v-if="activeItemDef?.staminaRestore" class="flex items-center justify-between mt-0.5">
               <span class="text-xs text-muted">恢复</span>
               <span class="text-xs text-success">
@@ -586,7 +592,7 @@
               class="w-full justify-center"
               :icon="activeItem.locked ? LockOpen : Lock"
               :icon-size="12"
-              @click="inventoryStore.toggleLock(activeItem.itemId, activeItem.quality)"
+              @click="inventoryStore.toggleLock(activeItem.itemId, activeItem.quality, activeItem.addedValue)"
             >
               {{ activeItem.locked ? '解锁' : '锁定' }}
             </Button>
@@ -595,7 +601,7 @@
               class="w-full justify-center"
               :icon="Apple"
               :icon-size="12"
-              @click="handleEat(activeItem.itemId, activeItem.quality)"
+              @click="handleEat(activeItem.itemId, activeItem.quality, activeItem.addedValue)"
             >
               食用
             </Button>
@@ -604,7 +610,7 @@
               class="w-full justify-center"
               :icon="Zap"
               :icon-size="12"
-              @click="handleUse(activeItem.itemId, activeItem.quality)"
+              @click="handleUse(activeItem.itemId, activeItem.quality, activeItem.addedValue)"
             >
               使用
             </Button>
@@ -869,6 +875,7 @@
   import { getEnhancedAttack, scaleEffectValue, formatEquipmentEffectValue } from '@/data/enhance'
   import { QUALITY_NAMES } from '@/composables/useFarmActions'
   import { addLog } from '@/composables/useGameLog'
+  import { getStackKey, isSameStack, normalizeAddedValue } from '@/composables/useItemStacks'
   import type { Quality, RingEffectType, ItemCategory, EquipmentKind, EquipmentEffect } from '@/types'
 
   const inventoryStore = useInventoryStore()
@@ -882,9 +889,9 @@
 
   const tab = ref<'items' | 'seeds' | 'tools' | 'temp'>('items')
 
-  /** 剩余格子 ≤5 且还没满级时，提示去哪儿扩容 */
+  /** 剩余格子 ≤5 且还能扩容时显示「背包将满」 */
   const showCapacityHint = computed(() => {
-    if (inventoryStore.capacity >= 60) return false
+    if (inventoryStore.capacity >= inventoryStore.MAX_CAPACITY) return false
     return inventoryStore.capacity - inventoryStore.items.length <= 5
   })
 
@@ -1317,17 +1324,17 @@
 
   const activeItemKey = ref<string | null>(null)
 
-  /** 在背包或种子袋中查找指定物品栈（种子存在种子袋里） */
-  const findSlot = (itemId: string | undefined, quality: string | undefined) => {
+  /** 在背包或种子袋中查找指定物品栈（种子存在种子袋里；陈酿增值不同视为不同栈） */
+  const findSlot = (itemId: string | undefined, quality: string | undefined, addedValue: number = 0) => {
     if (!itemId) return undefined
     const pool = inventoryStore.isSeedItem(itemId) ? inventoryStore.seedItems : inventoryStore.items
-    return pool.find(i => i.itemId === itemId && i.quality === quality)
+    return pool.find(i => isSameStack(i, itemId, quality as Quality, normalizeAddedValue(addedValue)))
   }
 
   const activeItem = computed(() => {
     if (!activeItemKey.value) return null
-    const [itemId, quality] = activeItemKey.value.split(':')
-    return findSlot(itemId, quality) ?? null
+    const [itemId, quality, addedValue] = activeItemKey.value.split(':')
+    return findSlot(itemId, quality, Number(addedValue ?? 0)) ?? null
   })
 
   const activeItemDef = computed(() => {
@@ -1349,7 +1356,7 @@
     return !!def?.edible && !!def.staminaRestore
   }
 
-  const handleEat = (itemId: string, quality: Quality) => {
+  const handleEat = (itemId: string, quality: Quality, addedValue: number = 0) => {
     const def = getItemById(itemId)
     if (!def?.edible || !def.staminaRestore) return
     const staminaFull = playerStore.stamina >= playerStore.maxStamina
@@ -1375,7 +1382,7 @@
       return
     }
 
-    if (!inventoryStore.removeItem(itemId, 1, quality)) return
+    if (!inventoryStore.removeItem(itemId, 1, quality, addedValue)) return
     // 炼金师专精：食物恢复+50%
     const alchemistBonus = skillStore.getSkill('foraging').perk10 === 'alchemist' ? 1.5 : 1.0
     const staminaRestore = Math.floor(def.staminaRestore * alchemistBonus)
@@ -1389,7 +1396,7 @@
     msg += '。'
     addLog(msg)
     // 物品消耗完则关闭弹窗
-    if (!findSlot(itemId, quality)) {
+    if (!findSlot(itemId, quality, addedValue)) {
       activeItemKey.value = null
     }
   }
@@ -1401,10 +1408,10 @@
     return USABLE_ITEMS.has(itemId)
   }
 
-  const handleUse = (itemId: string, quality: Quality) => {
+  const handleUse = (itemId: string, quality: Quality, addedValue: number = 0) => {
     const totem = getTotemById(itemId)
     if (totem) {
-      if (!inventoryStore.removeItem(itemId, 1, quality)) return
+      if (!inventoryStore.removeItem(itemId, 1, quality, addedValue)) return
       gameStore.setTomorrowWeather(totem.weather)
       addLog(`你使用了${totem.name}，明天的天气将变为「${WEATHER_NAMES[totem.weather]}」。`)
     }
@@ -1413,12 +1420,12 @@
         addLog('体力上限已达到最高，无法再使用仙桃。')
         return
       }
-      if (!inventoryStore.removeItem(itemId, 1, quality)) return
+      if (!inventoryStore.removeItem(itemId, 1, quality, addedValue)) return
       playerStore.upgradeMaxStamina()
       addLog(`食用了仙桃，体力上限永久提升至${playerStore.maxStamina}！`)
     }
     // 物品消耗完则关闭弹窗
-    if (!findSlot(itemId, quality)) {
+    if (!findSlot(itemId, quality, addedValue)) {
       activeItemKey.value = null
     }
   }
@@ -1442,6 +1449,7 @@
   const confirmDiscard = () => {
     if (!activeItem.value) return
     const { itemId, quality } = activeItem.value
+    const addedValue = activeItem.value.addedValue ?? 0
     const name = activeItemDef.value?.name ?? ''
     if (isProtectedItem(itemId)) {
       addLog(`${name}是限定物品，不能丢弃。`)
@@ -1450,11 +1458,11 @@
     }
     const qty = Math.min(discardQty.value, activeItem.value.quantity)
     if (qty <= 0) return
-    if (!inventoryStore.removeItem(itemId, qty, quality)) return
+    if (!inventoryStore.removeItem(itemId, qty, quality, addedValue)) return
     addLog(`丢弃了${name}×${qty}。`)
     discardMode.value = false
     // 物品消耗完则关闭弹窗
-    if (!findSlot(itemId, quality)) {
+    if (!findSlot(itemId, quality, addedValue)) {
       activeItemKey.value = null
     }
   }

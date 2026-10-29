@@ -38,6 +38,16 @@ export const TRAVELING_MERCHANT_POOL: TravelingMerchantItem[] = [
   { itemId: 'silk_ribbon', name: '丝帕', basePrice: 500 }
 ]
 
+/**
+ * 商人售价相对出售价的最低倍数。
+ * 满加成卖出约为出售价 ×1.74（装备 +51% × 狐仙 15%），满折扣买入约为标价 ×0.46，
+ * 3.8 倍可保证非行情类物品买进卖出不赚钱。
+ */
+const MERCHANT_MIN_MARKUP = 3.8
+
+/** 商人售价下限 */
+export const getMerchantPriceFloor = (sellPrice: number): number => Math.ceil(sellPrice * MERCHANT_MIN_MARKUP)
+
 /** 判断某天是否为旅行商人出摊日（周五/周日） */
 export const isTravelingMerchantDay = (day: number): boolean => {
   const weekday = getWeekday(day)
@@ -53,8 +63,14 @@ const seededRandom = (seed: number): (() => number) => {
   }
 }
 
-/** 根据游戏日期生成旅行商人当日库存 */
-export const generateMerchantStock = (year: number, seasonIndex: number, day: number, currentSeason: Season): TravelingMerchantStock[] => {
+/** 根据游戏日期生成旅行商人当日库存。priceFloor：按物品与出售价给出售价下限 */
+export const generateMerchantStock = (
+  year: number,
+  seasonIndex: number,
+  day: number,
+  currentSeason: Season,
+  priceFloor: (itemId: string, sellPrice: number) => number
+): TravelingMerchantStock[] => {
   const seed = year * 10000 + seasonIndex * 1000 + day * 37
   const rng = seededRandom(seed)
 
@@ -67,9 +83,9 @@ export const generateMerchantStock = (year: number, seasonIndex: number, day: nu
     const item = shuffled[i]!
     const priceVariation = 0.85 + rng() * 0.3 // ±15% 价格浮动
     let price = Math.floor(item.basePrice * priceVariation)
-    // 防套利：商人售价不低于物品出售价的 2 倍
+    // 防套利：商人售价不低于下限
     const def = getItemById(item.itemId)
-    if (def && def.sellPrice > 0) price = Math.max(price, def.sellPrice * 2)
+    if (def && def.sellPrice > 0) price = Math.max(price, priceFloor(item.itemId, def.sellPrice))
     stock.push({
       itemId: item.itemId,
       name: item.name,

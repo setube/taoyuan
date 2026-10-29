@@ -242,7 +242,7 @@ export const GUILD_SHOP_ITEMS: GuildShopItemDef[] = [
     name: '踏云驹',
     price: 0,
     contributionCost: 600,
-    description: '公会驯养的神骏。把你的马升级为踏云驹：赶路极快，放牧时帮你照看畜群。',
+    description: '公会驯养的神骏。获得踏云驹品种：赶路极快，放牧时帮你照看畜群。',
     unlockGuildLevel: 8,
     totalLimit: 1,
     horseUpgrade: 'cloud',

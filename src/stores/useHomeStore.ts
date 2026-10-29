@@ -15,6 +15,7 @@ import { usePlayerStore } from './usePlayerStore'
 import { useInventoryStore } from './useInventoryStore'
 import { useFarmStore } from './useFarmStore'
 import { getCombinedItemCount, removeCombinedItem } from '@/composables/useCombinedInventory'
+import { normalizeAddedValue } from '@/composables/useItemStacks'
 
 /** 酒窖陈酿槽 */
 interface CellarSlot {
@@ -26,7 +27,7 @@ interface CellarSlot {
 }
 
 /** 可陈酿的物品ID（酒类） */
-const AGEABLE_ITEMS = [
+export const AGEABLE_ITEMS = [
   'watermelon_wine',
   'osmanthus_wine',
   'peach_wine',
@@ -196,21 +197,23 @@ export const useHomeStore = defineStore('home', () => {
     return true
   }
 
-  /** 酒窖放入陈酿 */
-  const startAging = (itemId: string, quality: Quality): boolean => {
+  /** 酒窖放入陈酿（已陈酿过的酒带着原有增值继续陈酿） */
+  const startAging = (itemId: string, quality: Quality, addedValue: number = 0): boolean => {
     if (!hasCellar.value) return false
     if (cellarSlots.value.length >= cellarMaxSlots.value) return false
     if (!AGEABLE_ITEMS.includes(itemId)) return false
 
     const inventoryStore = useInventoryStore()
-    if (!inventoryStore.removeItem(itemId, 1, quality)) return false
+    const added = normalizeAddedValue(addedValue)
+    if (!inventoryStore.removeItem(itemId, 1, quality, added)) return false
 
     cellarSlots.value.push({
       itemId,
       originalQuality: quality,
       daysAging: 0,
-      addedValue: 0,
-      upgradeCount: 0
+      addedValue: added,
+      // 继续陈酿：按当前酒窖每周期增值折算已提升次数（酒窖升级过只会少算）
+      upgradeCount: Math.floor(added / cellarValuePerCycle.value)
     })
     return true
   }

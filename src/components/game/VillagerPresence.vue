@@ -125,7 +125,7 @@
                 </span>
               </button>
             </div>
-            <p v-else class="text-[10px] text-muted text-center py-3">背包里没有可送的东西</p>
+            <p v-else class="text-[10px] text-muted text-center py-3">暂无物品</p>
           </div>
 
           <p class="text-[10px] text-muted/40 mt-2">想送定情信物或谈婚论嫁，去「桃源村」面板找对方。</p>
@@ -149,6 +149,7 @@
   import { ACTION_TIME_COSTS } from '@/data/timeConstants'
   import { QUALITY_NAMES } from '@/composables/useFarmActions'
   import { addLog } from '@/composables/useGameLog'
+  import { getGiftableStacks } from '@/composables/useCombinedInventory'
   import { triggerHeartEvent } from '@/composables/useDialogs'
   import { handleEndDay } from '@/composables/useEndDay'
   import type { Quality } from '@/types'
@@ -204,12 +205,10 @@
     return npcStore.getGiftStatusText(selected.value)
   })
 
-  /** 可赠送的物品（种子不参与送礼） */
+  /** 可赠送的物品：背包+仓库合计（种子不参与送礼；点一下就送出，背包里锁定的不列出） */
   const giftableItems = computed(() => {
-    return inventoryStore.items.filter(i => {
-      const def = getItemById(i.itemId)
-      return def && def.category !== 'seed' && !i.locked
-    })
+    const locked = new Set(inventoryStore.items.filter(i => i.locked).map(i => `${i.itemId}:${i.quality}`))
+    return getGiftableStacks().filter(i => !locked.has(`${i.itemId}:${i.quality}`))
   })
 
   const giftPreference = (itemId: string): string => {
